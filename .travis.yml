@@ -47,7 +47,8 @@ sudo: required
 language:
   - generic
 cache:
-  - apt
+  directories:
+  - opencv_build
 
 # Configuration variables. All variables are global now, but this can be used to
 # trigger a build matrix for different ROS distributions if desired.
@@ -64,6 +65,20 @@ env:
 
 # Install system dependencies, namely a very barebones ROS setup.
 before_install:
+  # Install opencv (must come before gcc 6 install)
+  - sudo apt-get update
+  - sudo apt-get install -y libavcodec-dev libavformat-dev libswscale-dev
+  - wget https://github.com/opencv/opencv/archive/2.4.13.tar.gz --no-verbose
+  - tar xf 2.4.13.tar.gz
+  - cd opencv_build
+  - sudo make install; INSTALL_RESULT=$?
+  - if [ $INSTALL_RESULT != 0 ]; then
+    cmake -DCMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=/usr/local ${TRAVIS_BUILD_DIR}/opencv-2.4.13;
+    make -j $(nproc);
+    echo $(nproc);
+    sudo make install;
+    fi
+  - cd $TRAVIS_BUILD_DIR
   # Install gcc/g++ 6
   - sudo apt-get update
   - sudo apt-get install -y build-essential software-properties-common
@@ -125,3 +140,10 @@ script:
   # Run the tests, ensuring the path is set correctly.
   - source devel/setup.bash
   - catkin_make run_tests && catkin_make test
+
+# There's a bug in travis that assumes the cache has changed if the archive
+# doesn't exist, but the archive is deleted at the end of the unpacking,
+# so we need to trick it into thinking the archive exists by doing this so
+# that it still checks the md5 hash of the cache
+before_cache:
+  - touch ${CASHER_DIR}/fetch.tgz
