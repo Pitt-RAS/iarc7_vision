@@ -8,10 +8,11 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror ${CMAKE_CXX_FLAGS}")
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   iarc7_msgs
+  roscpp
 )
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(OpenCV 2 REQUIRED)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -100,7 +101,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+  INCLUDE_DIRS include
 #  LIBRARIES iarc7_vision
 #  CATKIN_DEPENDS iarc7_msgs
 #  DEPENDS system_lib
@@ -114,7 +115,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 # include_directories(include)
 include_directories(
-  ${catkin_INCLUDE_DIRS}
+  include ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -128,16 +129,32 @@ include_directories(
 # add_dependencies(iarc7_vision ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-# add_executable(iarc7_vision_node src/iarc7_vision_node.cpp)
+add_executable(iarc7_vision_node src/VisionNode.cpp src/GridLineEstimator.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(iarc7_vision_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(iarc7_vision_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(iarc7_vision_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(iarc7_vision_node
+  ${catkin_LIBRARIES}
+  opencv_core
+  opencv_imgproc
+  opencv_highgui
+  opencv_calib3d
+  opencv_contrib
+  opencv_features2d
+  opencv_flann
+  opencv_gpu
+  opencv_legacy
+  opencv_ml
+  opencv_objdetect
+  opencv_photo
+  opencv_stitching
+  opencv_superres
+  opencv_video
+  opencv_videostab
+)
 
 #############
 ## Install ##
