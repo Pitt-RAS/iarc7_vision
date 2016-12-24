@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(iarc7_vision)
 
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror ${CMAKE_CXX_FLAGS}")
+
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
