@@ -7,13 +7,29 @@ set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror ${CMAKE_CXX_FLAGS}")
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  cv_bridge
   iarc7_msgs
+  image_transport
   roscpp
 )
 
 ## System dependencies are found with CMake's conventions
-find_package(OpenCV 2 REQUIRED)
 
+## Find OpenCV
+find_package(OpenCV 2.4.13 EXACT REQUIRED)
+
+## Find Eigen
+find_package(Eigen3)
+set(EIGEN_PACKAGE EIGEN3)
+if(NOT EIGEN3_FOUND)
+  find_package(cmake_modules REQUIRED)
+  find_package(Eigen REQUIRED)
+  set(EIGEN3_INCLUDE_DIR ${EIGEN_INCLUDE_DIRS})
+  set(EIGEN3_LIBRARIES ${EIGEN_LIBRARIES})
+  set(EIGEN_PACKAGE Eigen)
+endif()
+
+add_definitions(-DEIGEN_NO_DEBUG -DEIGEN_MPL2_ONLY)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -113,9 +129,11 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-# include_directories(include)
 include_directories(
-  include ${catkin_INCLUDE_DIRS}
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
 )
 
 ## Declare a C++ library
@@ -154,6 +172,7 @@ target_link_libraries(iarc7_vision_node
   opencv_superres
   opencv_video
   opencv_videostab
+  ${EIGEN3_LIBRARIES}
 )
 
 #############
