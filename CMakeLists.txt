@@ -11,6 +11,9 @@ find_package(catkin REQUIRED COMPONENTS
   iarc7_msgs
   image_transport
   roscpp
+  ros_utils
+  tf2_ros
+  tf2_geometry_msgs
 )
 
 ## System dependencies are found with CMake's conventions

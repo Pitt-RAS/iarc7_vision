@@ -45,11 +45,13 @@
   <build_depend>iarc7_msgs</build_depend>
   <build_depend>image_transport</build_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>ros_utils</build_depend>
   <run_depend>cv_bridge</run_depend>
   <run_depend>eigen</run_depend>
   <run_depend>iarc7_msgs</run_depend>
   <run_depend>image_transport</run_depend>
   <run_depend>roscpp</run_depend>
+  <run_depend>ros_utils</run_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

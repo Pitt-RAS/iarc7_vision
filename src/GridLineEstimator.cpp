@@ -12,133 +12,78 @@
 #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #include <Eigen/Geometry>
 #pragma GCC diagnostic pop
+// END BAD HEADERS
 
+#include <cmath>
+#include <iterator>
+#include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/gpu/gpu.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/opencv.hpp>
+#include <ros/ros.h>
+#include <ros_utils/SafeTransformWrapper.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-void drawLines(std::vector<cv::Vec2f> lines, cv::Mat image) {
-    for( size_t i = 0; i < lines.size(); i++ )
-    {
-        float rho = lines[i][0], theta = lines[i][1];
+static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
+{
+    for (auto& line : lines) {
+        float rho = line[0], theta = line[1];
         cv::Point pt1, pt2;
-        double a = cos(theta), b = sin(theta);
-        double x0 = a*rho, y0 = b*rho;
-        pt1.x = cvRound(x0 + 10000*(-b));
-        pt1.y = cvRound(y0 + 10000*(a));
-        pt2.x = cvRound(x0 - 10000*(-b));
-        pt2.y = cvRound(y0 - 10000*(a));
+        double a = cos(theta);
+        double b = sin(theta);
+        double x0 = image.size().width/2 + a*rho;
+        double y0 = image.size().height/2 + b*rho;
+        double line_dist = 4*std::max(image.size().width, image.size().height);
+        pt1.x = cvRound(x0 + line_dist*(-b));
+        pt1.y = cvRound(y0 + line_dist*(a));
+        pt2.x = cvRound(x0 - line_dist*(-b));
+        pt2.y = cvRound(y0 - line_dist*(a));
         cv::line(image, pt1, pt2, cv::Scalar(0, 0, 255), 3, CV_AA);
     }
 }
 
 namespace iarc7_vision {
 
-void GridLineEstimator::update() {
+GridLineEstimator::GridLineEstimator(
+        double fov,
+        const LineExtractorSettings& line_extractor_settings,
+        const GridLineDebugSettings& debug_settings)
+    : fov_(fov),
+      line_extractor_settings_(line_extractor_settings),
+      debug_settings_(debug_settings),
+      transform_wrapper_()
+{
+    ros::NodeHandle local_nh ("grid_line_estimator");
+
+    if (debug_settings_.debug_edges) {
+        debug_edges_pub_ = local_nh.advertise<sensor_msgs::Image>("edges", 10);
+    }
+
+    if (debug_settings_.debug_lines) {
+        debug_lines_pub_ = local_nh.advertise<sensor_msgs::Image>("lines", 10);
+    }
+}
+
+void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
+{
+    // calculate necessary parameters
+
+    // TODO: GET HEIGHT FROM SOMEWHERE ELSE, MAKE THIS level_quad
+    geometry_msgs::TransformStamped transform;
+    ROS_ASSERT(transform_wrapper_.getTransformAtTime(transform,
+                                                     "map",
+                                                     "bottom_camera_optical",
+                                                     time,
+                                                     ros::Duration(1.0)));
+    double height = transform.transform.translation.z;
+
     //////////////////////////////////////////////////
     // extract lines
     //////////////////////////////////////////////////
-    cv::Mat image,
-            image_hsv,
-            image_gray,
-            image_blurred,
-            image_edges,
-            color_mask;
-    cv::Mat image_hsv_channels[3];
     std::vector<cv::Vec2f> lines;
-
-    cv::Size blur_size (9, 9);
-    double blur_sigma = 5;
-    double saturation_threshold = 40;
-    double canny_low_threshold = 500;
-    double canny_high_threshold = 1000;
-    int canny_sobel_size = 5;
-    double hough_rho_resolution = 1;
-    double hough_theta_resolution = 0.01;
-    int hough_threshold = 200;
-    cv::Mat erode_kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
-
-    // cv::VideoCapture cap ("/home/aaron/Videos/Default Project.mp4");
-
-    //while (true) {
-      //  cap >> image;
-        image = cv::imread("/home/aaron/Pictures/grid_sample_2.png");
-
-        if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
-            cv::cvtColor(image, image_hsv, CV_BGR2HSV);
-            cv::split(image_hsv, image_hsv_channels);
-            cv::threshold(image_hsv_channels[1],
-                          color_mask,
-                          saturation_threshold,
-                          255,
-                          cv::THRESH_BINARY_INV);
-            cv::erode(color_mask, color_mask, erode_kernel);
-
-            cv::cvtColor(image, image_gray, CV_BGR2GRAY);
-            cv::GaussianBlur(image_gray, image_blurred, blur_size, blur_sigma);
-            cv::Canny(image_blurred,
-                      image_edges,
-                      canny_low_threshold,
-                      canny_high_threshold,
-                      canny_sobel_size);
-            cv::bitwise_and(color_mask, image_edges, image_edges);
-            cv::HoughLines(image_edges,
-                           lines,
-                           hough_rho_resolution,
-                           hough_theta_resolution,
-                           hough_threshold);
-        } else {
-            cv::gpu::CannyBuf canny_buf;
-            cv::gpu::HoughLinesBuf hough_buf;
-            cv::gpu::GpuMat gpu_image,
-                            gpu_image_hsv,
-                            gpu_color_mask,
-                            gpu_mask_buf,
-                            gpu_image_gray,
-                            gpu_image_blurred,
-                            gpu_image_edges,
-                            gpu_lines;
-            cv::gpu::GpuMat gpu_image_hsv_channels[3];
-
-            gpu_image.upload(image);
-
-            cv::gpu::cvtColor(gpu_image, gpu_image_hsv, CV_BGR2HSV);
-            cv::gpu::split(gpu_image_hsv, gpu_image_hsv_channels);
-            cv::gpu::threshold(gpu_image_hsv_channels[1],
-                               gpu_color_mask,
-                               saturation_threshold,
-                               255,
-                               cv::THRESH_BINARY_INV);
-            cv::gpu::erode(gpu_color_mask, gpu_color_mask, erode_kernel, gpu_mask_buf);
-
-            cv::gpu::cvtColor(gpu_image, gpu_image_gray, CV_BGR2GRAY);
-            cv::gpu::GaussianBlur(gpu_image_gray, gpu_image_blurred, blur_size, blur_sigma);
-            cv::gpu::Canny(gpu_image_blurred,
-                           canny_buf,
-                           gpu_image_edges,
-                           canny_low_threshold,
-                           canny_high_threshold,
-                           canny_sobel_size);
-            cv::gpu::bitwise_and(gpu_color_mask, gpu_image_edges, gpu_image_edges);
-            cv::gpu::HoughLines(gpu_image_edges,
-                                gpu_lines,
-                                hough_buf,
-                                hough_rho_resolution,
-                                hough_theta_resolution,
-                                hough_threshold);
-
-            gpu_image_edges.download(image_edges);
-            cv::gpu::HoughLinesDownload(gpu_lines, lines);
-        }
-
-        drawLines(lines, image);
-        cv::imshow("edges", image_edges);
-        cv::imshow("image", image);
-        cv::waitKey(0);
-//        if (cv::waitKey(30) >= 0) break;
-    //}
+    getLines(lines, image, height);
+    ROS_WARN("%lu", lines.size());
 
     //////////////////////////////////////////////////
     // compute tranformation from lines to gridlines
@@ -179,6 +124,118 @@ void GridLineEstimator::update() {
     //////////////////////////////////////////////////
     // return estimate
     //////////////////////////////////////////////////
+}
+
+double GridLineEstimator::getFocalLength(const cv::Size& img_size, double fov)
+{
+    return std::hypot(img_size.width/2.0, img_size.height/2.0)
+         / std::tan(fov / 2.0);
+}
+
+void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
+                                 const cv::Mat& image,
+                                 double height)
+{
+    // m/px = camera_height / focal_length;
+    double meters_per_px = height / getFocalLength(image.size(), fov_);
+
+    // desired m_px used to keep kernel sizes relative to our features
+    double desired_meters_per_px = 1.0/250.0;
+    double scale_factor = meters_per_px / desired_meters_per_px;
+
+    if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
+        ROS_WARN_ONCE("Doing OpenCV operations on CPU");
+
+        cv::resize(image, image_sized_, cv::Size(), scale_factor, scale_factor);
+        cv::cvtColor(image_sized_, image_hsv_, CV_BGR2HSV);
+        cv::split(image_hsv_, image_hsv_channels_);
+
+        cv::Canny(image_hsv_channels_[2],
+                  image_edges_,
+                  line_extractor_settings_.canny_low_threshold,
+                  line_extractor_settings_.canny_high_threshold,
+                  line_extractor_settings_.canny_sobel_size);
+
+        double hough_threshold = image_edges_.size().height
+                               * line_extractor_settings_.hough_thresh_fraction;
+        cv::HoughLines(image_edges_,
+                       lines,
+                       line_extractor_settings_.hough_rho_resolution,
+                       line_extractor_settings_.hough_theta_resolution,
+                       hough_threshold);
+
+        // rescale lines back to original image size
+        for (cv::Vec2f& line : lines) {
+            line[0] *= static_cast<float>(image.size().height)
+                     / image_edges_.size().height;
+        }
+    } else {
+        gpu_image_.upload(image);
+
+        cv::gpu::resize(gpu_image_,
+                        gpu_image_sized_,
+                        cv::Size(),
+                        scale_factor,
+                        scale_factor);
+        cv::gpu::cvtColor(gpu_image_sized_, gpu_image_hsv_, CV_BGR2HSV);
+        cv::gpu::split(gpu_image_hsv_, gpu_image_hsv_channels_);
+
+        cv::gpu::Canny(gpu_image_hsv_channels_[2],
+                       gpu_image_edges_,
+                       line_extractor_settings_.canny_low_threshold,
+                       line_extractor_settings_.canny_high_threshold,
+                       line_extractor_settings_.canny_sobel_size);
+
+        double hough_threshold = gpu_image_edges_.size().height
+                               * line_extractor_settings_.hough_thresh_fraction;
+        cv::gpu::HoughLines(gpu_image_edges_,
+                            gpu_lines_,
+                            gpu_hough_buf_,
+                            line_extractor_settings_.hough_rho_resolution,
+                            line_extractor_settings_.hough_theta_resolution,
+                            hough_threshold);
+
+        cv::gpu::HoughLinesDownload(gpu_lines_, lines);
+
+        // rescale lines back to original image size
+        for (cv::Vec2f& line : lines) {
+            line[0] *= static_cast<float>(image.size().height)
+                     / gpu_image_edges_.size().height;
+        }
+
+        if (debug_settings_.debug_edges) {
+            gpu_image_edges_.download(image_edges_);
+        }
+    }
+
+    // shift rho to measure distance from center instead of distance from
+    // top left corner
+    Eigen::Vector2d corner_to_center (image.size().width/2, image.size().height/2);
+    for (cv::Vec2f& line : lines) {
+        Eigen::Vector2d normal_dir (std::cos(line[1]), std::sin(line[1]));
+        line[0] -= corner_to_center.dot(normal_dir);
+    }
+
+    if (debug_settings_.debug_edges) {
+        cv_bridge::CvImage cv_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::MONO8,
+            image_edges_
+        };
+
+        debug_edges_pub_.publish(cv_image.toImageMsg());
+    }
+
+    if (debug_settings_.debug_lines) {
+        cv::Mat image_lines = image.clone();
+        drawLines(lines, image_lines);
+        cv_bridge::CvImage cv_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::RGBA8,
+            image_lines
+        };
+        debug_lines_pub_.publish(cv_image.toImageMsg());
+    }
 }
 
 } // namespace iarc7_vision
