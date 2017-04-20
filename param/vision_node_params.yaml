@@ -6,6 +6,9 @@ line_extractor:
     hough_theta_resolution: 0.0087 # 1 degree
     hough_thresh_fraction: 0.3
 
+grid_estimator:
+    theta_step: 0.004
+
 grid_line_estimator:
     debug_edges: true
     debug_lines: true

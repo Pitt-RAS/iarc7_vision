@@ -42,6 +42,14 @@ void getLineExtractorSettings(const ros::NodeHandle& private_nh,
             settings.hough_thresh_fraction));
 }
 
+void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
+                              iarc7_vision::GridEstimatorSettings& settings)
+{
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/theta_step",
+            settings.theta_step));
+}
+
 void getDebugSettings(const ros::NodeHandle& private_nh,
                       iarc7_vision::GridLineDebugSettings& settings)
 {
@@ -62,11 +70,14 @@ int main(int argc, char **argv)
 
     iarc7_vision::LineExtractorSettings line_extractor_settings;
     getLineExtractorSettings(private_nh, line_extractor_settings);
+    iarc7_vision::GridEstimatorSettings grid_estimator_settings;
+    getGridEstimatorSettings(private_nh, grid_estimator_settings);
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
     getDebugSettings(private_nh, grid_line_debug_settings);
     iarc7_vision::GridLineEstimator gridline_estimator(
             0.95,
             line_extractor_settings,
+            grid_estimator_settings,
             grid_line_debug_settings);
 
     ros::Rate rate (100);
@@ -78,7 +89,7 @@ int main(int argc, char **argv)
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-            message->header.stamp);
+                                      message->header.stamp);
         };
 
     image_transport::ImageTransport image_transporter{nh};

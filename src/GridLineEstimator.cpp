@@ -14,8 +14,10 @@
 #pragma GCC diagnostic pop
 // END BAD HEADERS
 
+#include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/gpu/gpu.hpp>
@@ -24,6 +26,8 @@
 #include <ros/ros.h>
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+
+#include <geometry_msgs/Vector3Stamped.h>
 
 static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
 {
@@ -43,14 +47,35 @@ static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
     }
 }
 
+/// Chi^2 loss function, where the distance measurement for each datapoint
+/// is the distance from the point to the closest of the four vectors
+/// parallel, antiparallel, or perpendicular to theta
+///
+/// Expects that 0 <= theta < pi/2
+/// and each datapoint t satisfies -pi/2 <= t < pi/2
+static double theta_loss(std::vector<double> thetas, double theta)
+{
+    double loss = 0;
+    for (double t : thetas) {
+        double dist = std::numeric_limits<double>::max();
+        for (double theta_inc = -M_PI; theta_inc <= M_PI; theta_inc += M_PI/2) {
+            dist = std::min(dist, std::abs(t - (theta + theta_inc)));
+        }
+        loss += std::pow(dist, 2);
+    }
+    return loss;
+}
+
 namespace iarc7_vision {
 
 GridLineEstimator::GridLineEstimator(
         double fov,
         const LineExtractorSettings& line_extractor_settings,
+        const GridEstimatorSettings& grid_estimator_settings,
         const GridLineDebugSettings& debug_settings)
     : fov_(fov),
       line_extractor_settings_(line_extractor_settings),
+      grid_estimator_settings_(grid_estimator_settings),
       debug_settings_(debug_settings),
       transform_wrapper_()
 {
@@ -69,6 +94,9 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
     // calculate necessary parameters
 
+    // focal length in pixels
+    const double focal_length = getFocalLength(image.size(), fov_);
+
     // TODO: GET HEIGHT FROM SOMEWHERE ELSE, MAKE THIS level_quad
     geometry_msgs::TransformStamped transform;
     ROS_ASSERT(transform_wrapper_.getTransformAtTime(transform,
@@ -76,50 +104,162 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
                                                      "bottom_camera_optical",
                                                      time,
                                                      ros::Duration(1.0)));
+    geometry_msgs::TransformStamped q_lq_tf;
+    //ROS_ASSERT(transform_wrapper_.getTransformAtTime(q_lq_tf,
+    //                                                 "level_quad",
+    //                                                 "quad",
+    //                                                 ros::Time::now(),
+    //                                                 ros::Duration(1.0)));
+    q_lq_tf = transform;
+
     double height = transform.transform.translation.z;
 
     //////////////////////////////////////////////////
-    // extract lines
+    // extract lines from image
     //////////////////////////////////////////////////
+
     std::vector<cv::Vec2f> lines;
     getLines(lines, image, height);
     ROS_WARN("%lu", lines.size());
 
     //////////////////////////////////////////////////
-    // compute tranformation from lines to gridlines
-    //////////////////////////////////////////////////
-    /*
-    f = transform (1 0 0) from camera frame to level_quad
-    */
-
-    //////////////////////////////////////////////////
     // transform lines into gridlines
     //////////////////////////////////////////////////
-    /*
-    for each line:
-        v = (0 sin(theta) cos(theta))
-        global_v = transform v from camera frame to level_quad
-        offset = (0 -r*cos(theta) r*sin(theta))
-        global_offset = transform offset from camera_frame to level_quad
-        ray1 = f + global_offset
-        ray2 = f + global_offset + line_time * global_v
 
-        // think about what happens when these don't intersect
-        p1 = intersection of ray1 with the plane z=0
-        p2 = intersection of ray2 with the plane z=0
-        result = linebetween p1 and p2
-    */
+    // each line that the camera sees defines a plane (call it P_l) in which
+    // the actual line resides. We can find the line in the floor plane
+    // (call the line l_f and the plane P_f) by intersecting P_f with P_l.
+    //
+    // TODO: To make this more robust, we should also check that the line on the
+    // floor is within the fov of the camera.  This would have the advantage of
+    // automatically filtering out some lines which clearly aren't actually
+    // on the floor.
+    //
+    // To do this, we can send rays through the endpoints of the line in the
+    // camera frame and make sure that one of them intersects P_f.
+
+    std::vector<Eigen::Vector3d> pl_normals;
+    for (const cv::Vec2f& line : lines) {
+        // line goes through the point p, perpendicular to the vector p
+        float rho = line[0]; // length of p
+        float theta = line[1]; // angle from +x to p
+
+        // vector we rotate around to get P_l's normal vector in the optical
+        // frame
+        Eigen::Vector3d rot_vector (-sin(theta), cos(theta), 0);
+        Eigen::Vector3d pl_normal = Eigen::AngleAxisd(
+                                         std::atan(rho / focal_length),
+                                         rot_vector)
+                                  * Eigen::Vector3d(cos(theta), sin(theta), 0);
+
+        // transform pl_normal into the map frame
+        geometry_msgs::Vector3Stamped pl_normal_msg;
+        pl_normal_msg.vector.x = pl_normal(0);
+        pl_normal_msg.vector.y = pl_normal(1);
+        pl_normal_msg.vector.z = pl_normal(2);
+        tf2::doTransform(pl_normal_msg, pl_normal_msg, transform);
+
+        pl_normal(0) = pl_normal_msg.vector.x;
+        pl_normal(1) = pl_normal_msg.vector.y;
+        pl_normal(2) = pl_normal_msg.vector.z;
+
+        // the equation for P_l is then pl_normal * v = pl_normal.z * z_cam,
+        // where v is a vector in P_l and z_cam is the distance from the ground
+        // to the camera.
+        //
+        // this means the equation for l_f (in the map frame) is
+        // pl_normal.x * x + pl_normal.y * y = pl_normal.z * z_cam
+        //
+        // because z_cam is the same for all lines, each line is specified by
+        // pl_normal alone
+        pl_normals.push_back(pl_normal);
+    }
 
     //////////////////////////////////////////////////
-    // cluster gridlines
+    // cluster gridlines by angle
     //////////////////////////////////////////////////
-    /*
-    sort gridlines by angle
-    run k-means with k=2? or run sliding window over list and look for high counts?
-    maybe repeatedly pair each line with the nearest line or nearest cluster?
 
-    make a group for each direction and throw out outliers (lines more than a constant number of standard deviations away)
-    */
+    // extract angles from lines (angles in the list are in [0, pi/2))
+    std::vector<double> thetas;
+    for (const Eigen::Vector3d& pl_normal : pl_normals) {
+        double next_theta = std::atan(-pl_normal(0)/pl_normal(1));
+        if (next_theta < 0) {
+            next_theta += M_PI/2;
+        }
+        thetas.push_back(next_theta);
+    }
+
+    // do a coarse sweep over angles from 0 to pi/2
+    double best_coarse_theta = 0;
+    double best_coarse_theta_score = theta_loss(thetas, 0);
+    for (double theta = grid_estimator_settings_.theta_step;
+         theta < M_PI / 2;
+         theta += grid_estimator_settings_.theta_step) {
+        double theta_score = theta_loss(thetas, theta);
+        if (theta_score < best_coarse_theta_score) {
+            best_coarse_theta = theta;
+            best_coarse_theta_score = theta_score;
+        }
+    }
+
+    // do an average around the result of the coarse estimate
+    double total = 0;
+    for (double theta : thetas) {
+        if (theta - best_coarse_theta > M_PI/4) {
+            total += theta - M_PI/2;
+        } else if (theta - best_coarse_theta < -M_PI/4) {
+            total += theta + M_PI/2;
+        } else {
+            total += theta;
+        }
+    }
+    double best_theta = total / thetas.size();
+
+    // wrap the result into [0, pi/2)
+    if (best_theta > M_PI/2) {
+        best_theta -= M_PI/2;
+    }
+    if (best_theta < 0) {
+        best_theta += M_PI/2;
+    }
+
+    // TODO: Remove outliers here and redo the average without them
+
+    // get current orientation estimate
+    geometry_msgs::Vector3Stamped quad_forward;
+    quad_forward.vector.x = 1;
+    tf2::doTransform(quad_forward, quad_forward, q_lq_tf);
+    double current_theta = M_PI/2 + std::atan2(quad_forward.vector.y,
+                                               quad_forward.vector.x);
+    if (!std::isfinite(current_theta)) {
+        ROS_ERROR("The quad seems to be vertical, "
+                  "so we have no idea what our yaw is (Yay gimbal lock!)");
+        // TODO: handle this so the whole thing doesn't crash
+    }
+
+    if (current_theta < 0) {
+        current_theta += 2*M_PI;
+    }
+
+    // pick the orientation estimate that's closer to our current angle estimate
+    double best_theta_quad;
+    if (best_theta < M_PI/4) {
+        best_theta_quad = current_theta + best_theta;
+        if (best_theta_quad >= 2*M_PI) {
+            best_theta_quad -= 2*M_PI;
+        }
+    } else {
+        best_theta_quad = current_theta + best_theta - M_PI/2;
+        if (best_theta_quad < 0) {
+            best_theta_quad += 2*M_PI;
+        }
+    }
+
+    // convert orientation estimate to yaw
+    double yaw = -best_theta_quad;
+    if (yaw < 0) {
+        yaw += 2*M_PI;
+    }
 
     //////////////////////////////////////////////////
     // return estimate

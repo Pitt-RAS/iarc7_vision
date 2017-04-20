@@ -21,6 +21,10 @@ struct LineExtractorSettings {
     double hough_thresh_fraction;
 };
 
+struct GridEstimatorSettings {
+    double theta_step;
+};
+
 struct GridLineDebugSettings {
     bool debug_edges;
     bool debug_lines;
@@ -30,6 +34,7 @@ class GridLineEstimator {
   public:
     GridLineEstimator(double fov,
                       const LineExtractorSettings& line_estimator_settings,
+                      const GridEstimatorSettings& grid_estimator_settings,
                       const GridLineDebugSettings& debug_settings);
     void update(const cv::Mat& image, const ros::Time& time);
 
@@ -69,6 +74,7 @@ class GridLineEstimator {
     const double fov_; // diagonal field of view of our bottom camera
 
     const LineExtractorSettings& line_extractor_settings_;
+    const GridEstimatorSettings& grid_estimator_settings_;
 
     const GridLineDebugSettings& debug_settings_;
     ros::Publisher debug_edges_pub_;
