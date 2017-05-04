@@ -1,3 +1,4 @@
+# Settings for the image processing portion of the GridLineEstimator
 line_extractor:
     canny_high_threshold: 35000.0
     canny_threshold_ratio: 2.5
@@ -6,9 +7,33 @@ line_extractor:
     hough_theta_resolution: 0.0087 # 1 degree
     hough_thresh_fraction: 0.3
 
+# Settings for the grid position estimation portion of the GridLineEstimator
 grid_estimator:
+    # Step size for initial orientation sweep
     theta_step: 0.004
 
+    # Step size for initial translation sweep
+    grid_step: 0.05
+
+    # Distance between the center of one gridline and the center of the next
+    grid_spacing: 1.0
+
+    # Thickness of each gridline
+    grid_line_thickness: 0.1
+
+    # (x-location of gridline intersection) - (x-location of origin)
+    grid_zero_offset_x: 0.5
+
+    # (y-location of gridline intersection) - (y-location of origin)
+    grid_zero_offset_y: 0.5
+
+    # Number of times to iterate in get1dGridShift
+    grid_translation_mean_iterations: 1
+
 grid_line_estimator:
+    # Should we spit out an edge image for each frame on the `edges` topic?
     debug_edges: true
+
+    # Should we spit out a copy of the input with lines drawn on top on the
+    # `lines` topic?
     debug_lines: true

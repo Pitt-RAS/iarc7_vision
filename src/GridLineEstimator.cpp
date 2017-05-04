@@ -27,6 +27,7 @@
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
 
 static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
@@ -53,7 +54,7 @@ static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
 ///
 /// Expects that 0 <= theta < pi/2
 /// and each datapoint t satisfies -pi/2 <= t < pi/2
-static double theta_loss(std::vector<double> thetas, double theta)
+static double theta_loss(const std::vector<double>& thetas, double theta)
 {
     double loss = 0;
     for (double t : thetas) {
@@ -88,144 +89,42 @@ GridLineEstimator::GridLineEstimator(
     if (debug_settings_.debug_lines) {
         debug_lines_pub_ = local_nh.advertise<sensor_msgs::Image>("lines", 10);
     }
+
+    pose_pub_ = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose", 10);
 }
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
-    // calculate necessary parameters
+    double height = last_filtered_position_(2);
 
-    // focal length in pixels
-    const double focal_length = getFocalLength(image.size(), fov_);
+    // TODO: load this from rosparam
+    if (height >= 1) {
+        processImage(image, time);
+    }
 
-    // TODO: GET HEIGHT FROM SOMEWHERE ELSE, MAKE THIS level_quad
-    geometry_msgs::TransformStamped transform;
-    ROS_ASSERT(transform_wrapper_.getTransformAtTime(transform,
-                                                     "map",
-                                                     "bottom_camera_optical",
+    // Update filtered position
+    geometry_msgs::TransformStamped filtered_position_transform_stamped;
+    ROS_ASSERT(transform_wrapper_.getTransformAtTime(
+            filtered_position_transform_stamped,
+            "level_quad",
+            "map",
+            time,
+            ros::Duration(1.0)));
+    const geometry_msgs::Transform& filtered_position_transform =
+        filtered_position_transform_stamped.transform;
+    last_filtered_position_(0) = filtered_position_transform.translation.x;
+    last_filtered_position_(1) = filtered_position_transform.translation.y;
+    last_filtered_position_(2) = filtered_position_transform.translation.z;
+}
+
+double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
+{
+    geometry_msgs::TransformStamped q_lq_tf;
+    ROS_ASSERT(transform_wrapper_.getTransformAtTime(q_lq_tf,
+                                                     "level_quad",
+                                                     "quad",
                                                      time,
                                                      ros::Duration(1.0)));
-    geometry_msgs::TransformStamped q_lq_tf;
-    //ROS_ASSERT(transform_wrapper_.getTransformAtTime(q_lq_tf,
-    //                                                 "level_quad",
-    //                                                 "quad",
-    //                                                 ros::Time::now(),
-    //                                                 ros::Duration(1.0)));
-    q_lq_tf = transform;
-
-    double height = transform.transform.translation.z;
-
-    //////////////////////////////////////////////////
-    // extract lines from image
-    //////////////////////////////////////////////////
-
-    std::vector<cv::Vec2f> lines;
-    getLines(lines, image, height);
-    ROS_WARN("%lu", lines.size());
-
-    //////////////////////////////////////////////////
-    // transform lines into gridlines
-    //////////////////////////////////////////////////
-
-    // each line that the camera sees defines a plane (call it P_l) in which
-    // the actual line resides. We can find the line in the floor plane
-    // (call the line l_f and the plane P_f) by intersecting P_f with P_l.
-    //
-    // TODO: To make this more robust, we should also check that the line on the
-    // floor is within the fov of the camera.  This would have the advantage of
-    // automatically filtering out some lines which clearly aren't actually
-    // on the floor.
-    //
-    // To do this, we can send rays through the endpoints of the line in the
-    // camera frame and make sure that one of them intersects P_f.
-
-    std::vector<Eigen::Vector3d> pl_normals;
-    for (const cv::Vec2f& line : lines) {
-        // line goes through the point p, perpendicular to the vector p
-        float rho = line[0]; // length of p
-        float theta = line[1]; // angle from +x to p
-
-        // vector we rotate around to get P_l's normal vector in the optical
-        // frame
-        Eigen::Vector3d rot_vector (-sin(theta), cos(theta), 0);
-        Eigen::Vector3d pl_normal = Eigen::AngleAxisd(
-                                         std::atan(rho / focal_length),
-                                         rot_vector)
-                                  * Eigen::Vector3d(cos(theta), sin(theta), 0);
-
-        // transform pl_normal into the map frame
-        geometry_msgs::Vector3Stamped pl_normal_msg;
-        pl_normal_msg.vector.x = pl_normal(0);
-        pl_normal_msg.vector.y = pl_normal(1);
-        pl_normal_msg.vector.z = pl_normal(2);
-        tf2::doTransform(pl_normal_msg, pl_normal_msg, transform);
-
-        pl_normal(0) = pl_normal_msg.vector.x;
-        pl_normal(1) = pl_normal_msg.vector.y;
-        pl_normal(2) = pl_normal_msg.vector.z;
-
-        // the equation for P_l is then pl_normal * v = pl_normal.z * z_cam,
-        // where v is a vector in P_l and z_cam is the distance from the ground
-        // to the camera.
-        //
-        // this means the equation for l_f (in the map frame) is
-        // pl_normal.x * x + pl_normal.y * y = pl_normal.z * z_cam
-        //
-        // because z_cam is the same for all lines, each line is specified by
-        // pl_normal alone
-        pl_normals.push_back(pl_normal);
-    }
-
-    //////////////////////////////////////////////////
-    // cluster gridlines by angle
-    //////////////////////////////////////////////////
-
-    // extract angles from lines (angles in the list are in [0, pi/2))
-    std::vector<double> thetas;
-    for (const Eigen::Vector3d& pl_normal : pl_normals) {
-        double next_theta = std::atan(-pl_normal(0)/pl_normal(1));
-        if (next_theta < 0) {
-            next_theta += M_PI/2;
-        }
-        thetas.push_back(next_theta);
-    }
-
-    // do a coarse sweep over angles from 0 to pi/2
-    double best_coarse_theta = 0;
-    double best_coarse_theta_score = theta_loss(thetas, 0);
-    for (double theta = grid_estimator_settings_.theta_step;
-         theta < M_PI / 2;
-         theta += grid_estimator_settings_.theta_step) {
-        double theta_score = theta_loss(thetas, theta);
-        if (theta_score < best_coarse_theta_score) {
-            best_coarse_theta = theta;
-            best_coarse_theta_score = theta_score;
-        }
-    }
-
-    // do an average around the result of the coarse estimate
-    double total = 0;
-    for (double theta : thetas) {
-        if (theta - best_coarse_theta > M_PI/4) {
-            total += theta - M_PI/2;
-        } else if (theta - best_coarse_theta < -M_PI/4) {
-            total += theta + M_PI/2;
-        } else {
-            total += theta;
-        }
-    }
-    double best_theta = total / thetas.size();
-
-    // wrap the result into [0, pi/2)
-    if (best_theta > M_PI/2) {
-        best_theta -= M_PI/2;
-    }
-    if (best_theta < 0) {
-        best_theta += M_PI/2;
-    }
-
-    // TODO: Remove outliers here and redo the average without them
-
-    // get current orientation estimate
     geometry_msgs::Vector3Stamped quad_forward;
     quad_forward.vector.x = 1;
     tf2::doTransform(quad_forward, quad_forward, q_lq_tf);
@@ -241,29 +140,7 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
         current_theta += 2*M_PI;
     }
 
-    // pick the orientation estimate that's closer to our current angle estimate
-    double best_theta_quad;
-    if (best_theta < M_PI/4) {
-        best_theta_quad = current_theta + best_theta;
-        if (best_theta_quad >= 2*M_PI) {
-            best_theta_quad -= 2*M_PI;
-        }
-    } else {
-        best_theta_quad = current_theta + best_theta - M_PI/2;
-        if (best_theta_quad < 0) {
-            best_theta_quad += 2*M_PI;
-        }
-    }
-
-    // convert orientation estimate to yaw
-    double yaw = -best_theta_quad;
-    if (yaw < 0) {
-        yaw += 2*M_PI;
-    }
-
-    //////////////////////////////////////////////////
-    // return estimate
-    //////////////////////////////////////////////////
+    return current_theta;
 }
 
 double GridLineEstimator::getFocalLength(const cv::Size& img_size, double fov)
@@ -274,7 +151,7 @@ double GridLineEstimator::getFocalLength(const cv::Size& img_size, double fov)
 
 void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                                  const cv::Mat& image,
-                                 double height)
+                                 double height) const
 {
     // m/px = camera_height / focal_length;
     double meters_per_px = height / getFocalLength(image.size(), fov_);
@@ -375,6 +252,467 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
             image_lines
         };
         debug_lines_pub_.publish(cv_image.toImageMsg());
+    }
+}
+
+void GridLineEstimator::getPlanesForImageLines(
+        const std::vector<cv::Vec2f>& image_lines,
+        const ros::Time& time,
+        double focal_length,
+        std::vector<Eigen::Vector3d>& pl_normals) const
+{
+    geometry_msgs::TransformStamped camera_to_lq_transform;
+    ROS_ASSERT(transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
+                                                     "level_quad",
+                                                     "bottom_camera_optical",
+                                                     time,
+                                                     ros::Duration(1.0)));
+
+    // TODO: To make this more robust, we should also check that the line on the
+    // floor is within the fov of the camera.  This would have the advantage of
+    // automatically filtering out some lines which clearly aren't actually
+    // on the floor.
+    //
+    // To do this, we can send rays through the endpoints of the line in the
+    // camera frame and make sure that one of them intersects P_f.
+
+    pl_normals.clear();
+    for (const cv::Vec2f& line : image_lines) {
+        // line goes through the point p, perpendicular to the vector p
+        float rho = line[0]; // length of p
+        float theta = line[1]; // angle from +x to p
+
+        // vector we rotate around to get P_l's normal vector in the optical
+        // frame
+        Eigen::Vector3d rot_vector (-sin(theta), cos(theta), 0);
+        Eigen::Vector3d pl_normal = Eigen::AngleAxisd(
+                                         std::atan(rho / focal_length),
+                                         rot_vector)
+                                  * Eigen::Vector3d(cos(theta), sin(theta), 0);
+
+        // transform pl_normal into the map frame
+        geometry_msgs::Vector3Stamped pl_normal_msg;
+        pl_normal_msg.vector.x = pl_normal(0);
+        pl_normal_msg.vector.y = pl_normal(1);
+        pl_normal_msg.vector.z = pl_normal(2);
+        tf2::doTransform(pl_normal_msg, pl_normal_msg, camera_to_lq_transform);
+
+        pl_normal(0) = pl_normal_msg.vector.x;
+        pl_normal(1) = pl_normal_msg.vector.y;
+        pl_normal(2) = pl_normal_msg.vector.z;
+
+        pl_normals.push_back(pl_normal);
+    }
+}
+
+double GridLineEstimator::getThetaForPlanes(
+        const std::vector<Eigen::Vector3d>& pl_normals) const
+{
+    // extract angles from lines (angles in the list are in [0, pi/2))
+    std::vector<double> thetas;
+    for (const Eigen::Vector3d& pl_normal : pl_normals) {
+        double next_theta = std::atan(-pl_normal(0)/pl_normal(1));
+        if (next_theta < 0) {
+            next_theta += M_PI/2;
+        }
+        thetas.push_back(next_theta);
+    }
+
+    // do a coarse sweep over angles from 0 to pi/2
+    double best_coarse_theta = 0;
+    double best_coarse_theta_score = theta_loss(thetas, 0);
+    for (double theta = grid_estimator_settings_.theta_step;
+         theta < M_PI / 2;
+         theta += grid_estimator_settings_.theta_step) {
+        double theta_score = theta_loss(thetas, theta);
+        if (theta_score < best_coarse_theta_score) {
+            best_coarse_theta = theta;
+            best_coarse_theta_score = theta_score;
+        }
+    }
+
+    // do an average around the result of the coarse estimate
+    double total = 0;
+    for (double theta : thetas) {
+        if (theta - best_coarse_theta > M_PI/4) {
+            total += theta - M_PI/2;
+        } else if (theta - best_coarse_theta < -M_PI/4) {
+            total += theta + M_PI/2;
+        } else {
+            total += theta;
+        }
+    }
+    double best_theta = total / thetas.size();
+
+    // wrap the result into [0, pi/2)
+    if (best_theta > M_PI/2) {
+        best_theta -= M_PI/2;
+    }
+    if (best_theta < 0) {
+        best_theta += M_PI/2;
+    }
+
+    // TODO: Remove outliers here and redo the average without them
+
+    return best_theta;
+}
+
+void GridLineEstimator::getUnAltifiedDistancesFromLines(
+        double theta,
+        const std::vector<Eigen::Vector3d>& para_line_normals,
+        const std::vector<Eigen::Vector3d>& perp_line_normals,
+        std::vector<double>& para_signed_dists,
+        std::vector<double>& perp_signed_dists)
+{
+    para_signed_dists.clear();
+    perp_signed_dists.clear();
+
+    Eigen::Vector2d theta_vect {
+        std::cos(theta),
+        std::sin(theta)
+    };
+
+    Eigen::Vector2d theta_vect_perp {
+        std::cos(theta + M_PI/2),
+        std::sin(theta + M_PI/2)
+    };
+
+    for (const Eigen::Vector3d& pl_normal : para_line_normals) {
+        para_signed_dists.push_back(pl_normal(2)
+                                  / theta_vect_perp.dot(pl_normal.head<2>()));
+    }
+
+    for (const Eigen::Vector3d& pl_normal : perp_line_normals) {
+        perp_signed_dists.push_back(pl_normal(2)
+                                  / theta_vect_perp.dot(pl_normal.head<2>()));
+    }
+}
+
+void GridLineEstimator::get1dGridShift(
+        const std::vector<double>& wrapped_dists,
+        double& value,
+        double& variance) const
+{
+    // Take coarse samples and use min cost one
+    double min_cost = std::numeric_limits<double>::max();
+    double best_guess = -1;
+    for (double sample = 0;
+         sample < 1;
+         sample += grid_estimator_settings_.grid_step) {
+        double cost = gridLoss(wrapped_dists, sample);
+        if (cost < min_cost) {
+            min_cost = cost;
+            best_guess = sample;
+        }
+    }
+    ROS_ASSERT(best_guess >= 0);
+
+    // TODO: detect case where we only have one side of one line, and therefore
+    // can't tell which side of that line we have
+
+    double grid_spacing = grid_estimator_settings_.grid_spacing;
+    double line_thickness = grid_estimator_settings_.grid_line_thickness;
+    for (int i = 0;
+         i < grid_estimator_settings_.grid_translation_mean_iterations;
+         i++) {
+
+        double total = 0;
+        for (double sample_dist : wrapped_dists) {
+            double min_dist = std::numeric_limits<double>::max();
+            double total_inc;
+            for (double line_side : {-1, 1}) {
+                for (int cell_inc : {-1, 0, 1}) {
+                    double test_sample = sample_dist
+                                       + line_side * line_thickness/2
+                                       + cell_inc * grid_spacing;
+                    double dist = std::abs(test_sample - best_guess);
+                    if (dist < min_dist) {
+                        min_dist = dist;
+                        total_inc = test_sample;
+                    }
+                }
+            }
+            total += total_inc;
+        }
+
+        best_guess = total / wrapped_dists.size();
+        if (best_guess >= grid_spacing) {
+            best_guess -= grid_spacing;
+        }
+        if (best_guess < 0) {
+            best_guess += grid_spacing;
+        }
+    }
+
+    value = best_guess;
+    variance = std::sqrt(gridLoss(wrapped_dists, value)
+                       / (wrapped_dists.size() * (wrapped_dists.size()-1)));
+}
+
+void GridLineEstimator::get2dPosition(
+        const std::vector<double>& para_signed_dists,
+        const std::vector<double>& perp_signed_dists,
+        double theta,
+        double height_estimate,
+        const Eigen::Vector2d& position_estimate,
+        Eigen::Vector2d& position,
+        Eigen::Matrix2d& covariance) const
+{
+    double grid_spacing = grid_estimator_settings_.grid_spacing;
+
+    // Wrap all distances into [0, 1)
+    std::vector<double> para_wrapped_dists (para_signed_dists.size());
+    for (double dist : para_signed_dists) {
+        dist = std::fmod(dist * height_estimate, grid_spacing);
+        para_wrapped_dists.push_back(dist);
+        if (para_wrapped_dists.back() < 0) {
+            para_wrapped_dists.back() += grid_spacing;
+        }
+    }
+
+    std::vector<double> perp_wrapped_dists (perp_signed_dists.size());
+    for (double dist : perp_signed_dists) {
+        dist = std::fmod(dist * height_estimate, grid_spacing);
+        perp_wrapped_dists.push_back(dist);
+        if (perp_wrapped_dists.back() < 0) {
+            perp_wrapped_dists.back() += grid_spacing;
+        }
+    }
+
+    // Get estimates and variances for grid translation in
+    // parallel/perpendicular directions
+    Eigen::Vector2d shift_estimate;
+    Eigen::Matrix2d shift_estimate_covariance;
+    get1dGridShift(para_wrapped_dists,
+                   shift_estimate(0),
+                   shift_estimate_covariance(0, 0));
+    get1dGridShift(perp_wrapped_dists,
+                   shift_estimate(1),
+                   shift_estimate_covariance(1, 1));
+    // TODO bound covariance away from infinity
+
+    // Put estimate and covariance in correct orientation
+    Eigen::Matrix2d rotation;
+    rotation = Eigen::Rotation2Dd(theta); // TODO WHAT???
+    shift_estimate = rotation * shift_estimate;
+    shift_estimate_covariance = rotation
+                              * shift_estimate_covariance
+                              * rotation.transpose();
+
+    // Convert estimate of grid position into estimate of quad position
+    Eigen::Vector2d wrapped_quad_position
+        = grid_estimator_settings_.grid_zero_offset - shift_estimate;
+    for (size_t i = 0; i < 2; i++) {
+        wrapped_quad_position(i) = std::fmod(wrapped_quad_position(i),
+                                             grid_spacing);
+        if (wrapped_quad_position(i) < 0) {
+            wrapped_quad_position(i) += grid_spacing;
+        }
+    }
+
+    // Find new position estimate closest to last position
+    Eigen::Vector2d wrapped_position_estimate;
+    for (size_t i = 0; i < 2; i++) {
+        wrapped_position_estimate(i) = std::fmod(position_estimate(i),
+                                                 grid_spacing);
+        if (wrapped_position_estimate(i) < 0) {
+            wrapped_position_estimate(i) += grid_spacing;
+        }
+
+        int cell_shift;
+        if (wrapped_quad_position(i) - wrapped_position_estimate(i)
+                < -grid_spacing/2) {
+            // we've moved into the next cell
+            cell_shift = 1;
+        } else if (wrapped_quad_position(i) - wrapped_position_estimate(i)
+                < grid_spacing/2) {
+            // we're in the same cell
+            cell_shift = 0;
+        } else {
+            // we've moved into the previous cell
+            cell_shift = -1;
+        }
+
+        position(i) = (std::floor(position_estimate(i) / grid_spacing) + cell_shift)
+                        * grid_spacing
+                    + wrapped_quad_position(i);
+    }
+
+    covariance = shift_estimate_covariance;
+}
+
+double GridLineEstimator::gridLoss(const std::vector<double>& wrapped_dists,
+                                   double dist) const
+{
+    double grid_spacing = grid_estimator_settings_.grid_spacing;
+
+    double smaller_dist = dist - grid_estimator_settings_.grid_line_thickness/2;
+    if (smaller_dist < 0) {
+        smaller_dist += grid_spacing;
+    }
+
+    double larger_dist = dist + grid_estimator_settings_.grid_line_thickness/2;
+    if (larger_dist >= grid_spacing) {
+        larger_dist -= grid_spacing;
+    }
+
+    double result = 0;
+    for (double sample_dist : wrapped_dists) {
+        result += std::min({
+                    std::pow(smaller_dist - sample_dist + grid_spacing, 2),
+                    std::pow(smaller_dist - sample_dist, 2),
+                    std::pow(smaller_dist - sample_dist - grid_spacing, 2),
+                    std::pow(larger_dist - sample_dist + grid_spacing, 2),
+                    std::pow(larger_dist - sample_dist, 2),
+                    std::pow(larger_dist - sample_dist - grid_spacing, 2)
+                });
+    }
+    return result;
+}
+
+void GridLineEstimator::processImage(const cv::Mat& image,
+                                     const ros::Time& time) const
+{
+    const double height = last_filtered_position_(2);
+
+    // Extract lines from image
+    std::vector<cv::Vec2f> lines;
+    getLines(lines, image, height);
+    ROS_WARN("%lu", lines.size());
+
+    // Transform lines into gridlines
+    std::vector<Eigen::Vector3d> pl_normals;
+    getPlanesForImageLines(lines,
+                           time,
+                           getFocalLength(image.size(), fov_),
+                           pl_normals);
+
+    //////////////////////////////////////////////////
+    // cluster gridlines by angle
+    //////////////////////////////////////////////////
+    const double best_theta = getThetaForPlanes(pl_normals);
+
+    // get current orientation estimate
+    const double current_theta = getCurrentTheta(time);
+
+    // Pick the orientation estimate that's closer to our current angle estimate
+    double best_theta_quad; // angle in [0, 2pi)
+    if (best_theta < M_PI/4) {
+        best_theta_quad = current_theta + best_theta;
+        if (best_theta_quad >= 2*M_PI) {
+            best_theta_quad -= 2*M_PI;
+        }
+    } else {
+        best_theta_quad = current_theta + best_theta - M_PI/2;
+        if (best_theta_quad < 0) {
+            best_theta_quad += 2*M_PI;
+        }
+    }
+
+    // Convert orientation estimate to yaw
+    double yaw = -best_theta_quad;
+    if (yaw < 0) {
+        yaw += 2*M_PI;
+    }
+
+    ROS_ERROR("%f",
+              std::min({std::abs(best_theta_quad - current_theta),
+                        std::abs(best_theta_quad - current_theta - 2*M_PI),
+                        std::abs(best_theta_quad - current_theta + 2*M_PI)}));
+
+    // Cluster lines by orientation
+    std::vector<Eigen::Vector3d> para_line_normals;
+    std::vector<Eigen::Vector3d> perp_line_normals;
+    splitLinesByOrientation(best_theta,
+                            pl_normals,
+                            para_line_normals,
+                            perp_line_normals);
+
+    // Convert lines to distances from origin
+    std::vector<double> para_signed_dists;
+    std::vector<double> perp_signed_dists;
+    getUnAltifiedDistancesFromLines(best_theta,
+                                    para_line_normals,
+                                    perp_line_normals,
+                                    para_signed_dists,
+                                    perp_signed_dists);
+
+    // Extract altitude
+    // TODO
+
+    // Extract horizontal translation
+    const Eigen::Vector2d last_position_2d {
+        last_filtered_position_(0),
+        last_filtered_position_(1)
+    };
+
+    Eigen::Vector2d position_2d;
+    Eigen::Matrix2d position_cov_2d;
+    get2dPosition(para_signed_dists,
+                  perp_signed_dists,
+                  best_theta,
+                  height,
+                  last_position_2d,
+                  position_2d,
+                  position_cov_2d);
+
+    // Publish updated position
+    Eigen::Vector3d position_3d {
+        position_2d(0),
+        position_2d(1),
+        height
+    };
+    Eigen::Matrix3d position_cov_3d = Eigen::Matrix3d::Zero();
+    position_cov_3d.block<2, 2>(0, 0) = position_cov_2d;
+
+    publishPositionEstimate(position_3d, position_cov_3d, time);
+}
+
+void GridLineEstimator::publishPositionEstimate(
+        const Eigen::Vector3d& position,
+        const Eigen::Matrix3d& covariance,
+        const ros::Time& time) const
+{
+    geometry_msgs::PoseWithCovarianceStamped pose_msg;
+
+    pose_msg.header.stamp = time;
+    pose_msg.header.frame_id = "map";
+
+    pose_msg.pose.pose.position.x = position(0);
+    pose_msg.pose.pose.position.y = position(1);
+    pose_msg.pose.pose.position.z = position(2);
+
+    pose_msg.pose.pose.orientation.w = 1;
+    pose_msg.pose.pose.orientation.x = 0;
+    pose_msg.pose.pose.orientation.y = 0;
+    pose_msg.pose.pose.orientation.z = 0;
+
+    for (size_t i = 0; i < 3; i++) {
+        for (size_t j = 0; j < 3; j++) {
+            pose_msg.pose.covariance[6*i + j] = covariance(i, j);
+        }
+    }
+
+    pose_pub_.publish(pose_msg);
+}
+
+void GridLineEstimator::splitLinesByOrientation(
+        double theta,
+        const std::vector<Eigen::Vector3d>& pl_normals,
+        std::vector<Eigen::Vector3d>& para_line_normals,
+        std::vector<Eigen::Vector3d>& perp_line_normals)
+{
+    para_line_normals.clear();
+    perp_line_normals.clear();
+
+    for (const Eigen::Vector3d& pl_normal : pl_normals) {
+        double dist_to_line = std::abs(theta
+                                     - std::atan(-pl_normal(0)/pl_normal(1)));
+        if (dist_to_line < M_PI/4 || dist_to_line > 3*M_PI/4) {
+            para_line_normals.push_back(pl_normal);
+        } else {
+            perp_line_normals.push_back(pl_normal);
+        }
     }
 }
 

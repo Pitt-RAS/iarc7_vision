@@ -48,6 +48,24 @@ void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "grid_estimator/theta_step",
             settings.theta_step));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/grid_step",
+            settings.grid_step));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/grid_spacing",
+            settings.grid_spacing));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/grid_line_thickness",
+            settings.grid_line_thickness));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/grid_zero_offset_x",
+            settings.grid_zero_offset(0)));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/grid_zero_offset_y",
+            settings.grid_zero_offset(1)));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/grid_translation_mean_iterations",
+            settings.grid_translation_mean_iterations));
 }
 
 void getDebugSettings(const ros::NodeHandle& private_nh,
@@ -86,10 +104,11 @@ int main(int argc, char **argv)
         ros::spinOnce();
     }
 
+    std::vector<sensor_msgs::Image::ConstPtr> message_queue;
+
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
-            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                                      message->header.stamp);
+            message_queue.push_back(message);
         };
 
     image_transport::ImageTransport image_transporter{nh};
@@ -101,6 +120,11 @@ int main(int argc, char **argv)
 
     while (ros::ok())
     {
+        for (const auto& message : message_queue) {
+            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+                                      message->header.stamp);
+        }
+        message_queue.clear();
         ros::spinOnce();
         rate.sleep();
     }
