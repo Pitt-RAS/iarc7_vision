@@ -352,6 +352,8 @@ double GridLineEstimator::getThetaForPlanes(
         best_theta += M_PI/2;
     }
 
+    ROS_ASSERT(best_theta >= 0 && best_theta < M_PI/2);
+
     // TODO: Remove outliers here and redo the average without them
 
     return best_theta;
@@ -384,7 +386,7 @@ void GridLineEstimator::getUnAltifiedDistancesFromLines(
 
     for (const Eigen::Vector3d& pl_normal : perp_line_normals) {
         perp_signed_dists.push_back(pl_normal(2)
-                                  / theta_vect_perp.dot(pl_normal.head<2>()));
+                                  / theta_vect.dot(pl_normal.head<2>()));
     }
 }
 
@@ -393,11 +395,16 @@ void GridLineEstimator::get1dGridShift(
         double& value,
         double& variance) const
 {
+    ROS_ASSERT(wrapped_dists.size() > 0);
+
+    double grid_spacing = grid_estimator_settings_.grid_spacing;
+    double line_thickness = grid_estimator_settings_.grid_line_thickness;
+
     // Take coarse samples and use min cost one
     double min_cost = std::numeric_limits<double>::max();
     double best_guess = -1;
     for (double sample = 0;
-         sample < 1;
+         sample < grid_spacing;
          sample += grid_estimator_settings_.grid_step) {
         double cost = gridLoss(wrapped_dists, sample);
         if (cost < min_cost) {
@@ -405,13 +412,11 @@ void GridLineEstimator::get1dGridShift(
             best_guess = sample;
         }
     }
-    ROS_ASSERT(best_guess >= 0);
+    ROS_ASSERT(best_guess >= 0 && best_guess < grid_spacing);
 
     // TODO: detect case where we only have one side of one line, and therefore
     // can't tell which side of that line we have
 
-    double grid_spacing = grid_estimator_settings_.grid_spacing;
-    double line_thickness = grid_estimator_settings_.grid_line_thickness;
     for (int i = 0;
          i < grid_estimator_settings_.grid_translation_mean_iterations;
          i++) {
@@ -432,6 +437,7 @@ void GridLineEstimator::get1dGridShift(
                     }
                 }
             }
+            ROS_ASSERT(std::isfinite(total_inc));
             total += total_inc;
         }
 
@@ -459,9 +465,10 @@ void GridLineEstimator::get2dPosition(
         Eigen::Matrix2d& covariance) const
 {
     double grid_spacing = grid_estimator_settings_.grid_spacing;
+    ROS_ASSERT(theta >= 0 && theta < 2*M_PI);
 
-    // Wrap all distances into [0, 1)
-    std::vector<double> para_wrapped_dists (para_signed_dists.size());
+    // Wrap all distances into [0, grid_spacing)
+    std::vector<double> para_wrapped_dists;
     for (double dist : para_signed_dists) {
         dist = std::fmod(dist * height_estimate, grid_spacing);
         para_wrapped_dists.push_back(dist);
@@ -470,7 +477,7 @@ void GridLineEstimator::get2dPosition(
         }
     }
 
-    std::vector<double> perp_wrapped_dists (perp_signed_dists.size());
+    std::vector<double> perp_wrapped_dists;
     for (double dist : perp_signed_dists) {
         dist = std::fmod(dist * height_estimate, grid_spacing);
         perp_wrapped_dists.push_back(dist);
@@ -479,25 +486,42 @@ void GridLineEstimator::get2dPosition(
         }
     }
 
+    for (double dist : para_wrapped_dists) {
+        ROS_ASSERT(dist >= 0 && dist < grid_spacing);
+    }
+
+    for (double dist : perp_wrapped_dists) {
+        ROS_ASSERT(dist >= 0 && dist < grid_spacing);
+    }
+
     // Get estimates and variances for grid translation in
     // parallel/perpendicular directions
     Eigen::Vector2d shift_estimate;
     Eigen::Matrix2d shift_estimate_covariance;
-    get1dGridShift(para_wrapped_dists,
-                   shift_estimate(0),
-                   shift_estimate_covariance(0, 0));
-    get1dGridShift(perp_wrapped_dists,
-                   shift_estimate(1),
-                   shift_estimate_covariance(1, 1));
+    bool use_last_perp_shift = false;
+    bool use_last_para_shift = false;
+    if (perp_wrapped_dists.size() != 0) {
+        get1dGridShift(perp_wrapped_dists,
+                       shift_estimate(0),
+                       shift_estimate_covariance(0, 0));
+    } else {
+        use_last_perp_shift = true;
+        shift_estimate_covariance(0, 0) = grid_spacing;
+    }
+
+    if (para_wrapped_dists.size() != 0) {
+        get1dGridShift(para_wrapped_dists,
+                       shift_estimate(1),
+                       shift_estimate_covariance(1, 1));
+    } else {
+        use_last_para_shift = true;
+        shift_estimate_covariance(1, 1) = grid_spacing;
+    }
+
     // TODO bound covariance away from infinity
 
-    // Put estimate and covariance in correct orientation
-    Eigen::Matrix2d rotation;
-    rotation = Eigen::Rotation2Dd(theta); // TODO WHAT???
-    shift_estimate = rotation * shift_estimate;
-    shift_estimate_covariance = rotation
-                              * shift_estimate_covariance
-                              * rotation.transpose();
+    ROS_ASSERT(shift_estimate(0) >= 0 && shift_estimate(0) < grid_spacing);
+    ROS_ASSERT(shift_estimate(1) >= 0 && shift_estimate(1) < grid_spacing);
 
     // Convert estimate of grid position into estimate of quad position
     Eigen::Vector2d wrapped_quad_position
@@ -536,6 +560,14 @@ void GridLineEstimator::get2dPosition(
         position(i) = (std::floor(position_estimate(i) / grid_spacing) + cell_shift)
                         * grid_spacing
                     + wrapped_quad_position(i);
+    }
+
+    if (use_last_perp_shift) {
+        position(0) = position_estimate(0);
+    }
+
+    if (use_last_para_shift) {
+        position(1) = position_estimate(1);
     }
 
     covariance = shift_estimate_covariance;
@@ -705,12 +737,14 @@ void GridLineEstimator::splitLinesByOrientation(
     para_line_normals.clear();
     perp_line_normals.clear();
 
+    // TODO: load this from rosparam
+    double angle_thresh = M_PI/12;
     for (const Eigen::Vector3d& pl_normal : pl_normals) {
         double dist_to_line = std::abs(theta
                                      - std::atan(-pl_normal(0)/pl_normal(1)));
-        if (dist_to_line < M_PI/4 || dist_to_line > 3*M_PI/4) {
+        if (dist_to_line < angle_thresh || dist_to_line > M_PI - angle_thresh) {
             para_line_normals.push_back(pl_normal);
-        } else {
+        } else if (std::abs(dist_to_line - M_PI/2) < angle_thresh) {
             perp_line_normals.push_back(pl_normal);
         }
     }
