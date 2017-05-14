@@ -840,15 +840,16 @@ void GridLineEstimator::splitLinesByOrientation(
         double theta,
         const std::vector<Eigen::Vector3d>& pl_normals,
         std::vector<Eigen::Vector3d>& para_line_normals,
-        std::vector<Eigen::Vector3d>& perp_line_normals)
+        std::vector<Eigen::Vector3d>& perp_line_normals) const
 {
     para_line_normals.clear();
     perp_line_normals.clear();
 
     std::ostringstream thetas_stream;
 
-    // TODO: load this from rosparam
-    double angle_thresh = M_PI/12;
+    const double angle_thresh
+        = grid_estimator_settings_.line_rejection_angle_threshold;
+
     for (const Eigen::Vector3d& pl_normal : pl_normals) {
         thetas_stream << std::atan(-pl_normal(0)/pl_normal(1)) << " ";
         double dist_to_line = std::abs(theta

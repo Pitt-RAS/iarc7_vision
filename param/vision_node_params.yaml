@@ -30,6 +30,9 @@ grid_estimator:
     # Number of times to iterate in get1dGridShift
     grid_translation_mean_iterations: 1
 
+    # Threshold to reject lines that aren't aligned with the grid
+    line_rejection_angle_threshold: 0.262 # pi/12
+
 grid_line_estimator:
     # Should we spit out a marker vector for the quad's estimated orientation?
     debug_direction: true

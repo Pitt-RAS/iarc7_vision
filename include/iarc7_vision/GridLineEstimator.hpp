@@ -37,6 +37,7 @@ struct GridEstimatorSettings {
     double grid_line_thickness;
     Eigen::Vector2d grid_zero_offset;
     int grid_translation_mean_iterations;
+    double line_rejection_angle_threshold;
 };
 
 struct GridLineDebugSettings {
@@ -156,11 +157,11 @@ class GridLineEstimator {
     ///                                parallel to the theta vector}
     /// @param[out] perp_line_normals {Plane normals of lines closer to
     ///                                perpendicular to the theta vector}
-    static void splitLinesByOrientation(
+    void splitLinesByOrientation(
         double theta,
         const std::vector<Eigen::Vector3d>& pl_normals,
         std::vector<Eigen::Vector3d>& para_line_normals,
-        std::vector<Eigen::Vector3d>& perp_line_normals);
+        std::vector<Eigen::Vector3d>& perp_line_normals) const;
 
     ros::Publisher pose_pub_;
 

@@ -66,6 +66,9 @@ void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "grid_estimator/grid_translation_mean_iterations",
             settings.grid_translation_mean_iterations));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/line_rejection_angle_threshold",
+            settings.line_rejection_angle_threshold));
 }
 
 void getDebugSettings(const ros::NodeHandle& private_nh,
