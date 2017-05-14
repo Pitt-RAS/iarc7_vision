@@ -6,6 +6,7 @@ line_extractor:
     hough_rho_resolution: 1.0
     hough_theta_resolution: 0.0087 # 1 degree
     hough_thresh_fraction: 0.3
+    fov: 1.0
 
 # Settings for the grid position estimation portion of the GridLineEstimator
 grid_estimator:

@@ -28,6 +28,7 @@ struct LineExtractorSettings {
     double hough_rho_resolution;
     double hough_theta_resolution;
     double hough_thresh_fraction;
+    double fov;
 };
 
 struct GridEstimatorSettings {
@@ -49,8 +50,7 @@ struct GridLineDebugSettings {
 
 class GridLineEstimator {
   public:
-    GridLineEstimator(double fov,
-                      const LineExtractorSettings& line_estimator_settings,
+    GridLineEstimator(const LineExtractorSettings& line_estimator_settings,
                       const GridEstimatorSettings& grid_estimator_settings,
                       const GridLineDebugSettings& debug_settings);
     void update(const cv::Mat& image, const ros::Time& time);
@@ -177,8 +177,6 @@ class GridLineEstimator {
     mutable cv::gpu::GpuMat gpu_image_edges_;
     mutable cv::gpu::GpuMat gpu_lines_;
     mutable cv::gpu::GpuMat gpu_image_hsv_channels_[3];
-
-    const double fov_; // diagonal field of view of our bottom camera
 
     const LineExtractorSettings& line_extractor_settings_;
     const GridEstimatorSettings& grid_estimator_settings_;

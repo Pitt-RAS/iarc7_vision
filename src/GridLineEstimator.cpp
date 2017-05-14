@@ -71,12 +71,10 @@ static double theta_loss(const std::vector<double>& thetas, double theta)
 namespace iarc7_vision {
 
 GridLineEstimator::GridLineEstimator(
-        double fov,
         const LineExtractorSettings& line_extractor_settings,
         const GridEstimatorSettings& grid_estimator_settings,
         const GridLineDebugSettings& debug_settings)
-    : fov_(fov),
-      line_extractor_settings_(line_extractor_settings),
+    : line_extractor_settings_(line_extractor_settings),
       grid_estimator_settings_(grid_estimator_settings),
       debug_settings_(debug_settings),
       transform_wrapper_()
@@ -171,7 +169,9 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                                  double height) const
 {
     // m/px = camera_height / focal_length;
-    double meters_per_px = height / getFocalLength(image.size(), fov_);
+    double meters_per_px = height
+                         / getFocalLength(image.size(),
+                                          line_extractor_settings_.fov);
 
     // desired m_px used to keep kernel sizes relative to our features
     double desired_meters_per_px = 1.0/250.0;
@@ -662,7 +662,8 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     std::vector<Eigen::Vector3d> pl_normals;
     getPlanesForImageLines(lines,
                            time,
-                           getFocalLength(image.size(), fov_),
+                           getFocalLength(image.size(),
+                                          line_extractor_settings_.fov),
                            pl_normals);
 
     // Publish gridlines

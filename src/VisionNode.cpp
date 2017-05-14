@@ -40,6 +40,9 @@ void getLineExtractorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "line_extractor/hough_thresh_fraction",
             settings.hough_thresh_fraction));
+    ROS_ASSERT(private_nh.getParam(
+            "line_extractor/fov",
+            settings.fov));
 }
 
 void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
@@ -102,7 +105,6 @@ int main(int argc, char **argv)
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
     getDebugSettings(private_nh, grid_line_debug_settings);
     iarc7_vision::GridLineEstimator gridline_estimator(
-            0.95,
             line_extractor_settings,
             grid_estimator_settings,
             grid_line_debug_settings);
