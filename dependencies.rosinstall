@@ -1,3 +1,10 @@
 - git:
     local-name: iarc7_msgs
     uri: https://github.com/Pitt-RAS/iarc7_msgs.git
+- git:
+    local-name: ros_utils
+    uri: https://github.com/Pitt-RAS/ros_utils.git
+- git:
+    local-name: vision_opencv
+    uri: https://github.com/Pitt-RAS/vision_opencv.git
+    version: no-opencv-rosdep

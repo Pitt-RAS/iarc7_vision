@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="iarc7_vision" type="iarc7_vision_node" name="iarc7_vision_node">
+        <rosparam command="load" file="$(find iarc7_vision)/param/vision_node_params.yaml" />
+        <remap from="grid_line_estimator/pose" to="/camera_localized_pose" />
+    </node>
+</launch>
