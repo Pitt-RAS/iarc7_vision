@@ -119,15 +119,19 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
     geometry_msgs::TransformStamped filtered_position_transform_stamped;
     ROS_ASSERT(transform_wrapper_.getTransformAtTime(
             filtered_position_transform_stamped,
-            "level_quad",
             "map",
+            "bottom_camera_optical",
             time,
             ros::Duration(1.0)));
-    const geometry_msgs::Transform& filtered_position_transform =
-        filtered_position_transform_stamped.transform;
-    last_filtered_position_(0) = filtered_position_transform.translation.x;
-    last_filtered_position_(1) = filtered_position_transform.translation.y;
-    last_filtered_position_(2) = filtered_position_transform.translation.z;
+
+    geometry_msgs::PointStamped camera_position;
+    tf2::doTransform(camera_position,
+                     camera_position,
+                     filtered_position_transform_stamped);
+
+    last_filtered_position_(0) = camera_position.point.x;
+    last_filtered_position_(1) = camera_position.point.y;
+    last_filtered_position_(2) = camera_position.point.z;
 }
 
 double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
@@ -770,11 +774,25 @@ void GridLineEstimator::processImage(const cv::Mat& image,
                   position_cov_2d);
 
     // Publish updated position
+    geometry_msgs::TransformStamped camera_to_lq_transform;
+    ROS_ASSERT(transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
+                                                     "level_quad",
+                                                     "bottom_camera_optical",
+                                                     time,
+                                                     ros::Duration(1.0)));
+    geometry_msgs::PointStamped camera_position;
+    camera_position.header.frame_id = "bottom_camera_optical";
+    camera_position.point.x = 0;
+    camera_position.point.y = 0;
+    camera_position.point.z = 0;
+    tf2::doTransform(camera_position, camera_position, camera_to_lq_transform);
+
     Eigen::Vector3d position_3d {
-        position_2d(0),
-        position_2d(1),
-        height
+        position_2d(0) - camera_position.point.x,
+        position_2d(1) - camera_position.point.y,
+        height         - camera_position.point.z
     };
+
     Eigen::Matrix3d position_cov_3d = Eigen::Matrix3d::Zero();
     position_cov_3d.block<2, 2>(0, 0) = position_cov_2d;
 
