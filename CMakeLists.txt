@@ -160,22 +160,7 @@ add_dependencies(iarc7_vision_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_
 ## Specify libraries to link a library or executable target against
 target_link_libraries(iarc7_vision_node
   ${catkin_LIBRARIES}
-  opencv_core
-  opencv_imgproc
-  opencv_highgui
-  opencv_calib3d
-  opencv_contrib
-  opencv_features2d
-  opencv_flann
-  opencv_gpu
-  opencv_legacy
-  opencv_ml
-  opencv_objdetect
-  opencv_photo
-  opencv_stitching
-  opencv_superres
-  opencv_video
-  opencv_videostab
+  ${OpenCV_LIBRARIES}
   ${EIGEN3_LIBRARIES}
 )
 
