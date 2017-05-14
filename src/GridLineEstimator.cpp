@@ -686,7 +686,9 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     lines_marker.color.g = 1;
     lines_marker.color.b = 1;
     lines_marker.scale.x = 0.02;
-    debug_line_markers_pub_.publish(lines_marker);
+    if (debug_settings_.debug_line_markers) {
+        debug_line_markers_pub_.publish(lines_marker);
+    }
 
     //////////////////////////////////////////////////
     // cluster gridlines by angle
@@ -742,7 +744,9 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     direction_marker.color.b = 1;
     direction_marker.scale.x = 0.05;
     direction_marker.scale.y = 0.08;
-    debug_direction_marker_pub_.publish(direction_marker);
+    if (debug_settings_.debug_direction) {
+        debug_direction_marker_pub_.publish(direction_marker);
+    }
 
     // Cluster lines by orientation
     std::vector<Eigen::Vector3d> para_line_normals;
