@@ -691,7 +691,10 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     //////////////////////////////////////////////////
     // cluster gridlines by angle
     //////////////////////////////////////////////////
-    const double best_theta = getThetaForPlanes(pl_normals);
+
+    // For now, our localization has a better estimate of the grid orientation
+    // than the camera does, so we just use that
+    const double best_theta = 0; //getThetaForPlanes(pl_normals);
 
     // get current orientation estimate
     const double current_theta = getCurrentTheta(time);
