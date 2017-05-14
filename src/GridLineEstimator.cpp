@@ -651,7 +651,7 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     // Extract lines from image
     std::vector<cv::Vec2f> lines;
     getLines(lines, image, height);
-    ROS_INFO("Number of lines extracted: %lu", lines.size());
+    ROS_DEBUG("Number of lines extracted: %lu", lines.size());
 
     // Don't process further if we don't have any lines
     if (lines.size() == 0) return;
