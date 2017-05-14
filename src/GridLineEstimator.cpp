@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <iterator>
 #include <limits>
 #include <opencv2/opencv.hpp>
@@ -108,26 +109,35 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
     if (last_filtered_position_(2)
             >= grid_estimator_settings_.min_extraction_altitude) {
-        processImage(image, time);
+        try {
+            processImage(image, time);
+        } catch (std::exception& ex) {
+            ROS_ERROR_STREAM("Caught exception processing image: "
+                          << ex.what());
+        }
     }
 
     // Update filtered position
-    geometry_msgs::TransformStamped filtered_position_transform_stamped;
-    ROS_ASSERT(transform_wrapper_.getTransformAtTime(
-            filtered_position_transform_stamped,
-            "map",
-            "bottom_camera_optical",
-            time,
-            ros::Duration(1.0)));
+    try {
+        geometry_msgs::TransformStamped filtered_position_transform_stamped;
+        ROS_ASSERT(transform_wrapper_.getTransformAtTime(
+                filtered_position_transform_stamped,
+                "map",
+                "bottom_camera_optical",
+                time,
+                ros::Duration(1.0)));
 
-    geometry_msgs::PointStamped camera_position;
-    tf2::doTransform(camera_position,
-                     camera_position,
-                     filtered_position_transform_stamped);
+        geometry_msgs::PointStamped camera_position;
+        tf2::doTransform(camera_position,
+                         camera_position,
+                         filtered_position_transform_stamped);
 
-    last_filtered_position_(0) = camera_position.point.x;
-    last_filtered_position_(1) = camera_position.point.y;
-    last_filtered_position_(2) = camera_position.point.z;
+        last_filtered_position_(0) = camera_position.point.x;
+        last_filtered_position_(1) = camera_position.point.y;
+        last_filtered_position_(2) = camera_position.point.z;
+    } catch (std::exception& ex) {
+        ROS_ERROR_STREAM("Caught exception updating transform: " << ex.what());
+    }
 }
 
 double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
