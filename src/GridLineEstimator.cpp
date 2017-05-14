@@ -477,8 +477,12 @@ void GridLineEstimator::get1dGridShift(
     }
 
     value = best_guess;
-    variance = std::sqrt(gridLoss(wrapped_dists, value)
-                       / (wrapped_dists.size() * (wrapped_dists.size()-1)));
+    if (wrapped_dists.size() > 1) {
+        variance = gridLoss(wrapped_dists, value)
+                 / (wrapped_dists.size() * (wrapped_dists.size()-1));
+    } else {
+        variance = std::pow(line_thickness, 2);
+    }
 }
 
 void GridLineEstimator::get2dPosition(
@@ -553,8 +557,6 @@ void GridLineEstimator::get2dPosition(
         use_last_para_shift = true;
         shift_estimate_covariance(1, 1) = grid_spacing;
     }
-
-    // TODO bound covariance away from infinity
 
     ROS_ASSERT(shift_estimate(0) >= 0 && shift_estimate(0) < grid_spacing);
     ROS_ASSERT(shift_estimate(1) >= 0 && shift_estimate(1) < grid_spacing);
@@ -652,6 +654,9 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     std::vector<cv::Vec2f> lines;
     getLines(lines, image, height);
     ROS_WARN("%lu", lines.size());
+
+    // Don't process further if we don't have any lines
+    if (lines.size() == 0) return;
 
     // Transform lines into gridlines
     std::vector<Eigen::Vector3d> pl_normals;
