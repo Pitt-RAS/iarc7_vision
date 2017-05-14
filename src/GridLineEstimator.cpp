@@ -106,10 +106,8 @@ GridLineEstimator::GridLineEstimator(
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
-    double height = last_filtered_position_(2);
-
-    // TODO: load this from rosparam
-    if (height >= 1) {
+    if (last_filtered_position_(2)
+            >= grid_estimator_settings_.min_extraction_altitude) {
         processImage(image, time);
     }
 

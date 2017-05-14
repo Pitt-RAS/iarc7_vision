@@ -39,6 +39,7 @@ struct GridEstimatorSettings {
     Eigen::Vector2d grid_zero_offset;
     int grid_translation_mean_iterations;
     double line_rejection_angle_threshold;
+    double min_extraction_altitude;
 };
 
 struct GridLineDebugSettings {

@@ -72,6 +72,9 @@ void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "grid_estimator/line_rejection_angle_threshold",
             settings.line_rejection_angle_threshold));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/min_extraction_altitude",
+            settings.min_extraction_altitude));
 }
 
 void getDebugSettings(const ros::NodeHandle& private_nh,
