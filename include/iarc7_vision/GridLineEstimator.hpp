@@ -40,8 +40,10 @@ struct GridEstimatorSettings {
 };
 
 struct GridLineDebugSettings {
+    bool debug_direction;
     bool debug_edges;
     bool debug_lines;
+    bool debug_line_markers;
 };
 
 class GridLineEstimator {
@@ -181,8 +183,10 @@ class GridLineEstimator {
     const GridEstimatorSettings& grid_estimator_settings_;
 
     const GridLineDebugSettings& debug_settings_;
+    ros::Publisher debug_direction_marker_pub_;
     ros::Publisher debug_edges_pub_;
     ros::Publisher debug_lines_pub_;
+    ros::Publisher debug_line_markers_pub_;
 
     Eigen::Vector3d last_filtered_position_;
 

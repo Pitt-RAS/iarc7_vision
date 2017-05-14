@@ -31,9 +31,15 @@ grid_estimator:
     grid_translation_mean_iterations: 1
 
 grid_line_estimator:
+    # Should we spit out a marker vector for the quad's estimated orientation?
+    debug_direction: true
+
     # Should we spit out an edge image for each frame on the `edges` topic?
     debug_edges: true
 
     # Should we spit out a copy of the input with lines drawn on top on the
     # `lines` topic?
     debug_lines: true
+
+    # Should we spit out markers for the transformed lines?
+    debug_line_markers: true

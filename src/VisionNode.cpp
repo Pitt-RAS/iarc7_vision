@@ -72,11 +72,17 @@ void getDebugSettings(const ros::NodeHandle& private_nh,
                       iarc7_vision::GridLineDebugSettings& settings)
 {
     ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_direction",
+            settings.debug_direction));
+    ROS_ASSERT(private_nh.getParam(
             "grid_line_estimator/debug_edges",
             settings.debug_edges));
     ROS_ASSERT(private_nh.getParam(
             "grid_line_estimator/debug_lines",
             settings.debug_lines));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_line_markers",
+            settings.debug_line_markers));
 }
 
 int main(int argc, char **argv)

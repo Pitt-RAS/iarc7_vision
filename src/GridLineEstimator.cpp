@@ -29,6 +29,7 @@
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
+#include <visualization_msgs/Marker.h>
 
 static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
 {
@@ -82,6 +83,11 @@ GridLineEstimator::GridLineEstimator(
 {
     ros::NodeHandle local_nh ("grid_line_estimator");
 
+    if (debug_settings_.debug_direction) {
+        debug_direction_marker_pub_
+            = local_nh.advertise<visualization_msgs::Marker>("direction", 1);
+    }
+
     if (debug_settings_.debug_edges) {
         debug_edges_pub_ = local_nh.advertise<sensor_msgs::Image>("edges", 10);
     }
@@ -90,7 +96,14 @@ GridLineEstimator::GridLineEstimator(
         debug_lines_pub_ = local_nh.advertise<sensor_msgs::Image>("lines", 10);
     }
 
-    pose_pub_ = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose", 10);
+    if (debug_settings_.debug_line_markers) {
+        debug_line_markers_pub_ = local_nh.advertise<visualization_msgs::Marker>(
+                "line_markers", 1);
+    }
+
+    pose_pub_
+        = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose",
+                                                                       10);
 }
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
@@ -619,6 +632,30 @@ void GridLineEstimator::processImage(const cv::Mat& image,
                            getFocalLength(image.size(), fov_),
                            pl_normals);
 
+    // Publish gridlines
+    visualization_msgs::Marker lines_marker;
+    lines_marker.header.stamp = ros::Time::now();
+    lines_marker.header.frame_id = "map";
+    lines_marker.ns = "lines_marker_ns";
+    lines_marker.id = 0;
+    lines_marker.type = visualization_msgs::Marker::LINE_LIST;
+    lines_marker.action = visualization_msgs::Marker::MODIFY;
+    for (const Eigen::Vector3d& pl_normal : pl_normals) {
+        geometry_msgs::Point p;
+        p.x = 10;
+        p.y = (pl_normal(2)*height - pl_normal(0)*p.x) / pl_normal(1);
+        lines_marker.points.push_back(p);
+        p.x = -10;
+        p.y = (pl_normal(2)*height - pl_normal(0)*p.x) / pl_normal(1);
+        lines_marker.points.push_back(p);
+    }
+    lines_marker.color.a = 1;
+    lines_marker.color.r = 0;
+    lines_marker.color.g = 1;
+    lines_marker.color.b = 1;
+    lines_marker.scale.x = 0.02;
+    debug_line_markers_pub_.publish(lines_marker);
+
     //////////////////////////////////////////////////
     // cluster gridlines by angle
     //////////////////////////////////////////////////
@@ -651,6 +688,26 @@ void GridLineEstimator::processImage(const cv::Mat& image,
               std::min({std::abs(best_theta_quad - current_theta),
                         std::abs(best_theta_quad - current_theta - 2*M_PI),
                         std::abs(best_theta_quad - current_theta + 2*M_PI)}));
+
+    visualization_msgs::Marker direction_marker;
+    direction_marker.header.stamp = ros::Time::now();
+    direction_marker.header.frame_id = "level_quad";
+    direction_marker.ns = "direction_marker_ns";
+    direction_marker.id = 0;
+    direction_marker.type = visualization_msgs::Marker::ARROW;
+    direction_marker.action = visualization_msgs::Marker::MODIFY;
+    geometry_msgs::Point p;
+    direction_marker.points.push_back(p);
+    p.x = std::cos(yaw);
+    p.y = -std::sin(yaw);
+    direction_marker.points.push_back(p);
+    direction_marker.color.a = 1;
+    direction_marker.color.r = 0;
+    direction_marker.color.g = 1;
+    direction_marker.color.b = 1;
+    direction_marker.scale.x = 0.05;
+    direction_marker.scale.y = 0.08;
+    debug_direction_marker_pub_.publish(direction_marker);
 
     // Cluster lines by orientation
     std::vector<Eigen::Vector3d> para_line_normals;
