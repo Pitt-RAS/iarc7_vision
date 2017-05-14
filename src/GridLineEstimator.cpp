@@ -303,16 +303,21 @@ void GridLineEstimator::getPlanesForImageLines(
                                          rot_vector)
                                   * Eigen::Vector3d(cos(theta), sin(theta), 0);
 
-        // transform pl_normal into the map frame
+        // transform pl_normal into the map-oriented frame
         geometry_msgs::Vector3Stamped pl_normal_msg;
         pl_normal_msg.vector.x = pl_normal(0);
         pl_normal_msg.vector.y = pl_normal(1);
         pl_normal_msg.vector.z = pl_normal(2);
+
+        double pl_normal_len = pl_normal.norm();
+
         tf2::doTransform(pl_normal_msg, pl_normal_msg, camera_to_lq_transform);
 
         pl_normal(0) = pl_normal_msg.vector.x;
         pl_normal(1) = pl_normal_msg.vector.y;
         pl_normal(2) = pl_normal_msg.vector.z;
+
+        ROS_ASSERT_MSG(std::abs(pl_normal_len - pl_normal.norm()) < 0.0001, "%f %f", pl_normal_len, pl_normal.norm());
 
         pl_normals.push_back(pl_normal);
     }
@@ -321,6 +326,8 @@ void GridLineEstimator::getPlanesForImageLines(
 double GridLineEstimator::getThetaForPlanes(
         const std::vector<Eigen::Vector3d>& pl_normals) const
 {
+    ROS_ASSERT(pl_normals.size() > 0);
+
     // extract angles from lines (angles in the list are in [0, pi/2))
     std::vector<double> thetas;
     for (const Eigen::Vector3d& pl_normal : pl_normals) {
@@ -358,14 +365,16 @@ double GridLineEstimator::getThetaForPlanes(
     double best_theta = total / thetas.size();
 
     // wrap the result into [0, pi/2)
-    if (best_theta > M_PI/2) {
+    if (best_theta >= M_PI/2) {
         best_theta -= M_PI/2;
     }
     if (best_theta < 0) {
         best_theta += M_PI/2;
     }
 
-    ROS_ASSERT(best_theta >= 0 && best_theta < M_PI/2);
+    ROS_ASSERT_MSG(best_theta >= 0 && best_theta < M_PI/2,
+                   "best_theta: %f",
+                   best_theta);
 
     // TODO: Remove outliers here and redo the average without them
 
@@ -507,6 +516,16 @@ void GridLineEstimator::get2dPosition(
         ROS_ASSERT(dist >= 0 && dist < grid_spacing);
     }
 
+    std::ostringstream para_stream;
+    for (double d : para_wrapped_dists) para_stream << d << " ";
+    ROS_DEBUG_STREAM("GridLineEstimator parallel wrapped distances: "
+                  << para_stream.str());
+
+    std::ostringstream perp_stream;
+    for (double d : perp_wrapped_dists) perp_stream << d << " ";
+    ROS_DEBUG_STREAM("GridLineEstimator perpendicular wrapped distances: "
+                  << perp_stream.str());
+
     // Get estimates and variances for grid translation in
     // parallel/perpendicular directions
     Eigen::Vector2d shift_estimate;
@@ -547,6 +566,9 @@ void GridLineEstimator::get2dPosition(
         }
     }
 
+    ROS_ASSERT(wrapped_quad_position(0) >= 0 && wrapped_quad_position(0) < grid_spacing);
+    ROS_ASSERT(wrapped_quad_position(1) >= 0 && wrapped_quad_position(1) < grid_spacing);
+
     // Find new position estimate closest to last position
     Eigen::Vector2d wrapped_position_estimate;
     for (size_t i = 0; i < 2; i++) {
@@ -555,6 +577,8 @@ void GridLineEstimator::get2dPosition(
         if (wrapped_position_estimate(i) < 0) {
             wrapped_position_estimate(i) += grid_spacing;
         }
+
+        ROS_ASSERT(wrapped_position_estimate(i) >= 0 && wrapped_position_estimate(i) < grid_spacing);
 
         int cell_shift;
         if (wrapped_quad_position(i) - wrapped_position_estimate(i)
@@ -684,7 +708,7 @@ void GridLineEstimator::processImage(const cv::Mat& image,
         yaw += 2*M_PI;
     }
 
-    ROS_ERROR("%f",
+    ROS_DEBUG("Orientation error in GridLineEstimator: %f",
               std::min({std::abs(best_theta_quad - current_theta),
                         std::abs(best_theta_quad - current_theta - 2*M_PI),
                         std::abs(best_theta_quad - current_theta + 2*M_PI)}));
@@ -771,6 +795,10 @@ void GridLineEstimator::publishPositionEstimate(
     pose_msg.pose.pose.position.y = position(1);
     pose_msg.pose.pose.position.z = position(2);
 
+    ROS_ASSERT_MSG(std::isfinite(position(0)), "%f", position(0));
+    ROS_ASSERT_MSG(std::isfinite(position(1)), "%f", position(1));
+    ROS_ASSERT_MSG(std::isfinite(position(2)), "%f", position(2));
+
     pose_msg.pose.pose.orientation.w = 1;
     pose_msg.pose.pose.orientation.x = 0;
     pose_msg.pose.pose.orientation.y = 0;
@@ -794,9 +822,12 @@ void GridLineEstimator::splitLinesByOrientation(
     para_line_normals.clear();
     perp_line_normals.clear();
 
+    std::ostringstream thetas_stream;
+
     // TODO: load this from rosparam
     double angle_thresh = M_PI/12;
     for (const Eigen::Vector3d& pl_normal : pl_normals) {
+        thetas_stream << std::atan(-pl_normal(0)/pl_normal(1)) << " ";
         double dist_to_line = std::abs(theta
                                      - std::atan(-pl_normal(0)/pl_normal(1)));
         if (dist_to_line < angle_thresh || dist_to_line > M_PI - angle_thresh) {
@@ -805,6 +836,9 @@ void GridLineEstimator::splitLinesByOrientation(
             perp_line_normals.push_back(pl_normal);
         }
     }
+
+    ROS_DEBUG_STREAM("GridLineEstimator thetas: (" << thetas_stream.str()
+                  << ") Extracted theta: (" << theta << ")");
 }
 
 } // namespace iarc7_vision
