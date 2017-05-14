@@ -79,30 +79,35 @@ class GridLineEstimator {
                   const cv::Mat& image,
                   double height) const;
 
-    /// each line that the camera sees defines a plane (call it P_l) in which
+    /// Computes the normal vectors of the planes defined by the given lines
+    /// seen by the camera.
+    ///
+    /// Each line that the camera sees defines a plane (call it P_l) in which
     /// the actual line resides. We can find the line in the floor plane
     /// (call the line l_f and the plane P_f) by intersecting P_f with P_l.
     ///
     ///
-    /// the equation for P_l is then pl_normal * v = pl_normal.z * z_cam,
+    /// The equation for P_l is then pl_normal * v = pl_normal.z * z_cam,
     /// where v is a vector in P_l and z_cam is the distance from the ground
     /// to the camera.
     ///
-    /// this means the equation for l_f (in the map frame) is
+    /// This means the equation for l_f (in the map frame) is
     /// pl_normal.x * x + pl_normal.y * y = pl_normal.z * z_cam
     ///
-    /// because z_cam is the same for all lines, each line is specified by
-    /// pl_normal alone
+    /// Because z_cam is the same for all lines, each line is specified by
+    /// pl_normal alone.
     void getPlanesForImageLines(const std::vector<cv::Vec2f>& image_lines,
                                 const ros::Time& time,
                                 double focal_length,
                                 std::vector<Eigen::Vector3d>& pl_normals) const;
 
+    /// Returns the best guess for grid's orientation relative to the pl_normal
+    /// frame based on the given planes
     double getThetaForPlanes(const std::vector<Eigen::Vector3d>& pl_normals) const;
 
     /// Returns signed distance of each line from the origin without accounting
-    /// for altitude.  To the actual signed distance, multiply by the distance
-    /// from the camera frame origin to the ground.
+    /// for altitude.  To get the actual signed distance, multiply by the
+    /// distance from the camera frame origin to the ground.
     ///
     /// This operates on the assumption that we can use the distances between
     /// these lines and the origin (based on a projection onto the theta vector)
@@ -113,6 +118,16 @@ class GridLineEstimator {
     /// and the origin.  One possible solution would be to project the camera
     /// forward vector into the ground plane and use distances from that point
     /// instead of from the origin.
+    ///
+    /// @param[in]  theta             Best guess orientation for the grid
+    /// @param[in]  para_line_normals {Normal vectors of planes that are
+    ///                                parallel to the theta vector}
+    /// @param[in]  perp_line_normals {Normal vectors of planes that are
+    ///                                perpendicular to the theta vector}
+    /// @param[out] para_signed_dists {Signed distance between each line and
+    ///                                the origin}
+    /// @param[out] perp_signed_dists {Signed distance between each line and
+    ///                                the origin}
     static void getUnAltifiedDistancesFromLines(
         double theta,
         const std::vector<Eigen::Vector3d>& para_line_normals,
@@ -120,11 +135,24 @@ class GridLineEstimator {
         std::vector<double>& para_signed_dists,
         std::vector<double>& perp_signed_dists);
 
+    /// Best guess for the grid's location in [0, grid_spacing)
+    ///
+    /// @param[in]  wrapped_dists Locations of lines in [0, grid_spacing)
+    /// @param[out] value         Best guess at the grid's location
+    /// @param[out] variance      Variance of value
     void get1dGridShift(const std::vector<double>& wrapped_dists,
                         double& value,
                         double& variance) const;
 
-    /// @param[in] position_estimate Vector from origin of map to origin of pl_normal frame ("level_quad" on the ground)
+    /// Get the 2d position estimate closest to position_estimate based on the
+    /// given information about the grid
+    ///
+    /// @param[in]  height_estimate   The approximate altitude of the camera
+    /// @param[in]  position_estimate {Vector from origin of map to origin of
+    ///                                pl_normal frame ("level_quad" on the
+    ///                                ground)}
+    /// @param[out] position          The best guess 2d position
+    /// @param[out] covariance        Covariance of position estimate
     void get2dPosition(const std::vector<double>& para_signed_dists,
                        const std::vector<double>& perp_signed_dists,
                        double theta,
@@ -133,9 +161,16 @@ class GridLineEstimator {
                        Eigen::Vector2d& position,
                        Eigen::Matrix2d& covariance) const;
 
+    /// Chi^2 loss function, where the distance measurement for each datapoint
+    /// is the distance from the point to the closest possible edge of a
+    /// gridline
+    ///
+    /// Expects that 0 <= d < grid_spacing, for every d in wrapped_dists and
+    /// for dist itself
     double gridLoss(const std::vector<double>& wrapped_dists,
                     double dist) const;
 
+    /// Extract grid position from the image and publish if possible
     void processImage(const cv::Mat& image, const ros::Time& time) const;
 
     /// Publish a 3d position estimate with the specified timestamp in the
