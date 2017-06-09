@@ -177,13 +177,15 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                                  double height) const
 {
     // m/px = camera_height / focal_length;
-    double meters_per_px = height
+    double current_meters_per_px = height
                          / getFocalLength(image.size(),
                                           line_extractor_settings_.fov);
 
     // desired m_px used to keep kernel sizes relative to our features
-    double desired_meters_per_px = 1.0/250.0;
-    double scale_factor = meters_per_px / desired_meters_per_px;
+    double desired_meters_per_px = 1.0
+                                 / line_extractor_settings_.pixels_per_meter;
+
+    double scale_factor = current_meters_per_px / desired_meters_per_px;
 
     if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
         ROS_WARN_ONCE("Doing OpenCV operations on CPU");

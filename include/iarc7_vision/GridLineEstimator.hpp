@@ -22,6 +22,7 @@
 namespace iarc7_vision {
 
 struct LineExtractorSettings {
+    double pixels_per_meter;
     double canny_low_threshold;
     double canny_high_threshold;
     int canny_sobel_size;
