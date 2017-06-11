@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(iarc7_vision)
 
+set("OpenCV_DIR" "/usr/local/share/OpenCV")
+set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE "" INTERNAL)
+
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror ${CMAKE_CXX_FLAGS}")
 
 ## Find catkin macros and libraries
