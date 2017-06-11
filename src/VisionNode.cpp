@@ -18,6 +18,10 @@ void getLineExtractorSettings(const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& settings)
 {
     ROS_ASSERT(private_nh.getParam(
+            "line_extractor/pixels_per_meter",
+            settings.pixels_per_meter));
+
+    ROS_ASSERT(private_nh.getParam(
             "line_extractor/canny_high_threshold",
             settings.canny_high_threshold));
 
