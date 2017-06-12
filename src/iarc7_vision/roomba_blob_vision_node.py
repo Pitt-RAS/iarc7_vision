@@ -11,7 +11,8 @@ Algorithm:
        details on the red and green pixel clumps.
     3. Find contours on the remaining pixel clumps.
     4. Calculate the bounding box of any pixel clumps larger than 10x10 pixels.
-    5. Translate the camera coordinates to map frame using 
+    5. Translate the camera coordinates to map frame using CameraInfo and the
+       transform library
 
 Preconditions:
 
