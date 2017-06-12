@@ -39,7 +39,7 @@ import rospy
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
 
-from geometry_msgs.msg import Point, TransformStamped, Vector3Stamped
+from geometry_msgs.msg import Point, TransformStamped, Vector3Stamped, PointStamped
 from sensor_msgs.msg import Image, CameraInfo
 from visualization_msgs.msg import Marker
 from iarc7_msgs.msg import OdometryArray
@@ -295,13 +295,13 @@ class CameraProcessor(ImageRoombaFinder):
                                                           copy.deepcopy(trans))
             
             # Scale the direction to hit the ground (plane z=0)
-            direction_scale = (trans.transform.translation.z - ROOMBA_HEIGHT) \
-                              / map_ray.vector.z
+            # Direction scale should always be positive
+            cam_pos = tf2_geometry_msgs.do_transform_point(
+                                 PointStamped(point=Point(0,0,0)), trans).point
+            direction_scale = - (cam_pos.z - ROOMBA_HEIGHT) / map_ray.vector.z
             roomba_pos = Point()
-            roomba_pos.x = trans.transform.translation.x - \
-                           map_ray.vector.x * direction_scale
-            roomba_pos.y = trans.transform.translation.y - \
-                           map_ray.vector.y * direction_scale
+            roomba_pos.x = cam_pos.x + map_ray.vector.x * direction_scale
+            roomba_pos.y = cam_pos.y + map_ray.vector.y * direction_scale
             roomba_pos.z = 0
     
             # Debug the roomba line
@@ -318,7 +318,7 @@ class CameraProcessor(ImageRoombaFinder):
                     self.roombas[i] = roomba_pos
                     index = i
                     break
-            if index == -1:
+            else:
                 index = len(self.roombas)
                 self.roombas.append(roomba_pos)
 
@@ -358,7 +358,7 @@ class VideoProcessor(ImageRoombaFinder):
 if __name__ == '__main__':
     # Uncomment the following line to run on a sample video, and comment out
     # the CameraProcessor line below.
-    # VideoProcessor("../Experiments/green_test.mp4")
+    # VideoProcessor("ABSOLUTE_PATH_TO_VIDEO.MP4")
 
     # Run the main node functionality.
     # Change False to True to turn on debugging
