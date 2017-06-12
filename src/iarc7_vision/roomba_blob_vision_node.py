@@ -332,11 +332,12 @@ class VideoProcessor(ImageRoombaFinder):
         self.debug = Debugger(True, False)
         cap = cv2.VideoCapture(file_path)
         while True:
-            _, frame = cap.read()
+            retval, frame = cap.read()
+            if not retval: # Exit if there is not a frame
+                break
             for _ in self.bound_roombas(frame):
                 pass
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            cv2.waitKey(1)
 
 if __name__ == '__main__':
     # Uncomment the following line to run on a sample video, and comment out
