@@ -131,7 +131,8 @@ class ImageRoombaFinder(object):
     
         :param frame: 3-channel image to apply HSV range filters to
         :type frame: numpy.ndarray
-        :param ranges: list of 3-element tuples
+        :param ranges: list of disjointed HSV ranges
+        :type ranges: list of 3-element tuples
         :return: 3-channel filtered image
         :rtype: numpy.ndarray
     
