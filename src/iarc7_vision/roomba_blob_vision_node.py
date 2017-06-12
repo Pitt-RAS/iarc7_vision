@@ -65,7 +65,7 @@ class Debugger(object):
         if self._rviz_enabled:
             self.rviz_pub = rospy.Publisher('visualization_marker', Marker, \
                                                   queue_size=10)
-            self.rviz_frame = "/map"
+            self.rviz_frame = "map"
             self.rviz_namespace = NODE_NAME
         
     def image_grid(self, *args):
@@ -324,7 +324,7 @@ class CameraProcessor(ImageRoombaFinder):
             out_msg = OdometryArray()
             for pt in self.roombas:
                 item = Odometry()
-                item.header.frame_id = "/map"
+                item.header.frame_id = "map"
                 item.pose.pose.position = pt
                 out_msg.data.append(item) 
             self.publisher.publish(out_msg)
