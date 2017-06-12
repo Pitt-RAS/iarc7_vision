@@ -338,9 +338,6 @@ class VideoProcessor(ImageRoombaFinder):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-def main():
-    """ Run main node functionality. """
-
 if __name__ == '__main__':
     # Uncomment the following line to run on a sample video, and comment out
     # the CameraProcessor line below.
