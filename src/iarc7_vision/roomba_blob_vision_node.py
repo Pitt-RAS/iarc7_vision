@@ -26,7 +26,7 @@ Execution:
     Contrary to online code, the do_transform_vector3 method DOES NOT create a
     deep copy of the transform first, and thus this method will set the
     translation of the transform to the origin! This can be seen in the file:
-    `/opt/ros/kinetic/lib/python2.7/dist-packages/tf2_geometry_msgs/tf2_geometry_msgs.py`
+    `python2.7/dist-packages/tf2_geometry_msgs/tf2_geometry_msgs.py`
 
 .. note:
     The default behavior is to act as a camera cv node with debugging
@@ -125,8 +125,8 @@ class ImageRoombaFinder(object):
 
     def filter_ranges(self, frame, ranges):
         """
-        Filter the image to only areas between the HSV values described in ranges.
-        This will not alter the original image.
+        Filter the image to only areas between the HSV values described in
+        ranges. This will not alter the original image.
     
         :param frame: 3-channel image to apply HSV range filters to
         :type frame: numpy.ndarray
@@ -138,10 +138,13 @@ class ImageRoombaFinder(object):
             In OpenCV, the HSV ranges are [0,180], [0,255], [0,255].
         """
         hsv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        out = np.zeros(frame.shape, dtype=frame.dtype) # Create black image the same size as frame
+        # Create black image the same size as frame
+        out = np.zeros(frame.shape, dtype=frame.dtype)
         for r in ranges:
-            mask = cv2.inRange(hsv_image, r[0], r[1]) # Create mask
-            out = cv2.add(out, cv2.bitwise_and(frame, frame, mask=mask)) # Apply the mask
+            # Create mask
+            mask = cv2.inRange(hsv_image, r[0], r[1])
+            # Apply the mask
+            out = cv2.add(out, cv2.bitwise_and(frame, frame, mask=mask))
         return out
 
     def filter_roombas(self, frame):
@@ -154,17 +157,17 @@ class ImageRoombaFinder(object):
         :rtype: numpy.ndarray of shape 3 x WIDTH x HEIGHT with dtype uint8
     
         .. note::
-            From a few sample images, it seems that the saturation can go as low as
-            13%, which is equivalent to 33/255. Images are white when saturation is
-            0. 50/255 seems reasonable for minimum value. When the value is 0, the
-            image is black.
+            From a few sample images, it seems that the saturation can go as
+            low as 13%, which is equivalent to 33/255. Images are white when
+            saturation is 0. 50/255 seems reasonable for minimum value. When
+            the value is 0, the image is black.
     
         .. note::
-            The numbers used in the ranges need to be altered slightly depending on
-            the brightness of the `frame` being processed. The upper limits don't
-            need to be changed, but the saturation and value constants for the
-            lower limits will need to change if the image is significantly darker
-            or lighter.
+            The numbers used in the ranges need to be altered slightly
+            depending on the brightness of the `frame` being processed. The
+            upper limits don't need to be changed, but the saturation and value
+            constants for the lower limits will need to change if the image is
+            significantly darker or lighter.
         """
         # TODO This will be tuned for varying brightness levels
         ranges = np.array([
@@ -187,7 +190,7 @@ class ImageRoombaFinder(object):
         the original frame.
     
         :param img_gray: single channel image used to find edges
-        :type img_gray: numpy.ndarray of shape 1 x WIDTH x HEIGHT and dtype uint8
+        :type img_gray: numpy.ndarray of shape 1 x WIDTH x HEIGHT & dtype uint8
         :param img: original three channel (BGR) image to draw boxes on
         :type img: numpy.ndarray of shape 3 x WIDTH x HEIGHT and dtype uint8
         :return: Iterator object containing (x, y) pairs
@@ -198,7 +201,8 @@ class ImageRoombaFinder(object):
         frame_gray = cv2.cvtColor(roombas, cv2.COLOR_BGR2GRAY)
         # find the contours in this single channel image
         # RETR_EXTERNAL won't match boxes inside other boxes
-        contours, _ = cv2.findContours(frame_gray,cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(frame_gray,cv2.RETR_EXTERNAL,
+                                       cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             rect = cv2.boundingRect(c)
             # Skip tiny boxes
@@ -229,8 +233,10 @@ class CameraProcessor(ImageRoombaFinder):
                                         rospy.Time(0), rospy.Duration(3.0))
 
         rospy.Subscriber("/bottom_image_raw/image", Image, self.callback)
-        rospy.Subscriber("/bottom_image_raw/camera_info", CameraInfo, self.camera.fromCameraInfo)
-        self.publisher = rospy.Publisher("/roombas", OdometryArray, queue_size=10)
+        rospy.Subscriber("/bottom_image_raw/camera_info", CameraInfo,
+                         self.camera.fromCameraInfo)
+        self.publisher = rospy.Publisher("/roombas", OdometryArray,
+                                         queue_size=10)
 
         # Starup the loop
         try:
@@ -261,7 +267,8 @@ class CameraProcessor(ImageRoombaFinder):
 
     def filter_frame(self, frame, trans):
         """
-        Applies a four-step algorithm to find all the roombas in a given BGR image.
+        Applies a four-step algorithm to find all the roombas in a given BGR
+        image.
     
         :param frame: raw BGR image in which to find roombas
         :type frame: numpy.ndarray of shape 3 x WIDTH x HEIGHT with dtype uint8
@@ -277,16 +284,22 @@ class CameraProcessor(ImageRoombaFinder):
     
         for img_coords in self.bound_roombas(frame):
             cam_ray = Vector3Stamped()
-            cam_ray.vector.x, cam_ray.vector.y, cam_ray.vector.z = self.camera.projectPixelTo3dRay(img_coords)
+            cam_ray.vector.x, cam_ray.vector.y, cam_ray.vector.z = \
+                                    self.camera.projectPixelTo3dRay(img_coords)
             
             # Convert that camera ray to world space (map frame)
-            map_ray = tf2_geometry_msgs.do_transform_vector3(cam_ray, copy.deepcopy(trans)) # reassigning
+            # See note in script header about do_transform_vector3
+            map_ray = tf2_geometry_msgs.do_transform_vector3(cam_ray,
+                                                          copy.deepcopy(trans))
             
             # Scale the direction to hit the ground (plane z=0)
-            direction_scale = (trans.transform.translation.z - ROOMBA_HEIGHT) / map_ray.vector.z
+            direction_scale = (trans.transform.translation.z - ROOMBA_HEIGHT) \
+                              / map_ray.vector.z
             roomba_pos = Point()
-            roomba_pos.x = trans.transform.translation.x - map_ray.vector.x * direction_scale
-            roomba_pos.y = trans.transform.translation.y - map_ray.vector.y * direction_scale
+            roomba_pos.x = trans.transform.translation.x - \
+                           map_ray.vector.x * direction_scale
+            roomba_pos.y = trans.transform.translation.y - \
+                           map_ray.vector.y * direction_scale
             roomba_pos.z = 0
     
             # Debug the roomba line
@@ -298,7 +311,8 @@ class CameraProcessor(ImageRoombaFinder):
             sq_tolerance = 0.1 if len(self.roombas) < 10 else 1000
             index = -1
             for i in xrange(len(self.roombas)):
-                if (roomba_pos.x - self.roombas[i].x)**2 + (roomba_pos.y - self.roombas[i].y)**2 < sq_tolerance:
+                if (roomba_pos.x - self.roombas[i].x)**2 + \
+                   (roomba_pos.y - self.roombas[i].y)**2 < sq_tolerance:
                     self.roombas[i] = roomba_pos
                     index = i
                     break
