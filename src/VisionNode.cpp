@@ -134,7 +134,7 @@ int main(int argc, char **argv)
 
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
-            message_queue.push_back(std::move(message));
+            message_queue.push_back(message);
         };
 
     image_transport::ImageTransport image_transporter{nh};
