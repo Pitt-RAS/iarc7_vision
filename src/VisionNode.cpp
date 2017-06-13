@@ -131,7 +131,7 @@ int main(int argc, char **argv)
 
     image_transport::ImageTransport image_transporter{nh};
     ros::Subscriber sub = nh.subscribe(
-        "/bottom_image_raw/image",
+        "/bottom_image_raw/image_raw",
         100,
         &std::function<void(const sensor_msgs::Image::ConstPtr&)>::operator(),
         &handler);
