@@ -15,6 +15,7 @@
 // END BAD HEADERS
 
 #include <algorithm>
+#include <boost/format.hpp>
 #include <cmath>
 #include <exception>
 #include <iterator>
@@ -111,22 +112,26 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
             >= grid_estimator_settings_.min_extraction_altitude) {
         try {
             processImage(image, time);
-        } catch (std::exception& ex) {
+        } catch (const std::exception& ex) {
             ROS_ERROR_STREAM("Caught exception processing image: "
                           << ex.what());
         }
+    } else {
+        ROS_WARN("Height (%f) is below min processing height (%f)",
+                 last_filtered_position_(2),
+                 grid_estimator_settings_.min_extraction_altitude);
     }
 
     // Update filtered position
-    try {
-        geometry_msgs::TransformStamped filtered_position_transform_stamped;
-        ROS_ASSERT(transform_wrapper_.getTransformAtTime(
-                filtered_position_transform_stamped,
-                "map",
-                "bottom_camera_optical",
-                time,
-                ros::Duration(1.0)));
-
+    geometry_msgs::TransformStamped filtered_position_transform_stamped;
+    if (!transform_wrapper_.getTransformAtTime(
+            filtered_position_transform_stamped,
+            "map",
+            "bottom_camera_optical",
+            time,
+            ros::Duration(1.0))) {
+        ROS_ERROR("Failed to fetch transform to bottom_camera_optical");
+    } else {
         geometry_msgs::PointStamped camera_position;
         tf2::doTransform(camera_position,
                          camera_position,
@@ -134,20 +139,23 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 
         last_filtered_position_(0) = camera_position.point.x;
         last_filtered_position_(1) = camera_position.point.y;
-        last_filtered_position_(2) = camera_position.point.z;
-    } catch (std::exception& ex) {
-        ROS_ERROR_STREAM("Caught exception updating transform: " << ex.what());
+        last_filtered_position_(2) = std::isfinite(debug_settings_.debug_height)
+                                   ? debug_settings_.debug_height
+                                   : camera_position.point.z;
     }
 }
 
 double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
 {
     geometry_msgs::TransformStamped q_lq_tf;
-    ROS_ASSERT(transform_wrapper_.getTransformAtTime(q_lq_tf,
-                                                     "level_quad",
-                                                     "quad",
-                                                     time,
-                                                     ros::Duration(1.0)));
+    if (!transform_wrapper_.getTransformAtTime(q_lq_tf,
+                                               "level_quad",
+                                               "quad",
+                                               time,
+                                               ros::Duration(1.0))) {
+        throw ros::Exception("Failed to fetch transform");
+    }
+
     geometry_msgs::Vector3Stamped quad_forward;
     quad_forward.vector.x = 1;
     tf2::doTransform(quad_forward, quad_forward, q_lq_tf);
@@ -187,22 +195,27 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
     double scale_factor = current_meters_per_px / desired_meters_per_px;
 
+    cv::Mat image_edges;
     if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
         ROS_WARN_ONCE("Doing OpenCV operations on CPU");
 
-        cv::resize(image, image_sized_, cv::Size(), scale_factor, scale_factor);
-        cv::cvtColor(image_sized_, image_hsv_, CV_BGR2HSV);
-        cv::split(image_hsv_, image_hsv_channels_);
+        cv::Mat image_sized;
+        cv::Mat image_hsv;
+        cv::Mat image_hsv_channels[3];
 
-        cv::Canny(image_hsv_channels_[2],
-                  image_edges_,
+        cv::resize(image, image_sized, cv::Size(), scale_factor, scale_factor);
+        cv::cvtColor(image_sized, image_hsv, CV_BGR2HSV);
+        cv::split(image_hsv, image_hsv_channels);
+
+        cv::Canny(image_hsv_channels[2],
+                  image_edges,
                   line_extractor_settings_.canny_low_threshold,
                   line_extractor_settings_.canny_high_threshold,
                   line_extractor_settings_.canny_sobel_size);
 
-        double hough_threshold = image_edges_.size().height
+        double hough_threshold = image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;
-        cv::HoughLines(image_edges_,
+        cv::HoughLines(image_edges,
                        lines,
                        line_extractor_settings_.hough_rho_resolution,
                        line_extractor_settings_.hough_theta_resolution,
@@ -211,44 +224,52 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         // rescale lines back to original image size
         for (cv::Vec2f& line : lines) {
             line[0] *= static_cast<float>(image.size().height)
-                     / image_edges_.size().height;
+                     / image_edges.size().height;
         }
     } else {
-        gpu_image_.upload(image);
+        cv::gpu::HoughLinesBuf gpu_hough_buf;
+        cv::gpu::GpuMat gpu_image;
+        cv::gpu::GpuMat gpu_image_sized;
+        cv::gpu::GpuMat gpu_image_hsv;
+        cv::gpu::GpuMat gpu_image_edges;
+        cv::gpu::GpuMat gpu_lines;
+        cv::gpu::GpuMat gpu_image_hsv_channels[3];
 
-        cv::gpu::resize(gpu_image_,
-                        gpu_image_sized_,
+        gpu_image.upload(image);
+
+        cv::gpu::resize(gpu_image,
+                        gpu_image_sized,
                         cv::Size(),
                         scale_factor,
                         scale_factor);
-        cv::gpu::cvtColor(gpu_image_sized_, gpu_image_hsv_, CV_BGR2HSV);
-        cv::gpu::split(gpu_image_hsv_, gpu_image_hsv_channels_);
+        cv::gpu::cvtColor(gpu_image_sized, gpu_image_hsv, CV_BGR2HSV);
+        cv::gpu::split(gpu_image_hsv, gpu_image_hsv_channels);
 
-        cv::gpu::Canny(gpu_image_hsv_channels_[2],
-                       gpu_image_edges_,
+        cv::gpu::Canny(gpu_image_hsv_channels[2],
+                       gpu_image_edges,
                        line_extractor_settings_.canny_low_threshold,
                        line_extractor_settings_.canny_high_threshold,
                        line_extractor_settings_.canny_sobel_size);
 
-        double hough_threshold = gpu_image_edges_.size().height
+        double hough_threshold = gpu_image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;
-        cv::gpu::HoughLines(gpu_image_edges_,
-                            gpu_lines_,
-                            gpu_hough_buf_,
+        cv::gpu::HoughLines(gpu_image_edges,
+                            gpu_lines,
+                            gpu_hough_buf,
                             line_extractor_settings_.hough_rho_resolution,
                             line_extractor_settings_.hough_theta_resolution,
                             hough_threshold);
 
-        cv::gpu::HoughLinesDownload(gpu_lines_, lines);
+        cv::gpu::HoughLinesDownload(gpu_lines, lines);
 
         // rescale lines back to original image size
         for (cv::Vec2f& line : lines) {
             line[0] *= static_cast<float>(image.size().height)
-                     / gpu_image_edges_.size().height;
+                     / gpu_image_edges.size().height;
         }
 
         if (debug_settings_.debug_edges) {
-            gpu_image_edges_.download(image_edges_);
+            gpu_image_edges.download(image_edges);
         }
     }
 
@@ -264,7 +285,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
             sensor_msgs::image_encodings::MONO8,
-            image_edges_
+            image_edges
         };
 
         debug_edges_pub_.publish(cv_image.toImageMsg());
@@ -289,11 +310,13 @@ void GridLineEstimator::getPlanesForImageLines(
         std::vector<Eigen::Vector3d>& pl_normals) const
 {
     geometry_msgs::TransformStamped camera_to_lq_transform;
-    ROS_ASSERT(transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
-                                                     "level_quad",
-                                                     "bottom_camera_optical",
-                                                     time,
-                                                     ros::Duration(1.0)));
+    if (!transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
+                                               "level_quad",
+                                               "bottom_camera_optical",
+                                               time,
+                                               ros::Duration(1.0))) {
+        throw ros::Exception("Failed to fetch transform");
+    }
 
     // TODO: To make this more robust, we should also check that the line on the
     // floor is within the fov of the camera.  This would have the advantage of
@@ -331,7 +354,10 @@ void GridLineEstimator::getPlanesForImageLines(
         pl_normal(1) = pl_normal_msg.vector.y;
         pl_normal(2) = pl_normal_msg.vector.z;
 
-        ROS_ASSERT_MSG(std::abs(pl_normal_len - pl_normal.norm()) < 0.0001, "%f %f", pl_normal_len, pl_normal.norm());
+        if (!(std::abs(pl_normal_len - pl_normal.norm()) < 0.0001)) {
+            throw ros::Exception(str(boost::format("%f %f")
+                               % pl_normal_len % pl_normal.norm()));
+        }
 
         pl_normals.push_back(pl_normal);
     }
@@ -340,7 +366,9 @@ void GridLineEstimator::getPlanesForImageLines(
 double GridLineEstimator::getThetaForPlanes(
         const std::vector<Eigen::Vector3d>& pl_normals) const
 {
-    ROS_ASSERT(pl_normals.size() > 0);
+    if (pl_normals.size() == 0) {
+        throw ros::Exception("No planes to process");
+    }
 
     // extract angles from lines (angles in the list are in [0, pi/2))
     std::vector<double> thetas;
@@ -386,9 +414,9 @@ double GridLineEstimator::getThetaForPlanes(
         best_theta += M_PI/2;
     }
 
-    ROS_ASSERT_MSG(best_theta >= 0 && best_theta < M_PI/2,
-                   "best_theta: %f",
-                   best_theta);
+    if (best_theta < 0 || best_theta >= M_PI/2) {
+        throw ros::Exception(str(boost::format("best_theta: %f") % best_theta));
+    }
 
     // TODO: Remove outliers here and redo the average without them
 
@@ -431,7 +459,9 @@ void GridLineEstimator::get1dGridShift(
         double& value,
         double& variance) const
 {
-    ROS_ASSERT(wrapped_dists.size() > 0);
+    if (wrapped_dists.size() == 0) {
+        throw ros::Exception("No dists to process");
+    }
 
     double grid_spacing = grid_estimator_settings_.grid_spacing;
     double line_thickness = grid_estimator_settings_.grid_line_thickness;
@@ -448,7 +478,9 @@ void GridLineEstimator::get1dGridShift(
             best_guess = sample;
         }
     }
-    ROS_ASSERT(best_guess >= 0 && best_guess < grid_spacing);
+    if (best_guess < 0 || best_guess >= grid_spacing) {
+        throw ros::Exception("best_guess out of bounds");
+    }
 
     // TODO: detect case where we only have one side of one line, and therefore
     // can't tell which side of that line we have
@@ -473,7 +505,12 @@ void GridLineEstimator::get1dGridShift(
                     }
                 }
             }
-            ROS_ASSERT(std::isfinite(total_inc));
+
+            if (!std::isfinite(total_inc)) {
+                throw ros::Exception(str(boost::format("total_inc is %f")
+                                   % total_inc));
+            }
+
             total += total_inc;
         }
 
@@ -505,7 +542,10 @@ void GridLineEstimator::get2dPosition(
         Eigen::Matrix2d& covariance) const
 {
     double grid_spacing = grid_estimator_settings_.grid_spacing;
-    ROS_ASSERT(theta >= 0 && theta < 2*M_PI);
+    if (theta < 0 || theta >= 2*M_PI) {
+        throw ros::Exception(str(boost::format("theta (%f) out of bounds")
+                           % theta));
+    }
 
     // Wrap all distances into [0, grid_spacing)
     std::vector<double> para_wrapped_dists;
@@ -527,11 +567,15 @@ void GridLineEstimator::get2dPosition(
     }
 
     for (double dist : para_wrapped_dists) {
-        ROS_ASSERT(dist >= 0 && dist < grid_spacing);
+        if (dist < 0 || dist >= grid_spacing) {
+            throw ros::Exception("dist is out of bounds");
+        }
     }
 
     for (double dist : perp_wrapped_dists) {
-        ROS_ASSERT(dist >= 0 && dist < grid_spacing);
+        if (dist < 0 || dist >= grid_spacing) {
+            throw ros::Exception("dist is out of bounds");
+        }
     }
 
     std::ostringstream para_stream;
@@ -568,8 +612,13 @@ void GridLineEstimator::get2dPosition(
         shift_estimate_covariance(1, 1) = grid_spacing;
     }
 
-    ROS_ASSERT(shift_estimate(0) >= 0 && shift_estimate(0) < grid_spacing);
-    ROS_ASSERT(shift_estimate(1) >= 0 && shift_estimate(1) < grid_spacing);
+    if (shift_estimate(0) < 0 || shift_estimate(0) >= grid_spacing) {
+        throw ros::Exception("shift_estimate out of bounds");
+    }
+
+    if (shift_estimate(1) < 0 || shift_estimate(1) >= grid_spacing) {
+        throw ros::Exception("shift_estimate out of bounds");
+    }
 
     // Convert estimate of grid position into estimate of quad position
     Eigen::Vector2d wrapped_quad_position
@@ -582,8 +631,15 @@ void GridLineEstimator::get2dPosition(
         }
     }
 
-    ROS_ASSERT(wrapped_quad_position(0) >= 0 && wrapped_quad_position(0) < grid_spacing);
-    ROS_ASSERT(wrapped_quad_position(1) >= 0 && wrapped_quad_position(1) < grid_spacing);
+    if (wrapped_quad_position(0) < 0
+     || wrapped_quad_position(0) >= grid_spacing) {
+        throw ros::Exception("wrapped_quad_position out of bounds");
+    }
+
+    if (wrapped_quad_position(1) < 0
+     || wrapped_quad_position(1) >= grid_spacing) {
+        throw ros::Exception("wrapped_quad_position out of bounds");
+    }
 
     // Find new position estimate closest to last position
     Eigen::Vector2d wrapped_position_estimate;
@@ -594,7 +650,11 @@ void GridLineEstimator::get2dPosition(
             wrapped_position_estimate(i) += grid_spacing;
         }
 
-        ROS_ASSERT(wrapped_position_estimate(i) >= 0 && wrapped_position_estimate(i) < grid_spacing);
+        if (wrapped_position_estimate(i) < 0
+         || wrapped_position_estimate(i) >= grid_spacing) {
+            throw ros::Exception("wrapped_position_estimate out of bounds");
+        }
+
 
         int cell_shift;
         if (wrapped_quad_position(i) - wrapped_position_estimate(i)
@@ -798,11 +858,14 @@ void GridLineEstimator::processImage(const cv::Mat& image,
 
     // Publish updated position
     geometry_msgs::TransformStamped camera_to_lq_transform;
-    ROS_ASSERT(transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
+    if (!transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
                                                      "level_quad",
                                                      "bottom_camera_optical",
                                                      time,
-                                                     ros::Duration(1.0)));
+                                                     ros::Duration(1.0))) {
+        throw ros::Exception(
+            "Failed to get transform from level_quad to bottom_camera_optical");
+    }
     geometry_msgs::PointStamped camera_position;
     camera_position.header.frame_id = "bottom_camera_optical";
     camera_position.point.x = 0;
@@ -836,9 +899,11 @@ void GridLineEstimator::publishPositionEstimate(
     pose_msg.pose.pose.position.y = position(1);
     pose_msg.pose.pose.position.z = position(2);
 
-    ROS_ASSERT_MSG(std::isfinite(position(0)), "%f", position(0));
-    ROS_ASSERT_MSG(std::isfinite(position(1)), "%f", position(1));
-    ROS_ASSERT_MSG(std::isfinite(position(2)), "%f", position(2));
+    if (!std::isfinite(position(0))
+     || !std::isfinite(position(1))
+     || !std::isfinite(position(2))) {
+        throw ros::Exception("Position was not finite");
+    }
 
     pose_msg.pose.pose.orientation.w = 1;
     pose_msg.pose.pose.orientation.x = 0;
@@ -876,6 +941,10 @@ void GridLineEstimator::splitLinesByOrientation(
             para_line_normals.push_back(pl_normal);
         } else if (std::abs(dist_to_line - M_PI/2) < angle_thresh) {
             perp_line_normals.push_back(pl_normal);
+        } else {
+            ROS_WARN("Throwing out line with angle %f when we're at angle %f",
+                     std::atan(-pl_normal(0)/pl_normal(1)),
+                     theta);
         }
     }
 

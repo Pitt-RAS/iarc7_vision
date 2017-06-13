@@ -6,6 +6,7 @@
 // END BAD HEADER
 
 #include <image_transport/image_transport.h>
+#include <limits>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
@@ -96,6 +97,13 @@ void getDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "grid_line_estimator/debug_line_markers",
             settings.debug_line_markers));
+    if (private_nh.hasParam("grid_line_estimator/debug_height")) {
+        ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_height",
+            settings.debug_height));
+    } else {
+        settings.debug_height = std::numeric_limits<double>::quiet_NaN();
+    }
 }
 
 int main(int argc, char **argv)
@@ -126,12 +134,12 @@ int main(int argc, char **argv)
 
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
-            message_queue.push_back(std::move(message));
+            message_queue.push_back(message);
         };
 
     image_transport::ImageTransport image_transporter{nh};
     ros::Subscriber sub = nh.subscribe(
-        "/bottom_image_raw/image",
+        "/bottom_image_raw/image_raw",
         100,
         &std::function<void(const sensor_msgs::Image::ConstPtr&)>::operator(),
         &handler);

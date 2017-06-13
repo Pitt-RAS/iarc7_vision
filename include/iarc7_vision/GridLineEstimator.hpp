@@ -48,6 +48,7 @@ struct GridLineDebugSettings {
     bool debug_edges;
     bool debug_lines;
     bool debug_line_markers;
+    double debug_height;
 };
 
 class GridLineEstimator {
@@ -201,19 +202,6 @@ class GridLineEstimator {
         std::vector<Eigen::Vector3d>& perp_line_normals) const;
 
     ros::Publisher pose_pub_;
-
-    mutable cv::Mat image_sized_;
-    mutable cv::Mat image_hsv_;
-    mutable cv::Mat image_edges_;
-    mutable cv::Mat image_hsv_channels_[3];
-
-    mutable cv::gpu::HoughLinesBuf gpu_hough_buf_;
-    mutable cv::gpu::GpuMat gpu_image_;
-    mutable cv::gpu::GpuMat gpu_image_sized_;
-    mutable cv::gpu::GpuMat gpu_image_hsv_;
-    mutable cv::gpu::GpuMat gpu_image_edges_;
-    mutable cv::gpu::GpuMat gpu_lines_;
-    mutable cv::gpu::GpuMat gpu_image_hsv_channels_[3];
 
     const LineExtractorSettings& line_extractor_settings_;
     const GridEstimatorSettings& grid_estimator_settings_;
