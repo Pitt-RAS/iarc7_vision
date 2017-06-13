@@ -6,6 +6,7 @@
 // END BAD HEADER
 
 #include <image_transport/image_transport.h>
+#include <limits>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
@@ -96,6 +97,13 @@ void getDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "grid_line_estimator/debug_line_markers",
             settings.debug_line_markers));
+    if (private_nh.hasParam("grid_line_estimator/debug_height")) {
+        ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_height",
+            settings.debug_height));
+    } else {
+        settings.debug_height = std::numeric_limits<double>::quiet_NaN();
+    }
 }
 
 int main(int argc, char **argv)

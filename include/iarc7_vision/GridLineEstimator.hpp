@@ -48,6 +48,7 @@ struct GridLineDebugSettings {
     bool debug_edges;
     bool debug_lines;
     bool debug_line_markers;
+    double debug_height;
 };
 
 class GridLineEstimator {

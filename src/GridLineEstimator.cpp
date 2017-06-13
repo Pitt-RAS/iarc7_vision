@@ -139,7 +139,9 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 
         last_filtered_position_(0) = camera_position.point.x;
         last_filtered_position_(1) = camera_position.point.y;
-        last_filtered_position_(2) = camera_position.point.z;
+        last_filtered_position_(2) = std::isfinite(debug_settings_.debug_height)
+                                   ? debug_settings_.debug_height
+                                   : camera_position.point.z;
     }
 }
 
