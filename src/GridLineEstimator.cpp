@@ -193,22 +193,27 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
     double scale_factor = current_meters_per_px / desired_meters_per_px;
 
+    cv::Mat image_edges;
     if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
         ROS_WARN_ONCE("Doing OpenCV operations on CPU");
 
-        cv::resize(image, image_sized_, cv::Size(), scale_factor, scale_factor);
-        cv::cvtColor(image_sized_, image_hsv_, CV_BGR2HSV);
-        cv::split(image_hsv_, image_hsv_channels_);
+        cv::Mat image_sized;
+        cv::Mat image_hsv;
+        cv::Mat image_hsv_channels[3];
 
-        cv::Canny(image_hsv_channels_[2],
-                  image_edges_,
+        cv::resize(image, image_sized, cv::Size(), scale_factor, scale_factor);
+        cv::cvtColor(image_sized, image_hsv, CV_BGR2HSV);
+        cv::split(image_hsv, image_hsv_channels);
+
+        cv::Canny(image_hsv_channels[2],
+                  image_edges,
                   line_extractor_settings_.canny_low_threshold,
                   line_extractor_settings_.canny_high_threshold,
                   line_extractor_settings_.canny_sobel_size);
 
-        double hough_threshold = image_edges_.size().height
+        double hough_threshold = image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;
-        cv::HoughLines(image_edges_,
+        cv::HoughLines(image_edges,
                        lines,
                        line_extractor_settings_.hough_rho_resolution,
                        line_extractor_settings_.hough_theta_resolution,
@@ -217,44 +222,52 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         // rescale lines back to original image size
         for (cv::Vec2f& line : lines) {
             line[0] *= static_cast<float>(image.size().height)
-                     / image_edges_.size().height;
+                     / image_edges.size().height;
         }
     } else {
-        gpu_image_.upload(image);
+        cv::gpu::HoughLinesBuf gpu_hough_buf;
+        cv::gpu::GpuMat gpu_image;
+        cv::gpu::GpuMat gpu_image_sized;
+        cv::gpu::GpuMat gpu_image_hsv;
+        cv::gpu::GpuMat gpu_image_edges;
+        cv::gpu::GpuMat gpu_lines;
+        cv::gpu::GpuMat gpu_image_hsv_channels[3];
 
-        cv::gpu::resize(gpu_image_,
-                        gpu_image_sized_,
+        gpu_image.upload(image);
+
+        cv::gpu::resize(gpu_image,
+                        gpu_image_sized,
                         cv::Size(),
                         scale_factor,
                         scale_factor);
-        cv::gpu::cvtColor(gpu_image_sized_, gpu_image_hsv_, CV_BGR2HSV);
-        cv::gpu::split(gpu_image_hsv_, gpu_image_hsv_channels_);
+        cv::gpu::cvtColor(gpu_image_sized, gpu_image_hsv, CV_BGR2HSV);
+        cv::gpu::split(gpu_image_hsv, gpu_image_hsv_channels);
 
-        cv::gpu::Canny(gpu_image_hsv_channels_[2],
-                       gpu_image_edges_,
+        cv::gpu::Canny(gpu_image_hsv_channels[2],
+                       gpu_image_edges,
                        line_extractor_settings_.canny_low_threshold,
                        line_extractor_settings_.canny_high_threshold,
                        line_extractor_settings_.canny_sobel_size);
 
-        double hough_threshold = gpu_image_edges_.size().height
+        double hough_threshold = gpu_image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;
-        cv::gpu::HoughLines(gpu_image_edges_,
-                            gpu_lines_,
-                            gpu_hough_buf_,
+        cv::gpu::HoughLines(gpu_image_edges,
+                            gpu_lines,
+                            gpu_hough_buf,
                             line_extractor_settings_.hough_rho_resolution,
                             line_extractor_settings_.hough_theta_resolution,
                             hough_threshold);
 
-        cv::gpu::HoughLinesDownload(gpu_lines_, lines);
+        cv::gpu::HoughLinesDownload(gpu_lines, lines);
 
         // rescale lines back to original image size
         for (cv::Vec2f& line : lines) {
             line[0] *= static_cast<float>(image.size().height)
-                     / gpu_image_edges_.size().height;
+                     / gpu_image_edges.size().height;
         }
 
         if (debug_settings_.debug_edges) {
-            gpu_image_edges_.download(image_edges_);
+            gpu_image_edges.download(image_edges);
         }
     }
 
@@ -270,7 +283,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
             sensor_msgs::image_encodings::MONO8,
-            image_edges_
+            image_edges
         };
 
         debug_edges_pub_.publish(cv_image.toImageMsg());
