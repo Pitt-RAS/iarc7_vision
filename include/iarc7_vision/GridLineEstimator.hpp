@@ -41,9 +41,11 @@ struct GridEstimatorSettings {
     int grid_translation_mean_iterations;
     double line_rejection_angle_threshold;
     double min_extraction_altitude;
+    double allowed_position_stamp_error;
 };
 
 struct GridLineDebugSettings {
+    bool debug_line_detector;
     bool debug_direction;
     bool debug_edges;
     bool debug_lines;
@@ -201,6 +203,8 @@ class GridLineEstimator {
         std::vector<Eigen::Vector3d>& para_line_normals,
         std::vector<Eigen::Vector3d>& perp_line_normals) const;
 
+    void updateFilteredPosition(const ros::Time& time);
+
     ros::Publisher pose_pub_;
 
     const LineExtractorSettings& line_extractor_settings_;
@@ -213,6 +217,7 @@ class GridLineEstimator {
     ros::Publisher debug_line_markers_pub_;
 
     Eigen::Vector3d last_filtered_position_;
+    ros::Time last_filtered_position_stamp_;
 
     ros_utils::SafeTransformWrapper transform_wrapper_;
 };
