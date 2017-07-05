@@ -242,8 +242,8 @@ class CameraProcessor(ImageRoombaFinder):
         self.tf_buffer.lookup_transform('map', 'bottom_camera_optical',
                                         rospy.Time(0), rospy.Duration(3.0))
 
-        rospy.Subscriber("/bottom_image_raw/image", Image, self.callback)
-        rospy.Subscriber("/bottom_image_raw/camera_info", CameraInfo,
+        rospy.Subscriber("/bottom_camera/camera/image_raw", Image, self.callback)
+        rospy.Subscriber("/bottom_camera/camera/camera_info", CameraInfo,
                          self.camera.fromCameraInfo)
         self.publisher = rospy.Publisher("/roombas", OdometryArray,
                                          queue_size=10)
@@ -371,7 +371,8 @@ class VideoProcessor(ImageRoombaFinder):
 
 if __name__ == '__main__':
     # Uncomment the following line to run on a sample video, and comment out
-    # the CameraProcessor line below.
+    # the CameraProcessor line below. You must pass this initializer an
+    # absolute path; do not use a tilda.
     # VideoProcessor("ABSOLUTE_PATH_TO_VIDEO.MP4")
 
     # Run the main node functionality.
