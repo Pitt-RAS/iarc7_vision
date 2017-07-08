@@ -222,13 +222,6 @@ class CameraProcessor(ImageRoombaFinder):
     def __init__(self, debugging_on):
         rospy.init_node(NODE_NAME, anonymous=True)
 
-        # Verify that the correct version of OpenCV is in use
-        if cv2.__version__[:3] != "2.4":
-            rospy.logerr("You are using the incorrect version of OpenCV. You " +
-                         "should be using version 2.4, but you are using " +
-                         "version %s."%cv2.__version__)
-            raise SystemExit
-
         self.debug = Debugger(debugging_on, debugging_on)
 
         self.roombas = []
@@ -352,13 +345,6 @@ class VideoProcessor(ImageRoombaFinder):
         """
         :param file_path: path to video file
         """
-        # Verify that the correct version of OpenCV is in use
-        if cv2.__version__[:3] != "2.4":
-            print("You are using the incorrect version of OpenCV. You " +
-                         "should be using version 2.4, but you are using " +
-                         "version %s."%cv2.__version__)
-            raise SystemExit
-
         self.debug = Debugger(True, False)
         cap = cv2.VideoCapture(file_path)
         while True:
@@ -370,6 +356,11 @@ class VideoProcessor(ImageRoombaFinder):
             cv2.waitKey(1)
 
 if __name__ == '__main__':
+    # Verify that the correct version of OpenCV is in use
+    if cv2.__version__ != "2.4.13":
+        raise SystemExit("You are using the incorrect version of OpenCV. " +
+                         "You should be using version 2.4.13, but you are " +
+                         "using version %s."%cv2.__version__)
     # Uncomment the following line to run on a sample video, and comment out
     # the CameraProcessor line below. You must pass this initializer an
     # absolute path; do not use a tilda.
