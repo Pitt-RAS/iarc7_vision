@@ -35,6 +35,7 @@ Execution:
 
 :docformat: reStructuredText
 """
+from __future__ import print_function
 import rospy
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
@@ -234,8 +235,8 @@ class CameraProcessor(ImageRoombaFinder):
         self.tf_buffer.lookup_transform('map', 'bottom_camera_optical',
                                         rospy.Time(0), rospy.Duration(3.0))
 
-        rospy.Subscriber("/bottom_image_raw/image", Image, self.callback)
-        rospy.Subscriber("/bottom_image_raw/camera_info", CameraInfo,
+        rospy.Subscriber("/bottom_camera/camera/image_raw", Image, self.callback)
+        rospy.Subscriber("/bottom_camera/camera/camera_info", CameraInfo,
                          self.camera.fromCameraInfo)
         self.publisher = rospy.Publisher("/roombas", OdometryArray,
                                          queue_size=10)
@@ -344,7 +345,6 @@ class VideoProcessor(ImageRoombaFinder):
         """
         :param file_path: path to video file
         """
-        super(VideoProcessor, self).__init__()
         self.debug = Debugger(True, False)
         cap = cv2.VideoCapture(file_path)
         while True:
@@ -356,8 +356,14 @@ class VideoProcessor(ImageRoombaFinder):
             cv2.waitKey(1)
 
 if __name__ == '__main__':
+    # Verify that the correct version of OpenCV is in use
+    if cv2.__version__ != "2.4.13":
+        raise SystemExit("You are using the incorrect version of OpenCV. " +
+                         "You should be using version 2.4.13, but you are " +
+                         "using version %s."%cv2.__version__)
     # Uncomment the following line to run on a sample video, and comment out
-    # the CameraProcessor line below.
+    # the CameraProcessor line below. You must pass this initializer an
+    # absolute path; do not use a tilda.
     # VideoProcessor("ABSOLUTE_PATH_TO_VIDEO.MP4")
 
     # Run the main node functionality.
