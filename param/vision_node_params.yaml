@@ -6,7 +6,7 @@ line_extractor:
     canny_threshold_ratio: 2.5
     canny_sobel_size: 7
     hough_rho_resolution: 1.0
-    hough_theta_resolution: 0.02 # 1 degree
+    hough_theta_resolution: 0.02
     hough_thresh_fraction: 0.35
     fov: 1.64
 
@@ -47,17 +47,17 @@ grid_line_estimator:
     debug_line_detector: false
 
     # Should we spit out a marker vector for the quad's estimated orientation?
-    debug_direction: true
+    debug_direction: false
 
     # Should we spit out an edge image for each frame on the `edges` topic?
-    debug_edges: true
+    debug_edges: false
 
     # Should we spit out a copy of the input with lines drawn on top on the
     # `lines` topic?
-    debug_lines: true
+    debug_lines: false
 
     # Should we spit out markers for the transformed lines?
-    debug_line_markers: true
+    debug_line_markers: false
 
     # Uncomment this to override the height from robot_localization
-    # debug_height: 0.43
+    # debug_height: 0.22

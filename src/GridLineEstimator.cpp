@@ -108,8 +108,7 @@ GridLineEstimator::GridLineEstimator(
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
-    ROS_WARN("Called update");
-    ROS_ERROR("lfp %f", last_filtered_position_(2));
+    ROS_DEBUG("last filtered position %f", last_filtered_position_(2));
 
     if (last_filtered_position_stamp_ == ros::Time(0)
      || (time - last_filtered_position_stamp_).toSec()
@@ -233,7 +232,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv::gpu::GpuMat gpu_image_hsv_channels[3];
 
         gpu_image.upload(image);
-        ROS_ERROR("Scale factor %f", scale_factor);
+        ROS_DEBUG("Scale factor %f", scale_factor);
 
         cv::gpu::resize(gpu_image,
                         gpu_image_sized,
@@ -245,8 +244,8 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv::gpu::split(gpu_image_hsv, gpu_image_hsv_channels);
 
         // Turns out that cpu canny isn't the same as gpu Canny
-        // Using the CPU version for now as it works better
-
+        // Using a seperate sobel operator with a scaling factor
+        // achieves similar resuts to the CPU canny
         cv::gpu::GpuMat dx;
         cv::gpu::GpuMat dy;
         cv::gpu::Sobel(gpu_image_hsv_channels[2], dx, CV_32S, 1, 0, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
@@ -258,12 +257,14 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                        line_extractor_settings_.canny_low_threshold,
                        line_extractor_settings_.canny_high_threshold);
 
+        // Commented out integrated gpu canny with sobel
         /*cv::gpu::Canny(gpu_image_hsv_channels[2],
                        gpu_image_edges,
                        line_extractor_settings_.canny_low_threshold,
                        line_extractor_settings_.canny_high_threshold,
                        line_extractor_settings_.canny_sobel_size, true);*/
 
+        // Commented out cpu only canny
         /*cv::Canny((cv::Mat)gpu_image_hsv_channels[2],
                   image_edges,
                   line_extractor_settings_.canny_low_threshold,
@@ -601,12 +602,12 @@ void GridLineEstimator::get2dPosition(
 
     std::ostringstream para_stream;
     for (double d : para_wrapped_dists) para_stream << d << " ";
-    ROS_INFO_STREAM("GridLineEstimator parallel wrapped distances: "
+    ROS_DEBUG_STREAM("GridLineEstimator parallel wrapped distances: "
                   << para_stream.str());
 
     std::ostringstream perp_stream;
     for (double d : perp_wrapped_dists) perp_stream << d << " ";
-    ROS_INFO_STREAM("GridLineEstimator perpendicular wrapped distances: "
+    ROS_DEBUG_STREAM("GridLineEstimator perpendicular wrapped distances: "
                   << perp_stream.str());
 
     // Get estimates and variances for grid translation in
@@ -739,7 +740,6 @@ double GridLineEstimator::gridLoss(const std::vector<double>& wrapped_dists,
 void GridLineEstimator::processImage(const cv::Mat& image,
                                      const ros::Time& time) const
 {
-    ROS_WARN("Called processImage");
     const double height = last_filtered_position_(2);
 
     // Extract lines from image
@@ -898,9 +898,8 @@ void GridLineEstimator::processImage(const cv::Mat& image,
         camera_position.point.z = 0;
         tf2::doTransform(camera_position, camera_position, camera_to_lq_transform);
 
-        ROS_ERROR("cx %f cy %f cz %f", camera_position.point.x, camera_position.point.y, camera_position.point.z);
-        ROS_ERROR("px %f py %f pz %f", position_2d(0), position_2d(1), position_2d(2));
-        ROS_ERROR("height %f", height);
+        ROS_DEBUG("px %f py %f pz %f", position_2d(0), position_2d(1), position_2d(2));
+        ROS_DEBUG("height %f", height);
 
         Eigen::Vector3d position_3d {
             position_2d(0) - camera_position.point.x,
