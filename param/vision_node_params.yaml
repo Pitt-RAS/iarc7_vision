@@ -2,13 +2,13 @@
 line_extractor:
     # Pixels per meter to scale image to
     pixels_per_meter: 250
-    canny_high_threshold: 20000.0
+    canny_high_threshold: 30000.0
     canny_threshold_ratio: 2.5
     canny_sobel_size: 7
     hough_rho_resolution: 1.0
-    hough_theta_resolution: 0.02
-    hough_thresh_fraction: 0.35
-    fov: 1.64
+    hough_theta_resolution: 0.0087 # 1 degree
+    hough_thresh_fraction: 0.3
+    fov: 1.0
 
 # Settings for the grid position estimation portion of the GridLineEstimator
 grid_estimator:
@@ -16,13 +16,13 @@ grid_estimator:
     theta_step: 0.004
 
     # Step size for initial translation sweep
-    grid_step: 0.01
+    grid_step: 0.05
 
     # Distance between the center of one gridline and the center of the next
-    grid_spacing: 0.229
+    grid_spacing: 1.0
 
     # Thickness of each gridline
-    grid_line_thickness: 0.038
+    grid_line_thickness: 0.1
 
     # (x-location of gridline intersection) - (x-location of origin)
     grid_zero_offset_x: 0.5
