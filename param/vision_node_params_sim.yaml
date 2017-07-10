@@ -57,7 +57,7 @@ grid_line_estimator:
     debug_lines: false
 
     # Should we spit out markers for the transformed lines?
-    debug_line_markers: false
+    debug_line_markers: true
 
     # Uncomment this to override the height from robot_localization
     # debug_height: 0.22
