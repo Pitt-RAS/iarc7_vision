@@ -25,7 +25,7 @@ grid_estimator:
     line_rejection_angle_threshold: 0.262 # pi/12
 
     # Minimum altitude to run the detector
-    min_extraction_altitude: 0.1
+    min_extraction_altitude: 1.0
 
     # Allowed lag between available position and frame timestamp
     allowed_position_stamp_error: 0.1
@@ -38,7 +38,7 @@ grid_line_estimator:
     debug_direction: false
 
     # Should we spit out an edge image for each frame on the `edges` topic?
-    debug_edges: false
+    debug_edges: true
 
     # Should we spit out a copy of the input with lines drawn on top on the
     # `lines` topic?
