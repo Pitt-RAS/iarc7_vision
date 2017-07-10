@@ -786,132 +786,139 @@ void GridLineEstimator::processImage(const cv::Mat& image,
 
 
     if (!debug_settings_.debug_line_detector) {
-
-        //////////////////////////////////////////////////
-        // cluster gridlines by angle
-        //////////////////////////////////////////////////
-
-        // For now, our localization has a better estimate of the grid orientation
-        // than the camera does, so we just use that
-        const double best_theta = 0; //getThetaForPlanes(pl_normals);
-
-        // get current orientation estimate
-        const double current_theta = getCurrentTheta(time);
-
-        // Pick the orientation estimate that's closer to our current angle estimate
-        double best_theta_quad; // angle in [0, 2pi)
-        if (best_theta < M_PI/4) {
-            best_theta_quad = current_theta + best_theta;
-            if (best_theta_quad >= 2*M_PI) {
-                best_theta_quad -= 2*M_PI;
-            }
-        } else {
-            best_theta_quad = current_theta + best_theta - M_PI/2;
-            if (best_theta_quad < 0) {
-                best_theta_quad += 2*M_PI;
-            }
-        }
-
-        // Convert orientation estimate to yaw
-        double yaw = -best_theta_quad;
-        if (yaw < 0) {
-            yaw += 2*M_PI;
-        }
-
-        ROS_DEBUG("Orientation error in GridLineEstimator: %f",
-                  std::min({std::abs(best_theta_quad - current_theta),
-                            std::abs(best_theta_quad - current_theta - 2*M_PI),
-                            std::abs(best_theta_quad - current_theta + 2*M_PI)}));
-
-        visualization_msgs::Marker direction_marker;
-        direction_marker.header.stamp = ros::Time::now();
-        direction_marker.header.frame_id = "level_quad";
-        direction_marker.ns = "direction_marker_ns";
-        direction_marker.id = 0;
-        direction_marker.type = visualization_msgs::Marker::ARROW;
-        direction_marker.action = visualization_msgs::Marker::MODIFY;
-        geometry_msgs::Point p;
-        direction_marker.points.push_back(p);
-        p.x = std::cos(yaw);
-        p.y = -std::sin(yaw);
-        direction_marker.points.push_back(p);
-        direction_marker.color.a = 1;
-        direction_marker.color.r = 0;
-        direction_marker.color.g = 1;
-        direction_marker.color.b = 1;
-        direction_marker.scale.x = 0.05;
-        direction_marker.scale.y = 0.08;
-        if (debug_settings_.debug_direction) {
-            debug_direction_marker_pub_.publish(direction_marker);
-        }
-
-        // Cluster lines by orientation
-        std::vector<Eigen::Vector3d> para_line_normals;
-        std::vector<Eigen::Vector3d> perp_line_normals;
-        splitLinesByOrientation(best_theta,
-                                pl_normals,
-                                para_line_normals,
-                                perp_line_normals);
-
-        // Convert lines to distances from origin
-        std::vector<double> para_signed_dists;
-        std::vector<double> perp_signed_dists;
-        getUnAltifiedDistancesFromLines(best_theta,
-                                        para_line_normals,
-                                        perp_line_normals,
-                                        para_signed_dists,
-                                        perp_signed_dists);
-
-        // Extract altitude
-        // TODO
-
-        // Extract horizontal translation
-        const Eigen::Vector2d last_position_2d {
-            last_filtered_position_(0),
-            last_filtered_position_(1)
-        };
-
-        Eigen::Vector2d position_2d;
-        Eigen::Matrix2d position_cov_2d;
-        get2dPosition(para_signed_dists,
-                      perp_signed_dists,
-                      best_theta,
-                      height,
-                      last_position_2d,
-                      position_2d,
-                      position_cov_2d);
-
-        // Publish updated position
-        geometry_msgs::TransformStamped camera_to_lq_transform;
-        if (!transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
-                                                         "level_quad",
-                                                         "bottom_camera_optical",
-                                                         time,
-                                                         ros::Duration(1.0))) {
-            throw ros::Exception(
-                "Failed to get transform from level_quad to bottom_camera_optical");
-        }
-        geometry_msgs::PointStamped camera_position;
-        camera_position.header.frame_id = "bottom_camera_optical";
-        camera_position.point.x = 0;
-        camera_position.point.y = 0;
-        camera_position.point.z = 0;
-        tf2::doTransform(camera_position, camera_position, camera_to_lq_transform);
-
-        ROS_DEBUG("px %f py %f pz %f", position_2d(0), position_2d(1), position_2d(2));
-        ROS_DEBUG("height %f", height);
-
-        Eigen::Vector3d position_3d {
-            position_2d(0) - camera_position.point.x,
-            position_2d(1) - camera_position.point.y,
-            height         - camera_position.point.z
-        };
-
-        Eigen::Matrix3d position_cov_3d = Eigen::Matrix3d::Zero();
-        position_cov_3d.block<2, 2>(0, 0) = position_cov_2d;
-
-        publishPositionEstimate(position_3d, position_cov_3d, time);
+        processLines(height, pl_normals, time);
     }
+}
+
+void GridLineEstimator::processLines(
+        double height,
+        const std::vector<Eigen::Vector3d>& pl_normals,
+        const ros::Time& time) const
+{
+    //////////////////////////////////////////////////
+    // cluster gridlines by angle
+    //////////////////////////////////////////////////
+
+    // For now, our localization has a better estimate of the grid orientation
+    // than the camera does, so we just use that
+    const double best_theta = 0; //getThetaForPlanes(pl_normals);
+
+    // get current orientation estimate
+    const double current_theta = getCurrentTheta(time);
+
+    // Pick the orientation estimate that's closer to our current angle estimate
+    double best_theta_quad; // angle in [0, 2pi)
+    if (best_theta < M_PI/4) {
+        best_theta_quad = current_theta + best_theta;
+        if (best_theta_quad >= 2*M_PI) {
+            best_theta_quad -= 2*M_PI;
+        }
+    } else {
+        best_theta_quad = current_theta + best_theta - M_PI/2;
+        if (best_theta_quad < 0) {
+            best_theta_quad += 2*M_PI;
+        }
+    }
+
+    // Convert orientation estimate to yaw
+    double yaw = -best_theta_quad;
+    if (yaw < 0) {
+        yaw += 2*M_PI;
+    }
+
+    ROS_DEBUG("Orientation error in GridLineEstimator: %f",
+              std::min({std::abs(best_theta_quad - current_theta),
+                        std::abs(best_theta_quad - current_theta - 2*M_PI),
+                        std::abs(best_theta_quad - current_theta + 2*M_PI)}));
+
+    visualization_msgs::Marker direction_marker;
+    direction_marker.header.stamp = ros::Time::now();
+    direction_marker.header.frame_id = "level_quad";
+    direction_marker.ns = "direction_marker_ns";
+    direction_marker.id = 0;
+    direction_marker.type = visualization_msgs::Marker::ARROW;
+    direction_marker.action = visualization_msgs::Marker::MODIFY;
+    geometry_msgs::Point p;
+    direction_marker.points.push_back(p);
+    p.x = std::cos(yaw);
+    p.y = -std::sin(yaw);
+    direction_marker.points.push_back(p);
+    direction_marker.color.a = 1;
+    direction_marker.color.r = 0;
+    direction_marker.color.g = 1;
+    direction_marker.color.b = 1;
+    direction_marker.scale.x = 0.05;
+    direction_marker.scale.y = 0.08;
+    if (debug_settings_.debug_direction) {
+        debug_direction_marker_pub_.publish(direction_marker);
+    }
+
+    // Cluster lines by orientation
+    std::vector<Eigen::Vector3d> para_line_normals;
+    std::vector<Eigen::Vector3d> perp_line_normals;
+    splitLinesByOrientation(best_theta,
+                            pl_normals,
+                            para_line_normals,
+                            perp_line_normals);
+
+    // Convert lines to distances from origin
+    std::vector<double> para_signed_dists;
+    std::vector<double> perp_signed_dists;
+    getUnAltifiedDistancesFromLines(best_theta,
+                                    para_line_normals,
+                                    perp_line_normals,
+                                    para_signed_dists,
+                                    perp_signed_dists);
+
+    // Extract altitude
+    // TODO
+
+    // Extract horizontal translation
+    const Eigen::Vector2d last_position_2d {
+        last_filtered_position_(0),
+        last_filtered_position_(1)
+    };
+
+    Eigen::Vector2d position_2d;
+    Eigen::Matrix2d position_cov_2d;
+    get2dPosition(para_signed_dists,
+                  perp_signed_dists,
+                  best_theta,
+                  height,
+                  last_position_2d,
+                  position_2d,
+                  position_cov_2d);
+
+    // Publish updated position
+    geometry_msgs::TransformStamped camera_to_lq_transform;
+    if (!transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
+                                                     "level_quad",
+                                                     "bottom_camera_optical",
+                                                     time,
+                                                     ros::Duration(1.0))) {
+        throw ros::Exception(
+            "Failed to get transform from level_quad to bottom_camera_optical");
+    }
+    geometry_msgs::PointStamped camera_position;
+    camera_position.header.frame_id = "bottom_camera_optical";
+    camera_position.point.x = 0;
+    camera_position.point.y = 0;
+    camera_position.point.z = 0;
+    tf2::doTransform(camera_position, camera_position, camera_to_lq_transform);
+
+    ROS_DEBUG("px %f py %f pz %f", position_2d(0), position_2d(1), position_2d(2));
+    ROS_DEBUG("height %f", height);
+
+    Eigen::Vector3d position_3d {
+        position_2d(0) - camera_position.point.x,
+        position_2d(1) - camera_position.point.y,
+        height         - camera_position.point.z
+    };
+
+    Eigen::Matrix3d position_cov_3d = Eigen::Matrix3d::Zero();
+    position_cov_3d.block<2, 2>(0, 0) = position_cov_2d;
+
+    publishPositionEstimate(position_3d, position_cov_3d, time);
 }
 
 void GridLineEstimator::publishPositionEstimate(
