@@ -1,0 +1,11 @@
+# Settings for the image processing portion of the GridLineEstimator
+line_extractor:
+    # Pixels per meter to scale image to
+    pixels_per_meter: 250
+    canny_high_threshold: 20000.0
+    canny_threshold_ratio: 3
+    canny_sobel_size: 7
+    hough_rho_resolution: 1.0
+    hough_theta_resolution: 0.02
+    hough_thresh_fraction: 0.35
+    fov: 1.64
