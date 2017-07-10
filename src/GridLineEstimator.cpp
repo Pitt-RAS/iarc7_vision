@@ -108,6 +108,23 @@ GridLineEstimator::GridLineEstimator(
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
+    ROS_DEBUG("last filtered position %f", last_filtered_position_(2));
+
+    if (last_filtered_position_stamp_ == ros::Time(0)
+     || (time - last_filtered_position_stamp_).toSec()
+         > grid_estimator_settings_.allowed_position_stamp_error) {
+        updateFilteredPosition(time);
+    }
+
+    if (last_filtered_position_stamp_ == ros::Time(0)
+     || (time - last_filtered_position_stamp_).toSec()
+         > grid_estimator_settings_.allowed_position_stamp_error) {
+            ROS_ERROR_STREAM(
+                "Skipping frame because we don't have a transform at time "
+             << time);
+            return;
+    }
+
     if (last_filtered_position_(2)
             >= grid_estimator_settings_.min_extraction_altitude) {
         try {
@@ -122,27 +139,7 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
                  grid_estimator_settings_.min_extraction_altitude);
     }
 
-    // Update filtered position
-    geometry_msgs::TransformStamped filtered_position_transform_stamped;
-    if (!transform_wrapper_.getTransformAtTime(
-            filtered_position_transform_stamped,
-            "map",
-            "bottom_camera_optical",
-            time,
-            ros::Duration(1.0))) {
-        ROS_ERROR("Failed to fetch transform to bottom_camera_optical");
-    } else {
-        geometry_msgs::PointStamped camera_position;
-        tf2::doTransform(camera_position,
-                         camera_position,
-                         filtered_position_transform_stamped);
-
-        last_filtered_position_(0) = camera_position.point.x;
-        last_filtered_position_(1) = camera_position.point.y;
-        last_filtered_position_(2) = std::isfinite(debug_settings_.debug_height)
-                                   ? debug_settings_.debug_height
-                                   : camera_position.point.z;
-    }
+    updateFilteredPosition(time);
 }
 
 double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
@@ -202,9 +199,8 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv::Mat image_sized;
         cv::Mat image_hsv;
         cv::Mat image_hsv_channels[3];
-
         cv::resize(image, image_sized, cv::Size(), scale_factor, scale_factor);
-        cv::cvtColor(image_sized, image_hsv, CV_BGR2HSV);
+        cv::cvtColor(image_sized, image_hsv, CV_RGB2HSV);
         cv::split(image_hsv, image_hsv_channels);
 
         cv::Canny(image_hsv_channels[2],
@@ -236,20 +232,46 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv::gpu::GpuMat gpu_image_hsv_channels[3];
 
         gpu_image.upload(image);
+        ROS_DEBUG("Scale factor %f", scale_factor);
 
         cv::gpu::resize(gpu_image,
                         gpu_image_sized,
                         cv::Size(),
                         scale_factor,
                         scale_factor);
-        cv::gpu::cvtColor(gpu_image_sized, gpu_image_hsv, CV_BGR2HSV);
+        cv::gpu::cvtColor(gpu_image_sized, gpu_image_hsv, CV_RGB2HSV);
+
         cv::gpu::split(gpu_image_hsv, gpu_image_hsv_channels);
 
-        cv::gpu::Canny(gpu_image_hsv_channels[2],
+        // Turns out that cpu canny isn't the same as gpu Canny
+        // Using a seperate sobel operator with a scaling factor
+        // achieves similar resuts to the CPU canny
+        cv::gpu::GpuMat dx;
+        cv::gpu::GpuMat dy;
+        cv::gpu::Sobel(gpu_image_hsv_channels[2], dx, CV_32S, 1, 0, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
+        cv::gpu::Sobel(gpu_image_hsv_channels[2], dy, CV_32S, 0, 1, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
+
+        cv::gpu::Canny(dx,
+                       dy,
+                       gpu_image_edges,
+                       line_extractor_settings_.canny_low_threshold,
+                       line_extractor_settings_.canny_high_threshold);
+
+        // Commented out integrated gpu canny with sobel
+        /*cv::gpu::Canny(gpu_image_hsv_channels[2],
                        gpu_image_edges,
                        line_extractor_settings_.canny_low_threshold,
                        line_extractor_settings_.canny_high_threshold,
-                       line_extractor_settings_.canny_sobel_size);
+                       line_extractor_settings_.canny_sobel_size, true);*/
+
+        // Commented out cpu only canny
+        /*cv::Canny((cv::Mat)gpu_image_hsv_channels[2],
+                  image_edges,
+                  line_extractor_settings_.canny_low_threshold,
+                  line_extractor_settings_.canny_high_threshold,
+                  line_extractor_settings_.canny_sobel_size);
+
+        gpu_image_edges.upload(image_edges);*/
 
         double hough_threshold = gpu_image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;
@@ -723,7 +745,7 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     // Extract lines from image
     std::vector<cv::Vec2f> lines;
     getLines(lines, image, height);
-    ROS_DEBUG("Number of lines extracted: %lu", lines.size());
+    ROS_INFO("Number of lines extracted: %lu", lines.size());
 
     // Don't process further if we don't have any lines
     if (lines.size() == 0) return;
@@ -762,6 +784,17 @@ void GridLineEstimator::processImage(const cv::Mat& image,
         debug_line_markers_pub_.publish(lines_marker);
     }
 
+
+    if (!debug_settings_.debug_line_detector) {
+        processLines(height, pl_normals, time);
+    }
+}
+
+void GridLineEstimator::processLines(
+        double height,
+        const std::vector<Eigen::Vector3d>& pl_normals,
+        const ros::Time& time) const
+{
     //////////////////////////////////////////////////
     // cluster gridlines by angle
     //////////////////////////////////////////////////
@@ -873,6 +906,9 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     camera_position.point.z = 0;
     tf2::doTransform(camera_position, camera_position, camera_to_lq_transform);
 
+    ROS_DEBUG("px %f py %f pz %f", position_2d(0), position_2d(1), position_2d(2));
+    ROS_DEBUG("height %f", height);
+
     Eigen::Vector3d position_3d {
         position_2d(0) - camera_position.point.x,
         position_2d(1) - camera_position.point.y,
@@ -950,6 +986,31 @@ void GridLineEstimator::splitLinesByOrientation(
 
     ROS_DEBUG_STREAM("GridLineEstimator thetas: (" << thetas_stream.str()
                   << ") Extracted theta: (" << theta << ")");
+}
+
+void GridLineEstimator::updateFilteredPosition(const ros::Time& time)
+{
+    geometry_msgs::TransformStamped filtered_position_transform_stamped;
+    if (!transform_wrapper_.getTransformAtTime(
+            filtered_position_transform_stamped,
+            "map",
+            "bottom_camera_optical",
+            time,
+            ros::Duration(1.0))) {
+        ROS_ERROR("Failed to fetch transform to bottom_camera_optical");
+    } else {
+        geometry_msgs::PointStamped camera_position;
+        tf2::doTransform(camera_position,
+                         camera_position,
+                         filtered_position_transform_stamped);
+
+        last_filtered_position_(0) = camera_position.point.x;
+        last_filtered_position_(1) = camera_position.point.y;
+        last_filtered_position_(2) = std::isfinite(debug_settings_.debug_height)
+                                   ? debug_settings_.debug_height
+                                   : camera_position.point.z;
+        last_filtered_position_stamp_ = time;
+    }
 }
 
 } // namespace iarc7_vision

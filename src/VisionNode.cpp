@@ -80,11 +80,17 @@ void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "grid_estimator/min_extraction_altitude",
             settings.min_extraction_altitude));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_estimator/allowed_position_stamp_error",
+            settings.allowed_position_stamp_error));
 }
 
 void getDebugSettings(const ros::NodeHandle& private_nh,
                       iarc7_vision::GridLineDebugSettings& settings)
 {
+   ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_line_detector",
+            settings.debug_line_detector));
     ROS_ASSERT(private_nh.getParam(
             "grid_line_estimator/debug_direction",
             settings.debug_direction));
