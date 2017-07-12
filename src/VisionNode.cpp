@@ -11,43 +11,77 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
 
+#include <dynamic_reconfigure/server.h>
+#include <iarc7_vision/LineDetectorConfig.h>
+
 #include <sensor_msgs/image_encodings.h>
 
 #include "iarc7_vision/GridLineEstimator.hpp"
 
-void getLineExtractorSettings(const ros::NodeHandle& private_nh,
+void getLineExtractorSettings(iarc7_vision::LineDetectorConfig &config,
+                              const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& settings)
 {
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/pixels_per_meter",
-            settings.pixels_per_meter));
+    static bool first_run = true;
+    if (first_run) {
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/pixels_per_meter",
+                settings.pixels_per_meter));
+        config.pixels_per_meter = settings.pixels_per_meter;
 
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/canny_high_threshold",
-            settings.canny_high_threshold));
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/canny_high_threshold",
+                settings.canny_high_threshold));
+        config.canny_high_threshold = settings.canny_high_threshold;
 
-    double canny_threshold_ratio;
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/canny_threshold_ratio",
-            canny_threshold_ratio));
-    settings.canny_low_threshold =
-        settings.canny_high_threshold / canny_threshold_ratio;
+        double canny_threshold_ratio;
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/canny_threshold_ratio",
+                canny_threshold_ratio));
+        settings.canny_low_threshold =
+            settings.canny_high_threshold / canny_threshold_ratio;
+        config.canny_threshold_ratio = canny_threshold_ratio;
 
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/canny_sobel_size",
-            settings.canny_sobel_size));
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/hough_rho_resolution",
-            settings.hough_rho_resolution));
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/hough_theta_resolution",
-            settings.hough_theta_resolution));
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/hough_thresh_fraction",
-            settings.hough_thresh_fraction));
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/fov",
-            settings.fov));
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/canny_sobel_size",
+                settings.canny_sobel_size));
+        config.canny_sobel_size = settings.canny_sobel_size;
+
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/hough_rho_resolution",
+                settings.hough_rho_resolution));
+        config.hough_rho_resolution = settings.hough_rho_resolution;
+
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/hough_theta_resolution",
+                settings.hough_theta_resolution));
+        config.hough_theta_resolution = settings.hough_theta_resolution;
+
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/hough_thresh_fraction",
+                settings.hough_thresh_fraction));
+        config.hough_thresh_fraction = settings.hough_thresh_fraction;
+
+        ROS_ASSERT(private_nh.getParam(
+                "line_extractor/fov",
+                settings.fov));
+        config.fov = settings.fov;
+
+        first_run = false;
+    }
+    else {
+        settings.pixels_per_meter = config.pixels_per_meter;
+        settings.canny_high_threshold = config.canny_high_threshold;
+
+        settings.canny_low_threshold =
+            config.canny_high_threshold / config.canny_threshold_ratio;
+
+        settings.canny_sobel_size = config.canny_sobel_size;
+        settings.hough_rho_resolution = config.hough_rho_resolution;
+        settings.hough_theta_resolution = config.hough_theta_resolution;
+        settings.hough_thresh_fraction = config.hough_thresh_fraction;
+        settings.fov = config.fov;
+    }
 }
 
 void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
@@ -119,8 +153,22 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
+    dynamic_reconfigure::Server<iarc7_vision::LineDetectorConfig> server;
+    dynamic_reconfigure::Server
+          <iarc7_vision::LineDetectorConfig>::CallbackType settings_callback;
+
     iarc7_vision::LineExtractorSettings line_extractor_settings;
-    getLineExtractorSettings(private_nh, line_extractor_settings);
+
+    boost::function<void(iarc7_vision::LineDetectorConfig &config,
+                         uint32_t level)> line_extractor_settings_callback =
+        [&](iarc7_vision::LineDetectorConfig &config, uint32_t) {
+            getLineExtractorSettings(config,
+                                     private_nh,
+                                     line_extractor_settings);
+        };
+
+    server.setCallback(line_extractor_settings_callback);
+
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
     getGridEstimatorSettings(private_nh, grid_estimator_settings);
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
