@@ -177,6 +177,7 @@ class GridLineEstimator {
     /// Extract grid position from the image and publish if possible
     void processImage(const cv::Mat& image, const ros::Time& time) const;
 
+    /// Process lines extracted from the image
     void processLines(double height,
                       const std::vector<Eigen::Vector3d>& pl_normals,
                       const ros::Time& time) const;
