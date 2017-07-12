@@ -19,7 +19,6 @@
 #include "iarc7_vision/GridLineEstimator.hpp"
 
 void getLineExtractorSettings(iarc7_vision::LineDetectorConfig &config,
-                              uint32_t,
                               const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& settings)
 {
@@ -161,16 +160,14 @@ int main(int argc, char **argv)
     iarc7_vision::LineExtractorSettings line_extractor_settings;
 
     boost::function<void(iarc7_vision::LineDetectorConfig &config,
-                         uint32_t level)> line_extractor_lambda =
-        [&](iarc7_vision::LineDetectorConfig &config, uint32_t level) {
+                         uint32_t level)> line_extractor_settings_callback =
+        [&](iarc7_vision::LineDetectorConfig &config, uint32_t) {
             getLineExtractorSettings(config,
-                                     level,
                                      private_nh,
                                      line_extractor_settings);
         };
 
-    settings_callback = boost::bind(line_extractor_lambda, _1, _2);
-    server.setCallback(settings_callback);
+    server.setCallback(line_extractor_settings_callback);
 
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
     getGridEstimatorSettings(private_nh, grid_estimator_settings);
