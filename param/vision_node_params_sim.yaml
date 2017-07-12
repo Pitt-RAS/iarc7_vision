@@ -32,7 +32,7 @@ grid_estimator:
 
 grid_line_estimator:
     # Should we forgo line counting and just detect lines on the ground?
-    debug_line_detector: true
+    debug_line_detector: false
 
     # Should we spit out a marker vector for the quad's estimated orientation?
     debug_direction: false
