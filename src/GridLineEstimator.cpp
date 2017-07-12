@@ -31,6 +31,7 @@
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
+#include <iarc7_msgs/Float64Stamped.h>
 #include <visualization_msgs/Marker.h>
 
 static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
@@ -104,6 +105,8 @@ GridLineEstimator::GridLineEstimator(
     pose_pub_
         = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose",
                                                                        10);
+
+    yaw_pub_ = local_nh.advertise<iarc7_msgs::Float64Stamped>("line_yaw", 10);
 }
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
@@ -801,7 +804,7 @@ void GridLineEstimator::processLines(
 
     // For now, our localization has a better estimate of the grid orientation
     // than the camera does, so we just use that
-    const double best_theta = 0; //getThetaForPlanes(pl_normals);
+    const double best_theta = getThetaForPlanes(pl_normals);
 
     // get current orientation estimate
     const double current_theta = getCurrentTheta(time);
@@ -825,6 +828,8 @@ void GridLineEstimator::processLines(
     if (yaw < 0) {
         yaw += 2*M_PI;
     }
+
+    publishYaw(yaw, time);
 
     ROS_DEBUG("Orientation error in GridLineEstimator: %f",
               std::min({std::abs(best_theta_quad - current_theta),
@@ -953,6 +958,14 @@ void GridLineEstimator::publishPositionEstimate(
     }
 
     pose_pub_.publish(pose_msg);
+}
+
+void GridLineEstimator::publishYaw(double yaw, const ros::Time& time) const
+{
+    iarc7_msgs::Float64Stamped msg;
+    msg.header.stamp = time;
+    msg.data = yaw;
+    yaw_pub_.publish(msg);
 }
 
 void GridLineEstimator::splitLinesByOrientation(

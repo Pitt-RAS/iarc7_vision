@@ -189,6 +189,9 @@ class GridLineEstimator {
         const Eigen::Matrix3d& covariance,
         const ros::Time& time) const;
 
+    /// Publish the given yaw estimate with the given timestamp
+    void publishYaw(double yaw, const ros::Time& time) const;
+
     /// Takes a list of plane normals and splits them into two clusters based
     /// on which are parallel or perpendicular to the theta vector.  The theta
     /// vector is defined (in the frame of pl_normals) as
@@ -211,6 +214,7 @@ class GridLineEstimator {
     void updateFilteredPosition(const ros::Time& time);
 
     ros::Publisher pose_pub_;
+    ros::Publisher yaw_pub_;
 
     const LineExtractorSettings& line_extractor_settings_;
     const GridEstimatorSettings& grid_estimator_settings_;
