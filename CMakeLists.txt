@@ -23,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 generate_dynamic_reconfigure_options(
   cfg/LineDetector.cfg
+  cfg/OpticalFlowEstimator.cfg
 )
 
 ## System dependencies are found with CMake's conventions
@@ -159,7 +160,7 @@ include_directories(
 # add_dependencies(iarc7_vision ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-add_executable(iarc7_vision_node src/VisionNode.cpp src/GridLineEstimator.cpp)
+add_executable(iarc7_vision_node src/VisionNode.cpp src/GridLineEstimator.cpp src/OpticalFlowEstimator.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
