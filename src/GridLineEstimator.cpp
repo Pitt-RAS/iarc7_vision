@@ -111,6 +111,10 @@ GridLineEstimator::GridLineEstimator(
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
+    if (time <= last_update_time_) {
+        ROS_ERROR("Tried to process message with stamp before previous update");
+    }
+
     ROS_DEBUG("last filtered position %f", last_filtered_position_(2));
 
     // Attempt to update the transform if it's out of date
@@ -124,10 +128,10 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
     if (last_filtered_position_stamp_ == ros::Time(0)
      || (time - last_filtered_position_stamp_).toSec()
          > grid_estimator_settings_.allowed_position_stamp_error) {
-            ROS_ERROR_STREAM(
+        ROS_ERROR_STREAM(
                 "Skipping frame because we don't have a transform at time "
              << time);
-            return;
+        return;
     }
 
     if (last_filtered_position_(2)
@@ -145,6 +149,8 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
     }
 
     updateFilteredPosition(time);
+
+    last_update_time_ = time;
 }
 
 double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
@@ -1027,6 +1033,25 @@ void GridLineEstimator::updateFilteredPosition(const ros::Time& time)
                                    : camera_position.point.z;
         last_filtered_position_stamp_ = time;
     }
+}
+
+bool GridLineEstimator::waitUntilReady(const ros::Duration& timeout)
+{
+    geometry_msgs::TransformStamped transform;
+    bool success = transform_wrapper_.getTransformAtTime(transform,
+                                                    "map",
+                                                    "bottom_camera_optical",
+                                                    ros::Time(0),
+                                                    timeout);
+    if (!success)
+    {
+        ROS_ERROR("Failed to fetch initial transform");
+        return false;
+    }
+
+    last_update_time_ = transform.header.stamp;
+
+    return true;
 }
 
 } // namespace iarc7_vision

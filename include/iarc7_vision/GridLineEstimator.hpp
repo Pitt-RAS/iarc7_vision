@@ -59,6 +59,8 @@ class GridLineEstimator {
                       const GridEstimatorSettings& grid_estimator_settings,
                       const GridLineDebugSettings& debug_settings);
     void update(const cv::Mat& image, const ros::Time& time);
+    bool __attribute__((warn_unused_result)) waitUntilReady(
+            const ros::Duration& timeout);
 
   private:
 
@@ -246,6 +248,8 @@ class GridLineEstimator {
     ros::Time last_filtered_position_stamp_;
 
     ros_utils::SafeTransformWrapper transform_wrapper_;
+
+    ros::Time last_update_time_;
 };
 
 } // namespace iarc7_vision

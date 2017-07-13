@@ -184,6 +184,10 @@ int main(int argc, char **argv)
         ros::spinOnce();
     }
 
+    double startup_timeout;
+    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
+    ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+
     std::vector<sensor_msgs::Image::ConstPtr> message_queue;
 
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =

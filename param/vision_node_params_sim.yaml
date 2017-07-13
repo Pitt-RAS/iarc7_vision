@@ -1,3 +1,5 @@
+startup_timeout: 10.0
+
 # Settings for the grid position estimation portion of the GridLineEstimator
 grid_estimator:
     # Step size for initial orientation sweep
