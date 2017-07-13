@@ -200,11 +200,13 @@ int main(int argc, char **argv)
 
     while (ros::ok())
     {
-        for (const auto& message : message_queue) {
+        if (message_queue.size() > 0) {
+            const auto& message = message_queue.front();
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
+            message_queue.erase(message_queue.begin());
         }
-        message_queue.clear();
+
         ros::spinOnce();
         rate.sleep();
     }
