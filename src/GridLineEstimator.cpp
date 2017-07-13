@@ -560,82 +560,66 @@ void GridLineEstimator::get1dGridShift(
 }
 
 void GridLineEstimator::get2dPosition(
-        const std::vector<double>& para_signed_dists,
-        const std::vector<double>& perp_signed_dists,
-        double theta,
+        const std::vector<double>& x_signed_dists,
+        const std::vector<double>& y_signed_dists,
         double height_estimate,
         const Eigen::Vector2d& position_estimate,
         Eigen::Vector2d& position,
         Eigen::Matrix2d& covariance) const
 {
     double grid_spacing = grid_estimator_settings_.grid_spacing;
-    if (theta < 0 || theta >= 2*M_PI) {
-        throw ros::Exception(str(boost::format("theta (%f) out of bounds")
-                           % theta));
-    }
 
     // Wrap all distances into [0, grid_spacing)
-    std::vector<double> para_wrapped_dists;
-    for (double dist : para_signed_dists) {
+    std::vector<double> y_wrapped_dists;
+    for (double dist : y_signed_dists) {
         dist = std::fmod(dist * height_estimate, grid_spacing);
-        para_wrapped_dists.push_back(dist);
-        if (para_wrapped_dists.back() < 0) {
-            para_wrapped_dists.back() += grid_spacing;
+        y_wrapped_dists.push_back(dist);
+        if (y_wrapped_dists.back() < 0) {
+            y_wrapped_dists.back() += grid_spacing;
         }
     }
 
-    std::vector<double> perp_wrapped_dists;
-    for (double dist : perp_signed_dists) {
+    std::vector<double> x_wrapped_dists;
+    for (double dist : x_signed_dists) {
         dist = std::fmod(dist * height_estimate, grid_spacing);
-        perp_wrapped_dists.push_back(dist);
-        if (perp_wrapped_dists.back() < 0) {
-            perp_wrapped_dists.back() += grid_spacing;
+        x_wrapped_dists.push_back(dist);
+        if (x_wrapped_dists.back() < 0) {
+            x_wrapped_dists.back() += grid_spacing;
         }
     }
 
-    for (double dist : para_wrapped_dists) {
+    for (double dist : y_wrapped_dists) {
         if (dist < 0 || dist >= grid_spacing) {
             throw ros::Exception("dist is out of bounds");
         }
     }
 
-    for (double dist : perp_wrapped_dists) {
+    for (double dist : x_wrapped_dists) {
         if (dist < 0 || dist >= grid_spacing) {
             throw ros::Exception("dist is out of bounds");
         }
     }
 
-    std::ostringstream para_stream;
-    for (double d : para_wrapped_dists) para_stream << d << " ";
-    ROS_DEBUG_STREAM("GridLineEstimator parallel wrapped distances: "
-                  << para_stream.str());
-
-    std::ostringstream perp_stream;
-    for (double d : perp_wrapped_dists) perp_stream << d << " ";
-    ROS_DEBUG_STREAM("GridLineEstimator perpendicular wrapped distances: "
-                  << perp_stream.str());
-
-    // Get estimates and variances for grid translation in
-    // parallel/perpendicular directions
+    // Get estimates and variances for grid translation in x/y directions
     Eigen::Vector2d shift_estimate;
     Eigen::Matrix2d shift_estimate_covariance;
-    bool use_last_perp_shift = false;
-    bool use_last_para_shift = false;
-    if (perp_wrapped_dists.size() != 0) {
-        get1dGridShift(perp_wrapped_dists,
+    bool use_last_x_shift = false;
+    bool use_last_y_shift = false;
+    if (x_wrapped_dists.size() != 0) {
+        get1dGridShift(x_wrapped_dists,
                        shift_estimate(0),
                        shift_estimate_covariance(0, 0));
     } else {
-        use_last_perp_shift = true;
+        use_last_x_shift = true;
         shift_estimate_covariance(0, 0) = grid_spacing;
     }
 
-    if (para_wrapped_dists.size() != 0) {
-        get1dGridShift(para_wrapped_dists,
+    if (y_wrapped_dists.size() != 0) {
+        get1dGridShift(y_wrapped_dists,
                        shift_estimate(1),
                        shift_estimate_covariance(1, 1));
     } else {
-        use_last_para_shift = true;
+        use_last_y_shift = true;
         shift_estimate_covariance(1, 1) = grid_spacing;
     }
 
@@ -702,11 +686,11 @@ void GridLineEstimator::get2dPosition(
                     + wrapped_quad_position(i);
     }
 
-    if (use_last_perp_shift) {
+    if (use_last_x_shift) {
         position(0) = position_estimate(0);
     }
 
-    if (use_last_para_shift) {
+    if (use_last_y_shift) {
         position(1) = position_estimate(1);
     }
 
@@ -777,12 +761,7 @@ void GridLineEstimator::processLines(
         const std::vector<Eigen::Vector3d>& pl_normals,
         const ros::Time& time) const
 {
-    //////////////////////////////////////////////////
-    // cluster gridlines by angle
-    //////////////////////////////////////////////////
-
-    // For now, our localization has a better estimate of the grid orientation
-    // than the camera does, so we just use that
+    // get grid orientation in the pl_normal frame, result in [0, pi/2)
     const double best_theta = getThetaForPlanes(pl_normals);
 
     // get current orientation estimate in [0, 2pi)
@@ -843,11 +822,17 @@ void GridLineEstimator::processLines(
         last_filtered_position_(1)
     };
 
+    const auto& x_signed_dists = best_theta < M_PI/4
+                               ? perp_signed_dists
+                               : para_signed_dists;
+    const auto& y_signed_dists = best_theta < M_PI/4
+                               ? para_signed_dists
+                               : perp_signed_dists;
+
     Eigen::Vector2d position_2d;
     Eigen::Matrix2d position_cov_2d;
-    get2dPosition(para_signed_dists,
-                  perp_signed_dists,
-                  best_theta,
+    get2dPosition(x_signed_dists,
+                  y_signed_dists,
                   height,
                   last_position_2d,
                   position_2d,

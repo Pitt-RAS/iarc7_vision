@@ -154,15 +154,18 @@ class GridLineEstimator {
     /// Get the 2d position estimate closest to position_estimate based on the
     /// given information about the grid
     ///
+    /// @param[in]  x_signed_dists    {Signed distances to lines that are
+    ///                                parallel to the y axis}
+    /// @param[in]  y_signed_dists    {Signed distances to lines that are
+    ///                                parallel to the x axis}
     /// @param[in]  height_estimate   The approximate altitude of the camera
     /// @param[in]  position_estimate {Vector from origin of map to origin of
-    ///                                pl_normal frame ("level_quad" on the
+    ///                                pl_normal frame (camera frame on the
     ///                                ground)}
     /// @param[out] position          The best guess 2d position
     /// @param[out] covariance        Covariance of position estimate
-    void get2dPosition(const std::vector<double>& para_signed_dists,
-                       const std::vector<double>& perp_signed_dists,
-                       double theta,
+    void get2dPosition(const std::vector<double>& x_signed_dists,
+                       const std::vector<double>& y_signed_dists,
                        double height_estimate,
                        const Eigen::Vector2d& position_estimate,
                        Eigen::Vector2d& position,
