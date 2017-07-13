@@ -12,7 +12,7 @@
 #include <ros/ros.h>
 
 #include <dynamic_reconfigure/server.h>
-#include <iarc7_vision/LineDetectorConfig.h>
+#include <iarc7_vision/VisionNodeConfig.h>
 #include <iarc7_vision/OpticalFlowEstimatorConfig.h>
 
 #include <sensor_msgs/image_encodings.h>
@@ -20,69 +20,93 @@
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 
-void getLineExtractorSettings(iarc7_vision::LineDetectorConfig &config,
-                              const ros::NodeHandle& private_nh,
-                              iarc7_vision::LineExtractorSettings& settings)
+void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
+                        const ros::NodeHandle& private_nh,
+                        iarc7_vision::LineExtractorSettings& line_settings,
+                        iarc7_vision::OpticalFlowEstimatorSettings& flow_settings)
 {
     static bool first_run = true;
     if (first_run) {
+        // Begin line extractor settings
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/pixels_per_meter",
-                settings.pixels_per_meter));
-        config.pixels_per_meter = settings.pixels_per_meter;
+                line_settings.pixels_per_meter));
+        config.pixels_per_meter = line_settings.pixels_per_meter;
 
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/canny_high_threshold",
-                settings.canny_high_threshold));
-        config.canny_high_threshold = settings.canny_high_threshold;
+                line_settings.canny_high_threshold));
+        config.canny_high_threshold = line_settings.canny_high_threshold;
 
         double canny_threshold_ratio;
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/canny_threshold_ratio",
                 canny_threshold_ratio));
-        settings.canny_low_threshold =
-            settings.canny_high_threshold / canny_threshold_ratio;
+        line_settings.canny_low_threshold =
+            line_settings.canny_high_threshold / canny_threshold_ratio;
         config.canny_threshold_ratio = canny_threshold_ratio;
 
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/canny_sobel_size",
-                settings.canny_sobel_size));
-        config.canny_sobel_size = settings.canny_sobel_size;
+                line_settings.canny_sobel_size));
+        config.canny_sobel_size = line_settings.canny_sobel_size;
 
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/hough_rho_resolution",
-                settings.hough_rho_resolution));
-        config.hough_rho_resolution = settings.hough_rho_resolution;
+                line_settings.hough_rho_resolution));
+        config.hough_rho_resolution = line_settings.hough_rho_resolution;
 
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/hough_theta_resolution",
-                settings.hough_theta_resolution));
-        config.hough_theta_resolution = settings.hough_theta_resolution;
+                line_settings.hough_theta_resolution));
+        config.hough_theta_resolution = line_settings.hough_theta_resolution;
 
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/hough_thresh_fraction",
-                settings.hough_thresh_fraction));
-        config.hough_thresh_fraction = settings.hough_thresh_fraction;
+                line_settings.hough_thresh_fraction));
+        config.hough_thresh_fraction = line_settings.hough_thresh_fraction;
 
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/fov",
-                settings.fov));
-        config.fov = settings.fov;
+                line_settings.fov));
+        config.fov = line_settings.fov;
+
+        // Begin optical flow estimator settings
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/pixels_per_meter",
+                flow_settings.pixels_per_meter));
+        config.flow_pixels_per_meter = flow_settings.pixels_per_meter;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/fov",
+                flow_settings.fov));
+        config.flow_fov = flow_settings.fov;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/min_estimation_altitude",
+                flow_settings.min_estimation_altitude));
+        config.flow_min_estimation_altitude = flow_settings.min_estimation_altitude;
 
         first_run = false;
     }
     else {
-        settings.pixels_per_meter = config.pixels_per_meter;
-        settings.canny_high_threshold = config.canny_high_threshold;
+        // Begin line extractor settings
+        line_settings.pixels_per_meter = config.pixels_per_meter;
+        line_settings.canny_high_threshold = config.canny_high_threshold;
 
-        settings.canny_low_threshold =
+        line_settings.canny_low_threshold =
             config.canny_high_threshold / config.canny_threshold_ratio;
 
-        settings.canny_sobel_size = config.canny_sobel_size;
-        settings.hough_rho_resolution = config.hough_rho_resolution;
-        settings.hough_theta_resolution = config.hough_theta_resolution;
-        settings.hough_thresh_fraction = config.hough_thresh_fraction;
-        settings.fov = config.fov;
+        line_settings.canny_sobel_size = config.canny_sobel_size;
+        line_settings.hough_rho_resolution = config.hough_rho_resolution;
+        line_settings.hough_theta_resolution = config.hough_theta_resolution;
+        line_settings.hough_thresh_fraction = config.hough_thresh_fraction;
+        line_settings.fov = config.fov;
+
+        // Begin optical flow estimator settings
+        flow_settings.pixels_per_meter = config.flow_pixels_per_meter;
+        flow_settings.fov = config.flow_fov;
+        flow_settings.min_estimation_altitude = config.flow_min_estimation_altitude;
     }
 }
 
@@ -148,36 +172,6 @@ void getGridDebugSettings(const ros::NodeHandle& private_nh,
     }
 }
 
-void getFlowEstimatorSettings(iarc7_vision::OpticalFlowEstimatorConfig &config,
-                              const ros::NodeHandle& private_nh,
-                              iarc7_vision::OpticalFlowEstimatorSettings& settings)
-{
-    static bool first_run = true;
-    if (first_run) {
-        ROS_ASSERT(private_nh.getParam(
-                "optical_flow_estimator/pixels_per_meter",
-                settings.pixels_per_meter));
-        config.pixels_per_meter = settings.pixels_per_meter;
-
-        ROS_ASSERT(private_nh.getParam(
-                "optical_flow_estimator/fov",
-                settings.fov));
-        config.fov = settings.fov;
-
-        ROS_ASSERT(private_nh.getParam(
-                "optical_flow_estimator/min_estimation_altitude",
-                settings.min_estimation_altitude));
-        config.min_estimation_altitude = settings.min_estimation_altitude;
-
-        first_run = false;
-    }
-    else {
-        settings.pixels_per_meter = config.pixels_per_meter;
-        settings.fov = config.fov;
-        settings.min_estimation_altitude = config.min_estimation_altitude;
-    }
-}
-
 void getFlowDebugSettings(const ros::NodeHandle&,
                       iarc7_vision::OpticalFlowDebugSettings&)
 {
@@ -212,19 +206,21 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
-    dynamic_reconfigure::Server<iarc7_vision::LineDetectorConfig> line_extractor_server;
+    dynamic_reconfigure::Server<iarc7_vision::VisionNodeConfig> dynamic_reconfigure_server;
 
     iarc7_vision::LineExtractorSettings line_extractor_settings;
+    iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
 
-    boost::function<void(iarc7_vision::LineDetectorConfig &config,
-                         uint32_t level)> line_extractor_settings_callback =
-        [&](iarc7_vision::LineDetectorConfig &config, uint32_t) {
-            getLineExtractorSettings(config,
-                                     private_nh,
-                                     line_extractor_settings);
+    boost::function<void(iarc7_vision::VisionNodeConfig &config,
+                         uint32_t level)> dynamic_reconfigure_settings_callback =
+        [&](iarc7_vision::VisionNodeConfig &config, uint32_t) {
+            getDynamicSettings(config,
+                               private_nh,
+                               line_extractor_settings,
+                               optical_flow_estimator_settings);
         };
 
-    line_extractor_server.setCallback(line_extractor_settings_callback);
+    dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
 
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
     getGridEstimatorSettings(private_nh, grid_estimator_settings);
@@ -234,21 +230,6 @@ int main(int argc, char **argv)
             line_extractor_settings,
             grid_estimator_settings,
             grid_line_debug_settings);
-
-    dynamic_reconfigure::Server<iarc7_vision::OpticalFlowEstimatorConfig>
-        optical_flow_server;
-
-    iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
-
-    boost::function<void(iarc7_vision::OpticalFlowEstimatorConfig &config,
-                         uint32_t level)> optical_flow_settings_callback =
-        [&](iarc7_vision::OpticalFlowEstimatorConfig &config, uint32_t) {
-            getFlowEstimatorSettings(config,
-                                     private_nh,
-                                     optical_flow_estimator_settings);
-        };
-
-    optical_flow_server.setCallback(optical_flow_settings_callback);
 
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
     getFlowDebugSettings(private_nh, optical_flow_debug_settings);

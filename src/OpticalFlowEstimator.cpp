@@ -50,7 +50,6 @@ OpticalFlowEstimator::OpticalFlowEstimator(
 
 void OpticalFlowEstimator::update(const cv::Mat& image, const ros::Time&)
 {
-
     if (last_filtered_position_.point.z
             >= flow_estimator_settings_.min_estimation_altitude) {
         try {
