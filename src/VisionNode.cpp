@@ -13,10 +13,12 @@
 
 #include <dynamic_reconfigure/server.h>
 #include <iarc7_vision/LineDetectorConfig.h>
+#include <iarc7_vision/OpticalFlowEstimatorConfig.h>
 
 #include <sensor_msgs/image_encodings.h>
 
 #include "iarc7_vision/GridLineEstimator.hpp"
+#include "iarc7_vision/OpticalFlowEstimator.hpp"
 
 void getLineExtractorSettings(iarc7_vision::LineDetectorConfig &config,
                               const ros::NodeHandle& private_nh,
@@ -119,7 +121,7 @@ void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
             settings.allowed_position_stamp_error));
 }
 
-void getDebugSettings(const ros::NodeHandle& private_nh,
+void getGridDebugSettings(const ros::NodeHandle& private_nh,
                       iarc7_vision::GridLineDebugSettings& settings)
 {
    ROS_ASSERT(private_nh.getParam(
@@ -146,6 +148,63 @@ void getDebugSettings(const ros::NodeHandle& private_nh,
     }
 }
 
+void getFlowEstimatorSettings(iarc7_vision::OpticalFlowEstimatorConfig &config,
+                              const ros::NodeHandle& private_nh,
+                              iarc7_vision::OpticalFlowEstimatorSettings& settings)
+{
+    static bool first_run = true;
+    if (first_run) {
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/pixels_per_meter",
+                settings.pixels_per_meter));
+        config.pixels_per_meter = settings.pixels_per_meter;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/fov",
+                settings.fov));
+        config.fov = settings.fov;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/min_estimation_altitude",
+                settings.min_estimation_altitude));
+        config.min_estimation_altitude = settings.min_estimation_altitude;
+
+        first_run = false;
+    }
+    else {
+        settings.pixels_per_meter = config.pixels_per_meter;
+        settings.fov = config.fov;
+        settings.min_estimation_altitude = config.min_estimation_altitude;
+    }
+}
+
+void getFlowDebugSettings(const ros::NodeHandle&,
+                      iarc7_vision::OpticalFlowDebugSettings&)
+{
+   /*ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_line_detector",
+            settings.debug_line_detector));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_direction",
+            settings.debug_direction));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_edges",
+            settings.debug_edges));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_lines",
+            settings.debug_lines));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_line_markers",
+            settings.debug_line_markers));
+    if (private_nh.hasParam("grid_line_estimator/debug_height")) {
+        ROS_ASSERT(private_nh.getParam(
+            "grid_line_estimator/debug_height",
+            settings.debug_height));
+    } else {
+        settings.debug_height = std::numeric_limits<double>::quiet_NaN();
+    }*/
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "vision");
@@ -153,9 +212,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
-    dynamic_reconfigure::Server<iarc7_vision::LineDetectorConfig> server;
-    dynamic_reconfigure::Server
-          <iarc7_vision::LineDetectorConfig>::CallbackType settings_callback;
+    dynamic_reconfigure::Server<iarc7_vision::LineDetectorConfig> line_extractor_server;
 
     iarc7_vision::LineExtractorSettings line_extractor_settings;
 
@@ -167,16 +224,37 @@ int main(int argc, char **argv)
                                      line_extractor_settings);
         };
 
-    server.setCallback(line_extractor_settings_callback);
+    line_extractor_server.setCallback(line_extractor_settings_callback);
 
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
     getGridEstimatorSettings(private_nh, grid_estimator_settings);
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
-    getDebugSettings(private_nh, grid_line_debug_settings);
+    getGridDebugSettings(private_nh, grid_line_debug_settings);
     iarc7_vision::GridLineEstimator gridline_estimator(
             line_extractor_settings,
             grid_estimator_settings,
             grid_line_debug_settings);
+
+    dynamic_reconfigure::Server<iarc7_vision::OpticalFlowEstimatorConfig>
+        optical_flow_server;
+
+    iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
+
+    boost::function<void(iarc7_vision::OpticalFlowEstimatorConfig &config,
+                         uint32_t level)> optical_flow_settings_callback =
+        [&](iarc7_vision::OpticalFlowEstimatorConfig &config, uint32_t) {
+            getFlowEstimatorSettings(config,
+                                     private_nh,
+                                     optical_flow_estimator_settings);
+        };
+
+    optical_flow_server.setCallback(optical_flow_settings_callback);
+
+    iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
+    getFlowDebugSettings(private_nh, optical_flow_debug_settings);
+    iarc7_vision::OpticalFlowEstimator optical_flow_estimator(
+            optical_flow_estimator_settings,
+            optical_flow_debug_settings);
 
     ros::Rate rate (100);
     while (ros::ok() && ros::Time::now() == ros::Time(0)) {
@@ -209,6 +287,9 @@ int main(int argc, char **argv)
             message_queue.erase(message_queue.begin());
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
+
+            optical_flow_estimator.update(image,
+                                          message->header.stamp);
         }
 
         ros::spinOnce();

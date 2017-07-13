@@ -1,0 +1,11 @@
+# Settings for the optical flow estimator
+optical_flow_estimator:
+    # Pixels per meter to scale image to
+    pixels_per_meter: 250
+    fov: 1.64
+
+    # Minimum altitude to run the detector
+    min_extraction_altitude: 1.0
+
+# Debug settings for the optical flow estimator
+# optical_flow_estimator:

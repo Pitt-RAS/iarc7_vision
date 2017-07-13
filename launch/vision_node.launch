@@ -5,6 +5,7 @@
 
         <rosparam command="load" file="$(find iarc7_vision)/param/vision_node_params_$(arg platform).yaml" />
         <rosparam command="load" file="$(find iarc7_vision)/param/line_detector_params_$(arg platform).yaml" />
+        <rosparam command="load" file="$(find iarc7_vision)/param/optical_flow_params_$(arg platform).yaml" />
 
         <!-- Uncomment this and comment out the line that loads by platform if running without CUDA -->
         <!-- <rosparam command="load" file="$(find iarc7_vision)/param/line_detector_params_cpu.yaml" /> -->
