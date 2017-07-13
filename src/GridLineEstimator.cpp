@@ -113,12 +113,14 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
 {
     ROS_DEBUG("last filtered position %f", last_filtered_position_(2));
 
+    // Attempt to update the transform if it's out of date
     if (last_filtered_position_stamp_ == ros::Time(0)
      || (time - last_filtered_position_stamp_).toSec()
          > grid_estimator_settings_.allowed_position_stamp_error) {
         updateFilteredPosition(time);
     }
 
+    // Return if the transform update failed
     if (last_filtered_position_stamp_ == ros::Time(0)
      || (time - last_filtered_position_stamp_).toSec()
          > grid_estimator_settings_.allowed_position_stamp_error) {
@@ -761,32 +763,9 @@ void GridLineEstimator::processImage(const cv::Mat& image,
                                           line_extractor_settings_.fov),
                            pl_normals);
 
-    // Publish gridlines
-    visualization_msgs::Marker lines_marker;
-    lines_marker.header.stamp = ros::Time::now();
-    lines_marker.header.frame_id = "map";
-    lines_marker.ns = "lines_marker_ns";
-    lines_marker.id = 0;
-    lines_marker.type = visualization_msgs::Marker::LINE_LIST;
-    lines_marker.action = visualization_msgs::Marker::MODIFY;
-    for (const Eigen::Vector3d& pl_normal : pl_normals) {
-        geometry_msgs::Point p;
-        p.x = 10;
-        p.y = (pl_normal(2)*height - pl_normal(0)*p.x) / pl_normal(1);
-        lines_marker.points.push_back(p);
-        p.x = -10;
-        p.y = (pl_normal(2)*height - pl_normal(0)*p.x) / pl_normal(1);
-        lines_marker.points.push_back(p);
-    }
-    lines_marker.color.a = 1;
-    lines_marker.color.r = 0;
-    lines_marker.color.g = 1;
-    lines_marker.color.b = 1;
-    lines_marker.scale.x = 0.02;
     if (debug_settings_.debug_line_markers) {
-        debug_line_markers_pub_.publish(lines_marker);
+        publishLineMarkers(pl_normals, height, time);
     }
-
 
     if (!debug_settings_.debug_line_detector) {
         processLines(height, pl_normals, time);
@@ -834,26 +813,8 @@ void GridLineEstimator::processLines(
                         std::abs(yaw - current_theta - 2*M_PI),
                         std::abs(yaw - current_theta + 2*M_PI)}));
 
-    visualization_msgs::Marker direction_marker;
-    direction_marker.header.stamp = ros::Time::now();
-    direction_marker.header.frame_id = "level_quad";
-    direction_marker.ns = "direction_marker_ns";
-    direction_marker.id = 0;
-    direction_marker.type = visualization_msgs::Marker::ARROW;
-    direction_marker.action = visualization_msgs::Marker::MODIFY;
-    geometry_msgs::Point p;
-    direction_marker.points.push_back(p);
-    p.x = std::cos(yaw);
-    p.y = std::sin(yaw);
-    direction_marker.points.push_back(p);
-    direction_marker.color.a = 1;
-    direction_marker.color.r = 0;
-    direction_marker.color.g = 1;
-    direction_marker.color.b = 1;
-    direction_marker.scale.x = 0.05;
-    direction_marker.scale.y = 0.08;
     if (debug_settings_.debug_direction) {
-        debug_direction_marker_pub_.publish(direction_marker);
+        publishDirectionMarker(yaw, time);
     }
 
     // Cluster lines by orientation
@@ -922,6 +883,65 @@ void GridLineEstimator::processLines(
     position_cov_3d.block<2, 2>(0, 0) = position_cov_2d;
 
     publishPositionEstimate(position_3d, position_cov_3d, time);
+}
+
+void GridLineEstimator::publishDirectionMarker(double yaw,
+                                               const ros::Time& time) const
+{
+    visualization_msgs::Marker direction_marker;
+    direction_marker.header.stamp = time;
+    direction_marker.header.frame_id = "level_quad";
+    direction_marker.ns = "direction_marker_ns";
+    direction_marker.id = 0;
+    direction_marker.type = visualization_msgs::Marker::ARROW;
+    direction_marker.action = visualization_msgs::Marker::MODIFY;
+    geometry_msgs::Point p;
+    direction_marker.points.push_back(p);
+    p.x = std::cos(yaw);
+    p.y = std::sin(yaw);
+    direction_marker.points.push_back(p);
+    direction_marker.color.a = 1;
+    direction_marker.color.r = 0;
+    direction_marker.color.g = 1;
+    direction_marker.color.b = 1;
+    direction_marker.scale.x = 0.05;
+    direction_marker.scale.y = 0.08;
+    debug_direction_marker_pub_.publish(direction_marker);
+}
+
+void GridLineEstimator::publishLineMarkers(
+        const std::vector<Eigen::Vector3d>& pl_normals,
+        double height,
+        const ros::Time& time) const
+{
+    visualization_msgs::Marker lines_marker;
+    lines_marker.header.stamp = time;
+    lines_marker.header.frame_id = "map";
+    lines_marker.ns = "lines_marker_ns";
+    lines_marker.id = 0;
+    lines_marker.type = visualization_msgs::Marker::LINE_LIST;
+    lines_marker.action = visualization_msgs::Marker::MODIFY;
+    for (const Eigen::Vector3d& pl_normal : pl_normals) {
+        geometry_msgs::Point p;
+
+        p.x = 10;
+        p.y = (pl_normal(2)*height - pl_normal(0)*p.x) / pl_normal(1);
+        p.x += last_filtered_position_(0);
+        p.y += last_filtered_position_(1);
+        lines_marker.points.push_back(p);
+
+        p.x = -10;
+        p.y = (pl_normal(2)*height - pl_normal(0)*p.x) / pl_normal(1);
+        p.x += last_filtered_position_(0);
+        p.y += last_filtered_position_(1);
+        lines_marker.points.push_back(p);
+    }
+    lines_marker.color.a = 1;
+    lines_marker.color.r = 0;
+    lines_marker.color.g = 1;
+    lines_marker.color.b = 1;
+    lines_marker.scale.x = 0.02;
+    debug_line_markers_pub_.publish(lines_marker);
 }
 
 void GridLineEstimator::publishPositionEstimate(
