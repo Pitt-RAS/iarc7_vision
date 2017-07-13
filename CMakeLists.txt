@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(iarc7_vision)
 
+set(CMAKE_BUILD_TYPE "Debug")
+
 set("OpenCV_DIR" "/usr/local/share/OpenCV")
 set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE "" INTERNAL)
 
@@ -23,8 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 generate_dynamic_reconfigure_options(
-  cfg/LineDetector.cfg
-  cfg/OpticalFlowEstimator.cfg
+  cfg/VisionNode.cfg
 )
 
 ## System dependencies are found with CMake's conventions
