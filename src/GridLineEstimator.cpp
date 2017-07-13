@@ -855,7 +855,7 @@ void GridLineEstimator::processLines(
     camera_position.point.z = 0;
     tf2::doTransform(camera_position, camera_position, camera_to_lq_transform);
 
-    ROS_DEBUG("px %f py %f pz %f", position_2d(0), position_2d(1), position_2d(2));
+    ROS_DEBUG("px %f py %f", position_2d(0), position_2d(1));
     ROS_DEBUG("height %f", height);
 
     Eigen::Vector3d position_3d {
