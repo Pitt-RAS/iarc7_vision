@@ -62,6 +62,7 @@ class GridLineEstimator {
 
   private:
 
+    /// Returns the current angle of the quad from +x (with positive towards +y)
     double getCurrentTheta(const ros::Time& time) const;
 
     /// Compute the focal length (in px) from image size and dfov
@@ -107,6 +108,8 @@ class GridLineEstimator {
 
     /// Returns the best guess for grid's orientation relative to the pl_normal
     /// frame based on the given planes
+    ///
+    /// Result is in [0, pi/2)
     double getThetaForPlanes(const std::vector<Eigen::Vector3d>& pl_normals) const;
 
     /// Returns signed distance of each line from the origin without accounting
