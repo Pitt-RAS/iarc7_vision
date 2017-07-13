@@ -62,6 +62,7 @@ class GridLineEstimator {
 
   private:
 
+    /// Returns the current angle of the quad from +x (with positive towards +y)
     double getCurrentTheta(const ros::Time& time) const;
 
     /// Compute the focal length (in px) from image size and dfov
@@ -107,6 +108,8 @@ class GridLineEstimator {
 
     /// Returns the best guess for grid's orientation relative to the pl_normal
     /// frame based on the given planes
+    ///
+    /// Result is in [0, pi/2)
     double getThetaForPlanes(const std::vector<Eigen::Vector3d>& pl_normals) const;
 
     /// Returns signed distance of each line from the origin without accounting
@@ -177,6 +180,7 @@ class GridLineEstimator {
     /// Extract grid position from the image and publish if possible
     void processImage(const cv::Mat& image, const ros::Time& time) const;
 
+    /// Process lines extracted from the image
     void processLines(double height,
                       const std::vector<Eigen::Vector3d>& pl_normals,
                       const ros::Time& time) const;
@@ -187,6 +191,9 @@ class GridLineEstimator {
         const Eigen::Vector3d& position,
         const Eigen::Matrix3d& covariance,
         const ros::Time& time) const;
+
+    /// Publish the given yaw estimate with the given timestamp
+    void publishYaw(double yaw, const ros::Time& time) const;
 
     /// Takes a list of plane normals and splits them into two clusters based
     /// on which are parallel or perpendicular to the theta vector.  The theta
@@ -210,6 +217,7 @@ class GridLineEstimator {
     void updateFilteredPosition(const ros::Time& time);
 
     ros::Publisher pose_pub_;
+    ros::Publisher yaw_pub_;
 
     const LineExtractorSettings& line_extractor_settings_;
     const GridEstimatorSettings& grid_estimator_settings_;

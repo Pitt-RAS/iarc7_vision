@@ -31,6 +31,7 @@
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
+#include <iarc7_msgs/Float64Stamped.h>
 #include <visualization_msgs/Marker.h>
 
 static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
@@ -104,6 +105,8 @@ GridLineEstimator::GridLineEstimator(
     pose_pub_
         = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose",
                                                                        10);
+
+    yaw_pub_ = local_nh.advertise<iarc7_msgs::Float64Stamped>("line_yaw", 10);
 }
 
 void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
@@ -156,16 +159,16 @@ double GridLineEstimator::getCurrentTheta(const ros::Time& time) const
     geometry_msgs::Vector3Stamped quad_forward;
     quad_forward.vector.x = 1;
     tf2::doTransform(quad_forward, quad_forward, q_lq_tf);
-    double current_theta = M_PI/2 - std::atan2(quad_forward.vector.y,
-                                               quad_forward.vector.x);
+    double current_theta = std::atan2(quad_forward.vector.y,
+                                      quad_forward.vector.x);
     if (!std::isfinite(current_theta)) {
         ROS_ERROR("The quad seems to be vertical, "
                   "so we have no idea what our yaw is (Yay gimbal lock!)");
         // TODO: handle this so the whole thing doesn't crash
     }
 
-    if (current_theta >= 2*M_PI) {
-        current_theta -= 2*M_PI;
+    if (current_theta < 0) {
+        current_theta += 2*M_PI;
     }
 
     return current_theta;
@@ -801,35 +804,35 @@ void GridLineEstimator::processLines(
 
     // For now, our localization has a better estimate of the grid orientation
     // than the camera does, so we just use that
-    const double best_theta = 0; //getThetaForPlanes(pl_normals);
+    const double best_theta = getThetaForPlanes(pl_normals);
 
-    // get current orientation estimate
+    // get current orientation estimate in [0, 2pi)
     const double current_theta = getCurrentTheta(time);
 
     // Pick the orientation estimate that's closer to our current angle estimate
-    double best_theta_quad; // angle in [0, 2pi)
+    double yaw; // angle in [0, 2pi)
     if (best_theta < M_PI/4) {
-        best_theta_quad = current_theta + best_theta;
-        if (best_theta_quad >= 2*M_PI) {
-            best_theta_quad -= 2*M_PI;
+        yaw = current_theta - best_theta;
+        if (yaw < 0) {
+            yaw += 2*M_PI;
         }
     } else {
-        best_theta_quad = current_theta + best_theta - M_PI/2;
-        if (best_theta_quad < 0) {
-            best_theta_quad += 2*M_PI;
+        yaw = current_theta - best_theta + M_PI/2;
+        if (yaw >= 2*M_PI) {
+            yaw -= 2*M_PI;
         }
     }
 
-    // Convert orientation estimate to yaw
-    double yaw = -best_theta_quad;
-    if (yaw < 0) {
-        yaw += 2*M_PI;
+    if (yaw >= 2*M_PI || yaw < 0) {
+        throw ros::Exception(str(boost::format("yaw out of range: %f") % yaw));
     }
 
+    publishYaw(yaw, time);
+
     ROS_DEBUG("Orientation error in GridLineEstimator: %f",
-              std::min({std::abs(best_theta_quad - current_theta),
-                        std::abs(best_theta_quad - current_theta - 2*M_PI),
-                        std::abs(best_theta_quad - current_theta + 2*M_PI)}));
+              std::min({std::abs(yaw - current_theta),
+                        std::abs(yaw - current_theta - 2*M_PI),
+                        std::abs(yaw - current_theta + 2*M_PI)}));
 
     visualization_msgs::Marker direction_marker;
     direction_marker.header.stamp = ros::Time::now();
@@ -841,7 +844,7 @@ void GridLineEstimator::processLines(
     geometry_msgs::Point p;
     direction_marker.points.push_back(p);
     p.x = std::cos(yaw);
-    p.y = -std::sin(yaw);
+    p.y = std::sin(yaw);
     direction_marker.points.push_back(p);
     direction_marker.color.a = 1;
     direction_marker.color.r = 0;
@@ -953,6 +956,14 @@ void GridLineEstimator::publishPositionEstimate(
     }
 
     pose_pub_.publish(pose_msg);
+}
+
+void GridLineEstimator::publishYaw(double yaw, const ros::Time& time) const
+{
+    iarc7_msgs::Float64Stamped msg;
+    msg.header.stamp = time;
+    msg.data = yaw;
+    yaw_pub_.publish(msg);
 }
 
 void GridLineEstimator::splitLinesByOrientation(
