@@ -184,19 +184,28 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::Mat frame1Gray;
         cv::cvtColor(image, frame1Gray, cv::COLOR_BGR2GRAY);
 
+        cv::Size s = last_image.size();
+        ROS_ERROR("last %d %d", s.width, s.height);
+
+        s = image.size();
+        ROS_ERROR("curr %d %d", s.width, s.height);
+
+        s = frame0Gray.size();
+        ROS_ERROR("last grey %d %d", s.width, s.height);
+
         // goodFeaturesToTrack
         cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
                         flow_estimator_settings_.points,
                         0.01,
                         flow_estimator_settings_.min_dist);
 
-        cv::gpu::GpuMat d_frame0Gray_big(frame0Gray);
-        cv::gpu::GpuMat d_frame0Gray;
+        cv::gpu::GpuMat d_frame0Gray(frame0Gray);
+        //cv::gpu::GpuMat d_frame0Gray;
         cv::gpu::GpuMat d_prevPts;
 
-        cv::gpu::resize(d_frame0Gray_big,
-                        d_frame0Gray,
-                        cv::Size(500, 500));
+        //cv::gpu::resize(d_frame0Gray_big,
+        //                d_frame0Gray,
+        //                cv::Size(1280, 960));
 
         int64 start = cv::getTickCount();
         detector(d_frame0Gray, d_prevPts);
@@ -214,21 +223,21 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         d_pyrLK.iters = flow_estimator_settings_.iters;
 
         cv::gpu::GpuMat d_frame1Gray(frame1Gray);
-        cv::gpu::GpuMat d_frame1_big(image);
-        cv::gpu::GpuMat d_frame0_big(last_image);
-        cv::gpu::GpuMat d_frame1;
-        cv::gpu::GpuMat d_frame0;
+        cv::gpu::GpuMat d_frame1(image);
+        cv::gpu::GpuMat d_frame0(last_image);
+        //cv::gpu::GpuMat d_frame1;
+        //cv::gpu::GpuMat d_frame0;
 
         cv::gpu::GpuMat d_nextPts;
         cv::gpu::GpuMat d_status;
 
-        cv::gpu::resize(d_frame0_big,
+        /*cv::gpu::resize(d_frame0_big,
                         d_frame0,
-                        cv::Size(500, 500));
+                        cv::Size(1280, 960));
 
         cv::gpu::resize(d_frame1_big,
                         d_frame1,
-                        cv::Size(500, 500));
+                        cv::Size(1280, 960));*/
 
         start = cv::getTickCount();
         //d_pyrLK.sparse(useGray ? d_frame0Gray : d_frame0, useGray ? d_frame1Gray : d_frame1, d_prevPts, d_nextPts, d_status);

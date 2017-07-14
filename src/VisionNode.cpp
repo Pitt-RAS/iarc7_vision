@@ -310,7 +310,7 @@ int main(int argc, char **argv)
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
 
-            //optical_flow_estimator.update(message);
+            optical_flow_estimator.update(message);
         }
 
         ros::spinOnce();
