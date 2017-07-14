@@ -184,9 +184,10 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::cvtColor(image, frame1Gray, cv::COLOR_BGR2GRAY);
 
         // goodFeaturesToTrack
-        int points = 400;
-        int minDist = 100;
-        cv::gpu::GoodFeaturesToTrackDetector_GPU detector(points, 0.01, minDist);
+        cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
+                        flow_estimator_settings_.points,
+                        0.01,
+                        flow_estimator_settings_.min_dist);
 
         cv::gpu::GpuMat d_frame0Gray_big(frame0Gray);
         cv::gpu::GpuMat d_frame0Gray;
@@ -204,14 +205,12 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
         cv::gpu::PyrLKOpticalFlow d_pyrLK;
 
-        int winSize = 20;
-        int maxLevel = 3;
-        int iters = 10;
+
         //bool useGray = false;
-        d_pyrLK.winSize.width = winSize;
-        d_pyrLK.winSize.height = winSize;
-        d_pyrLK.maxLevel = maxLevel;
-        d_pyrLK.iters = iters;
+        d_pyrLK.winSize.width = flow_estimator_settings_.win_size;
+        d_pyrLK.winSize.height = flow_estimator_settings_.win_size;
+        d_pyrLK.maxLevel = flow_estimator_settings_.max_level;
+        d_pyrLK.iters = flow_estimator_settings_.iters;
 
         cv::gpu::GpuMat d_frame1Gray(frame1Gray);
         cv::gpu::GpuMat d_frame1_big(image);
