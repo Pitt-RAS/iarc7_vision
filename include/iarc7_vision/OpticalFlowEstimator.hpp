@@ -23,6 +23,12 @@ struct OpticalFlowEstimatorSettings {
     double pixels_per_meter;
     double fov;
     double min_estimation_altitude;
+    int win_size;
+    int max_level;
+    int iters;
+    int points;
+    double quality_level;
+    int min_dist;
 };
 
 struct OpticalFlowDebugSettings {

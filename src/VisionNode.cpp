@@ -87,6 +87,41 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.min_estimation_altitude));
         config.flow_min_estimation_altitude = flow_settings.min_estimation_altitude;
 
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/pixels_per_meter",
+                flow_settings.pixels_per_meter));
+        config.flow_pixels_per_meter = flow_settings.pixels_per_meter;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/points",
+                flow_settings.points));
+        config.flow_points = flow_settings.points;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/quality_level",
+                flow_settings.quality_level));
+        config.flow_quality_level = flow_settings.quality_level;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/min_dist",
+                flow_settings.min_dist));
+        config.flow_min_dist = flow_settings.min_dist;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/win_size",
+                flow_settings.win_size));
+        config.flow_min_dist = flow_settings.win_size;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/max_level",
+                flow_settings.max_level));
+        config.flow_max_level = flow_settings.max_level;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/iters",
+                flow_settings.iters));
+        config.flow_iters = flow_settings.iters;
+
         first_run = false;
     }
     else {
@@ -107,6 +142,12 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.pixels_per_meter = config.flow_pixels_per_meter;
         flow_settings.fov = config.flow_fov;
         flow_settings.min_estimation_altitude = config.flow_min_estimation_altitude;
+        flow_settings.points = config.flow_points;
+        flow_settings.quality_level = config.flow_quality_level;
+        flow_settings.min_dist = config.flow_min_dist;
+        flow_settings.win_size = config.flow_win_size;
+        flow_settings.max_level = config.flow_max_level;
+        flow_settings.iters = config.flow_iters;
     }
 }
 
