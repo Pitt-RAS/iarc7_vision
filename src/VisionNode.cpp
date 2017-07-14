@@ -184,6 +184,10 @@ int main(int argc, char **argv)
         ros::spinOnce();
     }
 
+    double startup_timeout;
+    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
+    ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+
     std::vector<sensor_msgs::Image::ConstPtr> message_queue;
 
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
@@ -201,10 +205,10 @@ int main(int argc, char **argv)
     while (ros::ok())
     {
         if (message_queue.size() > 0) {
-            const auto& message = message_queue.front();
+            const auto message = message_queue.front();
+            message_queue.erase(message_queue.begin());
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
-            message_queue.erase(message_queue.begin());
         }
 
         ros::spinOnce();

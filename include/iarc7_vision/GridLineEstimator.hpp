@@ -59,6 +59,8 @@ class GridLineEstimator {
                       const GridEstimatorSettings& grid_estimator_settings,
                       const GridLineDebugSettings& debug_settings);
     void update(const cv::Mat& image, const ros::Time& time);
+    bool __attribute__((warn_unused_result)) waitUntilReady(
+            const ros::Duration& timeout);
 
   private:
 
@@ -154,15 +156,18 @@ class GridLineEstimator {
     /// Get the 2d position estimate closest to position_estimate based on the
     /// given information about the grid
     ///
+    /// @param[in]  x_signed_dists    {Signed distances to lines that are
+    ///                                parallel to the y axis}
+    /// @param[in]  y_signed_dists    {Signed distances to lines that are
+    ///                                parallel to the x axis}
     /// @param[in]  height_estimate   The approximate altitude of the camera
     /// @param[in]  position_estimate {Vector from origin of map to origin of
-    ///                                pl_normal frame ("level_quad" on the
+    ///                                pl_normal frame (camera frame on the
     ///                                ground)}
     /// @param[out] position          The best guess 2d position
     /// @param[out] covariance        Covariance of position estimate
-    void get2dPosition(const std::vector<double>& para_signed_dists,
-                       const std::vector<double>& perp_signed_dists,
-                       double theta,
+    void get2dPosition(const std::vector<double>& x_signed_dists,
+                       const std::vector<double>& y_signed_dists,
                        double height_estimate,
                        const Eigen::Vector2d& position_estimate,
                        Eigen::Vector2d& position,
@@ -184,6 +189,14 @@ class GridLineEstimator {
     void processLines(double height,
                       const std::vector<Eigen::Vector3d>& pl_normals,
                       const ros::Time& time) const;
+
+    /// Publish single vector marker to indicate the drone's forward yaw vector
+    void publishDirectionMarker(double yaw, const ros::Time& time) const;
+
+    /// Publish markers for all lines seen (in the map frame)
+    void publishLineMarkers(const std::vector<Eigen::Vector3d>& pl_normals,
+                            double height,
+                            const ros::Time& time) const;
 
     /// Publish a 3d position estimate with the specified timestamp in the
     /// "map" frame
@@ -228,10 +241,15 @@ class GridLineEstimator {
     ros::Publisher debug_lines_pub_;
     ros::Publisher debug_line_markers_pub_;
 
+    /// Position of bottom_camera_optical in the map frame
+    /// when we received the last frame
     Eigen::Vector3d last_filtered_position_;
+
     ros::Time last_filtered_position_stamp_;
 
     ros_utils::SafeTransformWrapper transform_wrapper_;
+
+    ros::Time last_update_time_;
 };
 
 } // namespace iarc7_vision
