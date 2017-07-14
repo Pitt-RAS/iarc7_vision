@@ -1,5 +1,12 @@
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 
+// BAD HEADER
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <cv_bridge/cv_bridge.h>
+#pragma GCC diagnostic pop
+// END BAD HEADER
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/gpu/gpu.hpp>
@@ -14,13 +21,78 @@
 
 namespace iarc7_vision {
 
+static void download(const cv::gpu::GpuMat& d_mat, std::vector<cv::Point2f>& vec)
+{
+    vec.resize(d_mat.cols);
+    cv::Mat mat(1, d_mat.cols, CV_32FC2, (void*)&vec[0]);
+    d_mat.download(mat);
+}
+
+static void download(const cv::gpu::GpuMat& d_mat, std::vector<uchar>& vec)
+{
+    vec.resize(d_mat.cols);
+    cv::Mat mat(1, d_mat.cols, CV_8UC1, (void*)&vec[0]);
+    d_mat.download(mat);
+}
+
+static void drawArrows(cv::Mat& frame, const std::vector<cv::Point2f>& prevPts, const std::vector<cv::Point2f>& nextPts, const std::vector<uchar>& status, cv::Scalar line_color = cv::Scalar(0, 0, 255))
+{
+    for (size_t i = 0; i < prevPts.size(); ++i)
+    {
+        if (status[i])
+        {
+            int line_thickness = 1;
+
+            cv::Point p = prevPts[i];
+            cv::Point q = nextPts[i];
+
+            double angle = atan2((double) p.y - q.y, (double) p.x - q.x);
+
+            double hypotenuse = sqrt( (double)(p.y - q.y)*(p.y - q.y) + (double)(p.x - q.x)*(p.x - q.x) );
+
+            if (hypotenuse < 1.0)
+                continue;
+
+            // Here we lengthen the arrow by a factor of three.
+            q.x = (int) (p.x - 3 * hypotenuse * cos(angle));
+            q.y = (int) (p.y - 3 * hypotenuse * sin(angle));
+
+            // Now we draw the main line of the arrow.
+            line(frame, p, q, line_color, line_thickness);
+
+            // Now draw the tips of the arrow. I do some scaling so that the
+            // tips look proportional to the main line of the arrow.
+
+            p.x = (int) (q.x + 9 * cos(angle + CV_PI / 4));
+            p.y = (int) (q.y + 9 * sin(angle + CV_PI / 4));
+            line(frame, p, q, line_color, line_thickness);
+
+            p.x = (int) (q.x + 9 * cos(angle - CV_PI / 4));
+            p.y = (int) (q.y + 9 * sin(angle - CV_PI / 4));
+            line(frame, p, q, line_color, line_thickness);
+        }
+    }
+}
+
+template <typename T> inline T clamp (T x, T a, T b)
+{
+    return ((x) > (a) ? ((x) < (b) ? (x) : (b)) : (a));
+}
+
+template <typename T> inline T mapValue(T x, T a, T b, T c, T d)
+{
+    x = clamp(x, a, b);
+    return c + (d - c) * (x - a) / (b - a);
+}
+
 OpticalFlowEstimator::OpticalFlowEstimator(
         const OpticalFlowEstimatorSettings& flow_estimator_settings,
         const OpticalFlowDebugSettings& debug_settings)
     : flow_estimator_settings_(flow_estimator_settings),
       debug_settings_(debug_settings),
       last_filtered_position_(),
-      transform_wrapper_()
+      transform_wrapper_(),
+      last_message_()
 {
     ros::NodeHandle local_nh ("optical_flow_estimator");
 
@@ -48,23 +120,34 @@ OpticalFlowEstimator::OpticalFlowEstimator(
 
 }
 
-void OpticalFlowEstimator::update(const cv::Mat& image, const ros::Time&)
+void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
-    if (last_filtered_position_.point.z
-            >= flow_estimator_settings_.min_estimation_altitude) {
-        try {
-            geometry_msgs::TwistWithCovarianceStamped velocity;
-            estimateVelocity(velocity, image, last_filtered_position_.point.z);
-        } catch (const std::exception& ex) {
-            ROS_ERROR_STREAM("Caught exception processing image: "
-                          << ex.what());
-        }
-    } else {
-        ROS_WARN("Height (%f) is below min processing height (%f)",
-                 last_filtered_position_.point.z,
-                 flow_estimator_settings_.min_estimation_altitude);
-    }
+    updateFilteredPosition(message->header.stamp);
 
+    if (last_message_!=nullptr) {
+        if (last_filtered_position_.point.z
+                >= flow_estimator_settings_.min_estimation_altitude) {
+            try {
+
+                const cv::Mat last_image = cv_bridge::toCvShare(last_message_)->image;
+                const cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
+
+                geometry_msgs::TwistWithCovarianceStamped velocity;
+                estimateVelocity(velocity, last_image, curr_image, last_filtered_position_.point.z);
+            } catch (const std::exception& ex) {
+                ROS_ERROR_STREAM("Caught exception processing image flow: "
+                              << ex.what());
+            }
+        } else {
+            ROS_WARN("Height (%f) is below min processing height (%f)",
+                     last_filtered_position_.point.z,
+                     flow_estimator_settings_.min_estimation_altitude);
+        }
+        last_message_ = message;
+    }
+    else {
+        last_message_ = message;
+    }
 }
 
 double OpticalFlowEstimator::getFocalLength(const cv::Size& img_size, double fov)
@@ -74,8 +157,9 @@ double OpticalFlowEstimator::getFocalLength(const cv::Size& img_size, double fov
 }
 
 void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceStamped&,
-                                         const cv::Mat&,
-                                         double) const
+                                            const cv::Mat& last_image,
+                                            const cv::Mat& image,
+                                            double) const
 {
     // m/px = camera_height / focal_length;
     //double current_meters_per_px = height
@@ -89,11 +173,88 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
     //double scale_factor = current_meters_per_px / desired_meters_per_px;
 
     //cv::Mat image_edges;
+
     if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
         ROS_ERROR_ONCE("Optical Flow Estimator does not have a CPU version");
 
     } else {
+        cv::Mat frame0Gray;
+        cv::cvtColor(last_image, frame0Gray, cv::COLOR_BGR2GRAY);
+        cv::Mat frame1Gray;
+        cv::cvtColor(image, frame1Gray, cv::COLOR_BGR2GRAY);
 
+        // goodFeaturesToTrack
+        int points = 400;
+        int minDist = 100;
+        cv::gpu::GoodFeaturesToTrackDetector_GPU detector(points, 0.01, minDist);
+
+        cv::gpu::GpuMat d_frame0Gray_big(frame0Gray);
+        cv::gpu::GpuMat d_frame0Gray;
+        cv::gpu::GpuMat d_prevPts;
+
+        cv::gpu::resize(d_frame0Gray_big,
+                        d_frame0Gray,
+                        cv::Size(500, 500));
+
+        int64 start = cv::getTickCount();
+        detector(d_frame0Gray, d_prevPts);
+        double timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "Detector sparse : " << timeSec << " sec" << std::endl;
+        // Sparse
+
+        cv::gpu::PyrLKOpticalFlow d_pyrLK;
+
+        int winSize = 20;
+        int maxLevel = 3;
+        int iters = 10;
+        //bool useGray = false;
+        d_pyrLK.winSize.width = winSize;
+        d_pyrLK.winSize.height = winSize;
+        d_pyrLK.maxLevel = maxLevel;
+        d_pyrLK.iters = iters;
+
+        cv::gpu::GpuMat d_frame1Gray(frame1Gray);
+        cv::gpu::GpuMat d_frame1_big(image);
+        cv::gpu::GpuMat d_frame0_big(last_image);
+        cv::gpu::GpuMat d_frame1;
+        cv::gpu::GpuMat d_frame0;
+
+        cv::gpu::GpuMat d_nextPts;
+        cv::gpu::GpuMat d_status;
+
+        cv::gpu::resize(d_frame0_big,
+                        d_frame0,
+                        cv::Size(500, 500));
+
+        cv::gpu::resize(d_frame1_big,
+                        d_frame1,
+                        cv::Size(500, 500));
+
+        start = cv::getTickCount();
+        //d_pyrLK.sparse(useGray ? d_frame0Gray : d_frame0, useGray ? d_frame1Gray : d_frame1, d_prevPts, d_nextPts, d_status);
+        d_pyrLK.sparse(d_frame0, d_frame1, d_prevPts, d_nextPts, d_status);
+        timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "PYRLK sparse : " << timeSec << " sec" << std::endl;
+
+        // Draw arrows
+
+        std::vector<cv::Point2f> prevPts(d_prevPts.cols);
+        download(d_prevPts, prevPts);
+
+        std::vector<cv::Point2f> nextPts(d_nextPts.cols);
+        download(d_nextPts, nextPts);
+
+        std::vector<uchar> status(d_status.cols);
+        download(d_status, status);
+
+        cv::Mat temp;
+        d_frame1.download(temp);
+
+        drawArrows(temp, prevPts, nextPts, status, cv::Scalar(255, 0, 0));
+
+        cv::imshow("PyrLK [Sparse]", temp);
+
+        cv::waitKey(10);
     }
 }
 
@@ -114,13 +275,6 @@ void OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time)
                          filtered_position_transform_stamped);
 
         last_filtered_position_ = camera_position;
-
-        /*current_filtered_position_(0) = camera_position.point.x;
-        current_filtered_position_(1) = camera_position.point.y;
-        current_filtered_position_(2) = std::isfinite(debug_settings_.debug_height)
-                                      ? debug_settings_.debug_height
-                                      : camera_position.point.z;*/
-        //current_filtered_position_stamp_ = time;
     }
 }
 

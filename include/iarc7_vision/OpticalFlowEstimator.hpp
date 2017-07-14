@@ -14,6 +14,9 @@
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>
 
+#include <image_transport/image_transport.h>
+#include <sensor_msgs/image_encodings.h>
+
 namespace iarc7_vision {
 
 struct OpticalFlowEstimatorSettings {
@@ -30,7 +33,7 @@ class OpticalFlowEstimator {
   public:
     OpticalFlowEstimator(const OpticalFlowEstimatorSettings& flow_estimator_settings,
                          const OpticalFlowDebugSettings& debug_settings);
-    void update(const cv::Mat& image, const ros::Time& time);
+    void update(const sensor_msgs::Image::ConstPtr& message);
 
   private:
 
@@ -40,6 +43,7 @@ class OpticalFlowEstimator {
     static double getFocalLength(const cv::Size& img_size, double fov);
 
     void estimateVelocity(geometry_msgs::TwistWithCovarianceStamped& velocity,
+                                         const cv::Mat& last_image,
                                          const cv::Mat& image,
                                          double height) const;
 
@@ -54,6 +58,8 @@ class OpticalFlowEstimator {
     ros::Publisher twist_pub_;
 
     ros_utils::SafeTransformWrapper transform_wrapper_;
+
+    sensor_msgs::Image::ConstPtr last_message_;
 };
 
 } // namespace iarc7_vision
