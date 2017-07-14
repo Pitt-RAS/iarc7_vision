@@ -52,9 +52,11 @@ class OpticalFlowEstimator {
     void estimateVelocity(geometry_msgs::TwistWithCovarianceStamped& velocity,
                                          const cv::Mat& last_image,
                                          const cv::Mat& image,
-                                         double height) const;
+                                         double height);
 
     void updateFilteredPosition(const ros::Time& time);
+
+    void foo();
 
     const OpticalFlowEstimatorSettings& flow_estimator_settings_;
 
@@ -67,6 +69,10 @@ class OpticalFlowEstimator {
     ros_utils::SafeTransformWrapper transform_wrapper_;
 
     sensor_msgs::Image::ConstPtr last_message_;
+
+    cv::gpu::GpuMat last_scaled_image_;
+
+    cv::gpu::GpuMat last_scaled_grayscale_image_;
 
     ros::Publisher debug_velocity_vector_image_pub_;
 };

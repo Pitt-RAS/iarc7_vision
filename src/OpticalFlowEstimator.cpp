@@ -93,6 +93,8 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       last_filtered_position_(),
       transform_wrapper_(),
       last_message_(),
+      last_scaled_image_(),
+      last_scaled_grayscale_image_(),
       debug_velocity_vector_image_pub_()
 {
     ros::NodeHandle local_nh ("optical_flow_estimator");
@@ -133,8 +135,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                 >= flow_estimator_settings_.min_estimation_altitude) {
             try {
 
-                const cv::Mat last_image = cv_bridge::toCvShare(last_message_)->image;
-                const cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
+                cv::Mat last_image = cv_bridge::toCvShare(last_message_)->image;
+                cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
 
                 geometry_msgs::TwistWithCovarianceStamped velocity;
                 timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
@@ -154,7 +156,31 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         last_message_ = message;
     }
     else {
+
         last_message_ = message;
+
+        cv::Mat image = cv_bridge::toCvShare(message)->image;
+
+        cv::Size image_size = image.size();
+        image_size.width = image_size.width * flow_estimator_settings_.scale_factor;
+        image_size.height = image_size.height * flow_estimator_settings_.scale_factor;
+
+        cv::gpu::GpuMat d_frame1_big(image);
+        cv::gpu::GpuMat d_frame1;
+        cv::gpu::GpuMat d_frame1Gray;
+
+        cv::gpu::resize(d_frame1_big,
+                        d_frame1,
+                        image_size);
+
+        cv::gpu::cvtColor(d_frame1,
+                          d_frame1Gray,
+                          CV_RGBA2GRAY);
+
+        //d_frame1.copyTo(last_scaled_image_);
+        //d_frame1Gray.copyTo(last_scaled_grayscale_image_);
+        last_scaled_image_ = d_frame1;
+        last_scaled_grayscale_image_ = d_frame1Gray;
     }
     timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
     std::cout << "update return : " << timeSec << " sec" << std::endl;
@@ -167,9 +193,9 @@ double OpticalFlowEstimator::getFocalLength(const cv::Size& img_size, double fov
 }
 
 void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceStamped&,
-                                            const cv::Mat& last_image,
+                                            const cv::Mat&,
                                             const cv::Mat& image,
-                                            double) const
+                                            double)
 {
     // m/px = camera_height / focal_length;
     //double current_meters_per_px = height
@@ -192,14 +218,6 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         ROS_ERROR_ONCE("Optical Flow Estimator does not have a CPU version");
 
     } else {
-        /*cv::Size s = last_image.size();
-        //ROS_ERROR("last %d %d", s.width, s.height);
-
-        s = image.size();
-        ROS_ERROR("curr %d %d", s.width, s.height);
-
-        s = frame0Gray.size();
-        ROS_ERROR("last grey %d %d", s.width, s.height);*/
 
         // goodFeaturesToTrack
 
@@ -207,51 +225,33 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
         cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
                         flow_estimator_settings_.points,
-                        0.01,
+                        flow_estimator_settings_.quality_level,
                         flow_estimator_settings_.min_dist);
 
         double timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
         std::cout << "create good features to track : " << timeSec << " sec" << std::endl;
 
-        //cv::Mat frame0Gray;
-        //cv::cvtColor(last_image, frame0Gray, cv::COLOR_BGR2GRAY);
-        //cv::Mat frame1Gray;
-        //cv::cvtColor(image, frame1Gray, cv::COLOR_BGR2GRAY);
-
-        //cv::gpu::GpuMat d_frame0Gray_big(frame0Gray);
         cv::gpu::GpuMat d_prevPts;
 
-        //cv::gpu::GpuMat d_frame1Gray(frame1Gray);
-        cv::gpu::GpuMat d_frame0_big(last_image);
         cv::gpu::GpuMat d_frame1_big(image);
         cv::gpu::GpuMat d_frame1;
-        cv::gpu::GpuMat d_frame0;
-        cv::gpu::GpuMat d_frame0Gray;
-
-        cv::gpu::resize(d_frame0_big,
-                        d_frame0,
-                        image_size,
-                        cv::INTER_NEAREST);
+        cv::gpu::GpuMat d_frame1Gray;
 
         cv::gpu::resize(d_frame1_big,
                         d_frame1,
-                        image_size,
-                        cv::INTER_NEAREST);
+                        image_size);
 
         timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
         std::cout << "post resize : " << timeSec << " sec" << std::endl;
 
-        //cv::imshow("dframe", (cv::Mat)d_frame0);
-        //cv::waitKey(10);
-
-        cv::gpu::cvtColor(d_frame0,
-                          d_frame0Gray,
+        cv::gpu::cvtColor(d_frame1,
+                          d_frame1Gray,
                           CV_RGBA2GRAY);
 
         timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
         std::cout << "post cvtColor : " << timeSec << " sec" << std::endl;
 
-        detector(d_frame0Gray, d_prevPts);
+        detector(last_scaled_grayscale_image_, d_prevPts);
 
         timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
         std::cout << "post detector : " << timeSec << " sec" << std::endl;
@@ -260,7 +260,6 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
         cv::gpu::PyrLKOpticalFlow d_pyrLK;
 
-        //bool useGray = false;
         d_pyrLK.winSize.width = flow_estimator_settings_.win_size;
         d_pyrLK.winSize.height = flow_estimator_settings_.win_size;
         d_pyrLK.maxLevel = flow_estimator_settings_.max_level;
@@ -269,10 +268,21 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::gpu::GpuMat d_nextPts;
         cv::gpu::GpuMat d_status;
 
-        //d_pyrLK.sparse(useGray ? d_frame0Gray : d_frame0, useGray ? d_frame1Gray : d_frame1, d_prevPts, d_nextPts, d_status);
-        d_pyrLK.sparse(d_frame0, d_frame1, d_prevPts, d_nextPts, d_status);
+        d_pyrLK.sparse(last_scaled_image_, d_frame1, d_prevPts, d_nextPts, d_status);
         timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
         std::cout << "PYRLK sparse : " << timeSec << " sec" << std::endl;
+
+        last_scaled_image_ = d_frame1;
+        last_scaled_grayscale_image_ = d_frame1Gray;
+
+        //last_scaled_image_ = d_frame1.clone();
+        //last_scaled_grayscale_image_ = d_frame1Gray.clone();
+
+        //d_frame1.assignTo(last_scaled_image_);
+        //last_scaled_grayscale_image_(d_frame1Gray);
+
+        //d_frame1.copyTo(last_scaled_image_);
+        //d_frame1Gray.copyTo(last_scaled_grayscale_image_);
 
         if (debug_settings_.debug_vectors_image) {
 
