@@ -471,9 +471,11 @@ void GridLineEstimator::getUnAltifiedDistancesFromLines(
         std::sin(theta)
     };
 
+    double perp_theta = theta + M_PI/2 * (theta > M_PI/4 ? -1 : 1);
+
     Eigen::Vector2d theta_vect_perp {
-        std::cos(theta + M_PI/2),
-        std::sin(theta + M_PI/2)
+        std::cos(perp_theta),
+        std::sin(perp_theta)
     };
 
     for (const Eigen::Vector3d& pl_normal : para_line_normals) {
