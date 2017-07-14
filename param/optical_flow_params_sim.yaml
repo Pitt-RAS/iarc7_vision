@@ -19,17 +19,17 @@ optical_flow_estimator:
     iters: 20
 
     # Number of points to track
-    points: 400
+    points: 300
 
     # Quality level for the corner detector
     quality_level: 0.01
 
     # Min distance between points for the corner detector
-    min_dist: 100
+    min_dist: 15
 
     # Image scale factor
-    scale_factor: 0.5
+    scale_factor: 0.3
 
     # Debug settings for the optical flow estimator
     # Publish image with the velocity vectors drawn on it
-    debug_vectors_image: false
+    debug_vectors_image: true

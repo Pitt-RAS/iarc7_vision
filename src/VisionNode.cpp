@@ -110,7 +110,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/win_size",
                 flow_settings.win_size));
-        config.flow_min_dist = flow_settings.win_size;
+        config.flow_win_size = flow_settings.win_size;
 
         ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/max_level",
