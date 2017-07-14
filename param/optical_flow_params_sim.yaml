@@ -27,8 +27,9 @@ optical_flow_estimator:
     # Min distance between points for the corner detector
     min_dist: 100
 
-# Debug settings for the optical flow estimator
-optical_flow_estimator:
+    # Image scale factor
+    scale_factor: 0.5
 
+    # Debug settings for the optical flow estimator
     # Publish image with the velocity vectors drawn on it
-    debug_vectors_image: true
+    debug_vectors_image: false

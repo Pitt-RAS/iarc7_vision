@@ -122,6 +122,11 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.iters));
         config.flow_iters = flow_settings.iters;
 
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/scale_factor",
+                flow_settings.scale_factor));
+        config.flow_scale_factor = flow_settings.scale_factor;
+
         first_run = false;
     }
     else {
@@ -148,6 +153,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.win_size = config.flow_win_size;
         flow_settings.max_level = config.flow_max_level;
         flow_settings.iters = config.flow_iters;
+        flow_settings.scale_factor = config.flow_scale_factor;
     }
 }
 
@@ -305,6 +311,7 @@ int main(int argc, char **argv)
     while (ros::ok())
     {
         if (message_queue.size() > 0) {
+
             const auto message = message_queue.front();
             message_queue.erase(message_queue.begin());
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
@@ -315,6 +322,7 @@ int main(int argc, char **argv)
 
         ros::spinOnce();
         rate.sleep();
+
     }
 
     // All is good.

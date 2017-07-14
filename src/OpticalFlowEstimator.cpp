@@ -123,7 +123,10 @@ OpticalFlowEstimator::OpticalFlowEstimator(
 
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
+    int64 start = cv::getTickCount();
     updateFilteredPosition(message->header.stamp);
+    double timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+    std::cout << "updateFilteredPosition : " << timeSec << " sec" << std::endl;
 
     if (last_message_!=nullptr) {
         if (last_filtered_position_.point.z
@@ -134,7 +137,11 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                 const cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
 
                 geometry_msgs::TwistWithCovarianceStamped velocity;
+                timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+                std::cout << "pre estimateVelocity : " << timeSec << " sec" << std::endl;
                 estimateVelocity(velocity, last_image, curr_image, last_filtered_position_.point.z);
+                timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+                std::cout << "post estimateVelocity : " << timeSec << " sec" << std::endl;
             } catch (const std::exception& ex) {
                 ROS_ERROR_STREAM("Caught exception processing image flow: "
                               << ex.what());
@@ -149,6 +156,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     else {
         last_message_ = message;
     }
+    timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+    std::cout << "update return : " << timeSec << " sec" << std::endl;
 }
 
 double OpticalFlowEstimator::getFocalLength(const cv::Size& img_size, double fov)
@@ -175,46 +184,81 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
     //cv::Mat image_edges;
 
+    cv::Size image_size = image.size();
+    image_size.width = image_size.width * flow_estimator_settings_.scale_factor;
+    image_size.height = image_size.height * flow_estimator_settings_.scale_factor;
+
     if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
         ROS_ERROR_ONCE("Optical Flow Estimator does not have a CPU version");
 
     } else {
-        cv::Mat frame0Gray;
-        cv::cvtColor(last_image, frame0Gray, cv::COLOR_BGR2GRAY);
-        cv::Mat frame1Gray;
-        cv::cvtColor(image, frame1Gray, cv::COLOR_BGR2GRAY);
-
-        cv::Size s = last_image.size();
-        ROS_ERROR("last %d %d", s.width, s.height);
+        /*cv::Size s = last_image.size();
+        //ROS_ERROR("last %d %d", s.width, s.height);
 
         s = image.size();
         ROS_ERROR("curr %d %d", s.width, s.height);
 
         s = frame0Gray.size();
-        ROS_ERROR("last grey %d %d", s.width, s.height);
+        ROS_ERROR("last grey %d %d", s.width, s.height);*/
 
         // goodFeaturesToTrack
+
+        int64 start = cv::getTickCount();
+
         cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
                         flow_estimator_settings_.points,
                         0.01,
                         flow_estimator_settings_.min_dist);
 
-        cv::gpu::GpuMat d_frame0Gray(frame0Gray);
-        //cv::gpu::GpuMat d_frame0Gray;
+        double timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "create good features to track : " << timeSec << " sec" << std::endl;
+
+        //cv::Mat frame0Gray;
+        //cv::cvtColor(last_image, frame0Gray, cv::COLOR_BGR2GRAY);
+        //cv::Mat frame1Gray;
+        //cv::cvtColor(image, frame1Gray, cv::COLOR_BGR2GRAY);
+
+        //cv::gpu::GpuMat d_frame0Gray_big(frame0Gray);
         cv::gpu::GpuMat d_prevPts;
 
-        //cv::gpu::resize(d_frame0Gray_big,
-        //                d_frame0Gray,
-        //                cv::Size(1280, 960));
+        //cv::gpu::GpuMat d_frame1Gray(frame1Gray);
+        cv::gpu::GpuMat d_frame0_big(last_image);
+        cv::gpu::GpuMat d_frame1_big(image);
+        cv::gpu::GpuMat d_frame1;
+        cv::gpu::GpuMat d_frame0;
+        cv::gpu::GpuMat d_frame0Gray;
 
-        int64 start = cv::getTickCount();
+        cv::gpu::resize(d_frame0_big,
+                        d_frame0,
+                        image_size,
+                        cv::INTER_NEAREST);
+
+        cv::gpu::resize(d_frame1_big,
+                        d_frame1,
+                        image_size,
+                        cv::INTER_NEAREST);
+
+        timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "post resize : " << timeSec << " sec" << std::endl;
+
+        //cv::imshow("dframe", (cv::Mat)d_frame0);
+        //cv::waitKey(10);
+
+        cv::gpu::cvtColor(d_frame0,
+                          d_frame0Gray,
+                          CV_RGBA2GRAY);
+
+        timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "post cvtColor : " << timeSec << " sec" << std::endl;
+
         detector(d_frame0Gray, d_prevPts);
-        double timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
-        std::cout << "Detector sparse : " << timeSec << " sec" << std::endl;
+
+        timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "post detector : " << timeSec << " sec" << std::endl;
+
         // Sparse
 
         cv::gpu::PyrLKOpticalFlow d_pyrLK;
-
 
         //bool useGray = false;
         d_pyrLK.winSize.width = flow_estimator_settings_.win_size;
@@ -222,46 +266,32 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         d_pyrLK.maxLevel = flow_estimator_settings_.max_level;
         d_pyrLK.iters = flow_estimator_settings_.iters;
 
-        cv::gpu::GpuMat d_frame1Gray(frame1Gray);
-        cv::gpu::GpuMat d_frame1(image);
-        cv::gpu::GpuMat d_frame0(last_image);
-        //cv::gpu::GpuMat d_frame1;
-        //cv::gpu::GpuMat d_frame0;
-
         cv::gpu::GpuMat d_nextPts;
         cv::gpu::GpuMat d_status;
 
-        /*cv::gpu::resize(d_frame0_big,
-                        d_frame0,
-                        cv::Size(1280, 960));
-
-        cv::gpu::resize(d_frame1_big,
-                        d_frame1,
-                        cv::Size(1280, 960));*/
-
-        start = cv::getTickCount();
         //d_pyrLK.sparse(useGray ? d_frame0Gray : d_frame0, useGray ? d_frame1Gray : d_frame1, d_prevPts, d_nextPts, d_status);
         d_pyrLK.sparse(d_frame0, d_frame1, d_prevPts, d_nextPts, d_status);
         timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
         std::cout << "PYRLK sparse : " << timeSec << " sec" << std::endl;
 
-        // Draw arrows
-
-        std::vector<cv::Point2f> prevPts(d_prevPts.cols);
-        download(d_prevPts, prevPts);
-
-        std::vector<cv::Point2f> nextPts(d_nextPts.cols);
-        download(d_nextPts, nextPts);
-
-        std::vector<uchar> status(d_status.cols);
-        download(d_status, status);
-
-        cv::Mat temp;
-        d_frame1.download(temp);
-
-        drawArrows(temp, prevPts, nextPts, status, cv::Scalar(255, 0, 0));
-
         if (debug_settings_.debug_vectors_image) {
+
+            // Draw arrows
+
+            std::vector<cv::Point2f> prevPts(d_prevPts.cols);
+            download(d_prevPts, prevPts);
+
+            std::vector<cv::Point2f> nextPts(d_nextPts.cols);
+            download(d_nextPts, nextPts);
+
+            std::vector<uchar> status(d_status.cols);
+            download(d_status, status);
+
+            cv::Mat temp;
+            d_frame1.download(temp);
+
+            drawArrows(temp, prevPts, nextPts, status, cv::Scalar(255, 0, 0));
+
             cv_bridge::CvImage cv_image {
                 std_msgs::Header(),
                 sensor_msgs::image_encodings::RGBA8,
@@ -270,6 +300,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
             debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
         }
+
+        timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
+        std::cout << "post debug vectors image : " << timeSec << " sec" << std::endl;
 
         //cv::imshow("PyrLK [Sparse]", temp);
         //cv::waitKey(10);

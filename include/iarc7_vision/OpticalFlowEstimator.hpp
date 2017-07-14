@@ -29,6 +29,7 @@ struct OpticalFlowEstimatorSettings {
     int points;
     double quality_level;
     int min_dist;
+    double scale_factor;
 };
 
 struct OpticalFlowDebugSettings {
