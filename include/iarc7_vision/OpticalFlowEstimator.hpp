@@ -32,7 +32,7 @@ struct OpticalFlowEstimatorSettings {
 };
 
 struct OpticalFlowDebugSettings {
-
+    bool debug_vectors_image;
 };
 
 class OpticalFlowEstimator {
@@ -66,6 +66,8 @@ class OpticalFlowEstimator {
     ros_utils::SafeTransformWrapper transform_wrapper_;
 
     sensor_msgs::Image::ConstPtr last_message_;
+
+    ros::Publisher debug_velocity_vector_image_pub_;
 };
 
 } // namespace iarc7_vision

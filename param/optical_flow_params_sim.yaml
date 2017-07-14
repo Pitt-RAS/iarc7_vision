@@ -28,4 +28,7 @@ optical_flow_estimator:
     min_dist: 100
 
 # Debug settings for the optical flow estimator
-# optical_flow_estimator:
+optical_flow_estimator:
+
+    # Publish image with the velocity vectors drawn on it
+    debug_vectors_image: true

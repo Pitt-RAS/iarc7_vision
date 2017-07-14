@@ -213,13 +213,13 @@ void getGridDebugSettings(const ros::NodeHandle& private_nh,
     }
 }
 
-void getFlowDebugSettings(const ros::NodeHandle&,
-                      iarc7_vision::OpticalFlowDebugSettings&)
+void getFlowDebugSettings(const ros::NodeHandle& private_nh,
+                          iarc7_vision::OpticalFlowDebugSettings& settings)
 {
-   /*ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_line_detector",
-            settings.debug_line_detector));
     ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/debug_vectors_image",
+            settings.debug_vectors_image));
+    /*ROS_ASSERT(private_nh.getParam(
             "grid_line_estimator/debug_direction",
             settings.debug_direction));
     ROS_ASSERT(private_nh.getParam(
@@ -310,8 +310,7 @@ int main(int argc, char **argv)
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
 
-            optical_flow_estimator.update(image,
-                                          message->header.stamp);
+            //optical_flow_estimator.update(message);
         }
 
         ros::spinOnce();

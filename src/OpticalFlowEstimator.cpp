@@ -92,16 +92,17 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       debug_settings_(debug_settings),
       last_filtered_position_(),
       transform_wrapper_(),
-      last_message_()
+      last_message_(),
+      debug_velocity_vector_image_pub_()
 {
     ros::NodeHandle local_nh ("optical_flow_estimator");
 
-    /*if (debug_settings_.debug_direction) {
-        debug_direction_marker_pub_
-            = local_nh.advertise<visualization_msgs::Marker>("direction", 1);
+    if (debug_settings_.debug_vectors_image) {
+        debug_velocity_vector_image_pub_
+            = local_nh.advertise<sensor_msgs::Image>("vector_image", 1);
     }
 
-    if (debug_settings_.debug_edges) {
+    /*if (debug_settings_.debug_edges) {
         debug_edges_pub_ = local_nh.advertise<sensor_msgs::Image>("edges", 10);
     }
 
@@ -251,9 +252,18 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
         drawArrows(temp, prevPts, nextPts, status, cv::Scalar(255, 0, 0));
 
-        cv::imshow("PyrLK [Sparse]", temp);
+        if (debug_settings_.debug_vectors_image) {
+            cv_bridge::CvImage cv_image {
+                std_msgs::Header(),
+                sensor_msgs::image_encodings::RGBA8,
+                temp
+            };
 
-        cv::waitKey(10);
+            debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+        }
+
+        //cv::imshow("PyrLK [Sparse]", temp);
+        //cv::waitKey(10);
     }
 }
 
