@@ -314,26 +314,30 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         line[0] -= corner_to_center.dot(normal_dir);
     }
 
-    if (debug_settings_.debug_edges) {
-        cv_bridge::CvImage cv_image {
-            std_msgs::Header(),
-            sensor_msgs::image_encodings::MONO8,
-            image_edges
-        };
+    static int skipped_frames = 0;
+    if(skipped_frames == 0) {
+        if (debug_settings_.debug_edges) {
+            cv_bridge::CvImage cv_image {
+                std_msgs::Header(),
+                sensor_msgs::image_encodings::MONO8,
+                image_edges
+            };
 
-        debug_edges_pub_.publish(cv_image.toImageMsg());
-    }
+            debug_edges_pub_.publish(cv_image.toImageMsg());
+        }
 
-    if (debug_settings_.debug_lines) {
-        cv::Mat image_lines = image.clone();
-        drawLines(lines, image_lines);
-        cv_bridge::CvImage cv_image {
-            std_msgs::Header(),
-            sensor_msgs::image_encodings::RGBA8,
-            image_lines
-        };
-        debug_lines_pub_.publish(cv_image.toImageMsg());
+        if (debug_settings_.debug_lines) {
+            cv::Mat image_lines = image.clone();
+            drawLines(lines, image_lines);
+            cv_bridge::CvImage cv_image {
+                std_msgs::Header(),
+                sensor_msgs::image_encodings::RGBA8,
+                image_lines
+            };
+            debug_lines_pub_.publish(cv_image.toImageMsg());
+        }
     }
+    skipped_frames = (skipped_frames+1)%6;
 }
 
 void GridLineEstimator::getPlanesForImageLines(
