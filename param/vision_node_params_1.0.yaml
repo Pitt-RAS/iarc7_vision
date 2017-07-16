@@ -15,10 +15,10 @@ grid_estimator:
     grid_line_thickness: 0.038
 
     # (x-location of gridline intersection) - (x-location of origin)
-    grid_zero_offset_x: 0.5
+    grid_zero_offset_x: 0.11
 
     # (y-location of gridline intersection) - (y-location of origin)
-    grid_zero_offset_y: 0.5
+    grid_zero_offset_y: 0.11
 
     # Number of times to iterate in get1dGridShift
     grid_translation_mean_iterations: 1
@@ -40,14 +40,14 @@ grid_line_estimator:
     debug_direction: false
 
     # Should we spit out an edge image for each frame on the `edges` topic?
-    debug_edges: false
+    debug_edges: true
 
     # Should we spit out a copy of the input with lines drawn on top on the
     # `lines` topic?
     debug_lines: false
 
     # Should we spit out markers for the transformed lines?
-    debug_line_markers: false
+    debug_line_markers: true
 
     # Uncomment this to override the height from robot_localization
     # debug_height: 0.22

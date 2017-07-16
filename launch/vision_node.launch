@@ -1,7 +1,7 @@
 <launch>
     <arg name="platform" default="1.0" />
 
-    <node pkg="iarc7_vision" type="iarc7_vision_node" name="iarc7_vision_node">
+    <node pkg="iarc7_vision" type="iarc7_vision_node" name="iarc7_vision_node" launch-prefix="gdb --args">
 
         <rosparam command="load" file="$(find iarc7_vision)/param/vision_node_params_$(arg platform).yaml" />
         <rosparam command="load" file="$(find iarc7_vision)/param/line_detector_params_$(arg platform).yaml" />

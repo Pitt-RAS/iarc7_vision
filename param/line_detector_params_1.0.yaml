@@ -5,7 +5,7 @@ line_extractor:
     canny_high_threshold: 20000.0
     canny_threshold_ratio: 3
     canny_sobel_size: 7
-    hough_rho_resolution: 1.0
-    hough_theta_resolution: 0.02
-    hough_thresh_fraction: 0.35
+    hough_rho_resolution: 0.4
+    hough_theta_resolution: 0.0087
+    hough_thresh_fraction: 0.3
     fov: 1.64
