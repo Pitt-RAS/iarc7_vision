@@ -83,13 +83,15 @@ static cv::Point2f averageArrows(cv::Mat& frame, const std::vector<cv::Point2f>&
     double averageY = 0.0;
     int num_points = 0;
 
+    cv::Size size = frame.size();
+    const double cutoff = 0.2;
     for (size_t i = 0; i < prevPts.size(); ++i)
     {
         if (status[i] &&
-            prevPts[i].x > 64 &&
-            prevPts[i].x < 320 &&
-            prevPts[i].y > 48 && 
-            prevPts[i].y < 240)
+            prevPts[i].x > size.width * cutoff &&
+            prevPts[i].x < size.width * (1.0 - cutoff) &&
+            prevPts[i].y > size.height * cutoff && 
+            prevPts[i].y < size.height * (1.0 - cutoff))
         {
             cv::Point p = prevPts[i];
             cv::Point q = nextPts[i];
