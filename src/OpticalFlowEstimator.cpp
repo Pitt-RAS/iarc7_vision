@@ -19,6 +19,10 @@
 #include <iarc7_msgs/Float64Stamped.h>
 #include <visualization_msgs/Marker.h>
 
+#include "tf2/LinearMath/Matrix3x3.h"
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Vector3.h"
+
 namespace iarc7_vision {
 
 static void download(const cv::gpu::GpuMat& d_mat, std::vector<cv::Point2f>& vec)
@@ -74,6 +78,66 @@ static void drawArrows(cv::Mat& frame, const std::vector<cv::Point2f>& prevPts, 
     }
 }
 
+static cv::Point2f averageArrows(cv::Mat& frame, const std::vector<cv::Point2f>& prevPts, const std::vector<cv::Point2f>& nextPts, const std::vector<uchar>& status) {
+    double averageX = 0.0;
+    double averageY = 0.0;
+    int num_points = 0;
+
+    for (size_t i = 0; i < prevPts.size(); ++i)
+    {
+        if (status[i] &&
+            prevPts[i].x > 64 &&
+            prevPts[i].x < 320 &&
+            prevPts[i].y > 48 && 
+            prevPts[i].y < 240)
+        {
+            cv::Point p = prevPts[i];
+            cv::Point q = nextPts[i];
+
+            averageX += p.x - q.x;
+            averageY += p.y - q.y;
+            num_points++;
+        }
+    }
+
+    averageX /= num_points;
+    averageY /= num_points;
+
+    cv::Point2f velocity_vector;
+    velocity_vector.x = averageX;
+    velocity_vector.y = averageY;
+
+    int x_off = 200;
+    int y_off = 150;
+
+    cv::Point2f screen_vector;
+    screen_vector.x = 3 * averageX + x_off;
+    screen_vector.y = 3 * averageY + y_off;
+
+    cv::Point2f other;
+    other.x = x_off;
+    other.y = y_off;
+
+    // Now we draw the main line of the arrow.
+    line(frame, other, screen_vector, cv::Scalar(255, 0, 0), 1);
+
+    // Now draw the tips of the arrow. I do some scaling so that the
+    // tips look proportional to the main line of the arrow.
+
+
+    /*cv::Point2f p = other;
+    cv::Point2f q = velocity_vector;
+    p.x = (int) (q.x + 9 * cos(averageAngle + 3 * CV_PI / 4));
+    p.y = (int) (q.y + 9 * sin(averageAngle + 3 * CV_PI / 4));
+    line(frame, p, q, cv::Scalar(255, 0, 0), 1);
+
+    p.x = (int) (q.x + 9 * cos(averageAngle - 3 * CV_PI / 4));
+    p.y = (int) (q.y + 9 * sin(averageAngle - 3 * CV_PI / 4));
+    line(frame, p, q, cv::Scalar(255, 0, 0), 1);*/
+
+    return velocity_vector;
+}
+
 template <typename T> inline T clamp (T x, T a, T b)
 {
     return ((x) > (a) ? ((x) < (b) ? (x) : (b)) : (a));
@@ -86,6 +150,7 @@ template <typename T> inline T mapValue(T x, T a, T b, T c, T d)
 }
 
 OpticalFlowEstimator::OpticalFlowEstimator(
+        ros::NodeHandle nh,
         const OpticalFlowEstimatorSettings& flow_estimator_settings,
         const OpticalFlowDebugSettings& debug_settings)
     : flow_estimator_settings_(flow_estimator_settings),
@@ -95,8 +160,20 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       last_message_(),
       last_scaled_image_(),
       last_scaled_grayscale_image_(),
-      debug_velocity_vector_image_pub_()
-{
+      debug_velocity_vector_image_pub_(),
+      imu_interpolator_(
+        nh,
+        "fc_imu",
+        ros::Duration(flow_estimator_settings_.imu_update_timeout),
+        ros::Duration(0),
+        [](const sensor_msgs::Imu& msg) {
+            return tf2::Vector3(msg.angular_velocity.x,
+                                msg.angular_velocity.y,
+                                msg.angular_velocity.z);
+        },
+        100),
+      last_filtered_transform_stamped_()
+    {
     ros::NodeHandle local_nh ("optical_flow_estimator");
 
     if (debug_settings_.debug_vectors_image) {
@@ -123,6 +200,18 @@ OpticalFlowEstimator::OpticalFlowEstimator(
 
 }
 
+bool OpticalFlowEstimator::waitUntilReady(const ros::Duration& startup_timeout) {
+    bool success = imu_interpolator_.waitUntilReady(startup_timeout);
+    if (!success) {
+        ROS_ERROR("Failed to fetch initial fc imu message");
+        return false;
+    }
+
+    updateFilteredPosition(ros::Time::now());
+
+    return true;
+}
+
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
     int64 start = cv::getTickCount();
@@ -141,7 +230,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                 geometry_msgs::TwistWithCovarianceStamped velocity;
                 timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
                 std::cout << "pre estimateVelocity : " << timeSec << " sec" << std::endl;
-                estimateVelocity(velocity, last_image, curr_image, last_filtered_position_.point.z);
+                estimateVelocity(velocity, last_image, curr_image, last_filtered_position_.point.z, message->header.stamp);
+                twist_pub_.publish(velocity);
                 timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();
                 std::cout << "post estimateVelocity : " << timeSec << " sec" << std::endl;
             } catch (const std::exception& ex) {
@@ -192,15 +282,12 @@ double OpticalFlowEstimator::getFocalLength(const cv::Size& img_size, double fov
          / std::tan(fov / 2.0);
 }
 
-void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceStamped&,
+void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceStamped& twist,
                                             const cv::Mat&,
                                             const cv::Mat& image,
-                                            double)
+                                            double height,
+                                            ros::Time time)
 {
-    // m/px = camera_height / focal_length;
-    //double current_meters_per_px = height
-    //                     / getFocalLength(image.size(),
-    //                                      flow_estimator_settings_.fov);
 
     // desired m_px used to keep kernel sizes relative to our features
     //double desired_meters_per_px = 1.0
@@ -210,9 +297,34 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
     //cv::Mat image_edges;
 
+    static double last_scale = -1.0;
+
     cv::Size image_size = image.size();
     image_size.width = image_size.width * flow_estimator_settings_.scale_factor;
     image_size.height = image_size.height * flow_estimator_settings_.scale_factor;
+
+    // m/px = camera_height / focal_length;
+    double current_meters_per_px = height
+                         / getFocalLength(image_size,
+                                          flow_estimator_settings_.fov);
+
+    ROS_WARN("Meters per px %f", current_meters_per_px);
+
+    if (last_scale != flow_estimator_settings_.scale_factor) {
+        cv::gpu::GpuMat old_size;
+        last_scaled_image_.copyTo(old_size);
+
+        cv::gpu::GpuMat old_size_gray;
+        last_scaled_grayscale_image_.copyTo(old_size_gray);
+
+        cv::gpu::resize(old_size,
+                        last_scaled_image_,
+                        image_size);
+
+        cv::gpu::resize(old_size_gray,
+                        last_scaled_grayscale_image_,
+                        image_size);
+    }
 
     if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
         ROS_ERROR_ONCE("Optical Flow Estimator does not have a CPU version");
@@ -299,13 +411,47 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
             cv::Mat temp;
             d_frame1.download(temp);
-
             drawArrows(temp, prevPts, nextPts, status, cv::Scalar(255, 0, 0));
+            cv::Mat temp2;
+            d_frame1.download(temp2);
+            cv::Point2f vel = averageArrows(temp2, prevPts, nextPts, status);
+            vel.x *= -current_meters_per_px / (time - last_message_->header.stamp).toSec();
+            vel.y *= -current_meters_per_px / (time - last_message_->header.stamp).toSec();
 
+            tf2::Quaternion orientation;
+            tf2::convert(last_filtered_transform_stamped_.transform.rotation, orientation);
+
+            tf2::Matrix3x3 matrix;
+            matrix.setRotation(orientation);
+
+            double y, p, r;
+            matrix.getEulerYPR(y, p, r);
+
+            double distance_to_plane = last_filtered_position_.point.z *
+                                       sqrt(1 + tan(p) + tan(r));
+
+            cv::Point2f correction_vel;
+            correction_vel.x = distance_to_plane *
+                               last_angular_velocity_.x() * cos(p);
+            correction_vel.y = distance_to_plane *
+                               -last_angular_velocity_.y() * fabs(cos(r));
+
+            cv::Point2f corrected_vel;
+            corrected_vel.x = vel.x - correction_vel.x;
+            corrected_vel.y = vel.y - correction_vel.y;
+
+            twist.header.stamp = time;
+            twist.header.frame_id = "bottom_camera_optical";
+            twist.twist.twist.linear.x = corrected_vel.y;
+            twist.twist.twist.linear.y = corrected_vel.x;
+            
+            //twist.twist.twist.linear.x = -corrected_vel.y;
+            //twist.twist.twist.linear.y = correction_vel.y;
+            //twist.twist.twist.linear.z = vel.y;
             cv_bridge::CvImage cv_image {
                 std_msgs::Header(),
                 sensor_msgs::image_encodings::RGBA8,
-                temp
+                temp2
             };
 
             debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
@@ -336,6 +482,13 @@ void OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time)
                          filtered_position_transform_stamped);
 
         last_filtered_position_ = camera_position;
+        last_filtered_transform_stamped_ = filtered_position_transform_stamped;
+    }
+
+        // Get the current acceleration of the quad
+    bool success = imu_interpolator_.getInterpolatedMsgAtTime(last_angular_velocity_, time);
+    if (!success) {
+        ROS_ERROR("Failed to get imu information in OpticalFlowEstimator::updateFilteredPosition");
     }
 }
 
