@@ -11,11 +11,13 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TwistWithCovarianceStamped.h>
 
+#include "ros_utils/LinearMsgInterpolator.hpp"
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>
 
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Imu.h>
 
 namespace iarc7_vision {
 
@@ -30,6 +32,7 @@ struct OpticalFlowEstimatorSettings {
     double quality_level;
     int min_dist;
     double scale_factor;
+    double imu_update_timeout;
 };
 
 struct OpticalFlowDebugSettings {
@@ -38,9 +41,12 @@ struct OpticalFlowDebugSettings {
 
 class OpticalFlowEstimator {
   public:
-    OpticalFlowEstimator(const OpticalFlowEstimatorSettings& flow_estimator_settings,
+    OpticalFlowEstimator(ros::NodeHandle nh,
+                         const OpticalFlowEstimatorSettings& flow_estimator_settings,
                          const OpticalFlowDebugSettings& debug_settings);
     void update(const sensor_msgs::Image::ConstPtr& message);
+
+    bool waitUntilReady(const ros::Duration& startup_timeout);
 
   private:
 
@@ -52,7 +58,8 @@ class OpticalFlowEstimator {
     void estimateVelocity(geometry_msgs::TwistWithCovarianceStamped& velocity,
                                          const cv::Mat& last_image,
                                          const cv::Mat& image,
-                                         double height);
+                                         double height,
+                                         ros::Time time);
 
     void updateFilteredPosition(const ros::Time& time);
 
@@ -75,6 +82,15 @@ class OpticalFlowEstimator {
     cv::gpu::GpuMat last_scaled_grayscale_image_;
 
     ros::Publisher debug_velocity_vector_image_pub_;
+
+    ros_utils::LinearMsgInterpolator<
+       sensor_msgs::Imu,
+       tf2::Vector3>
+          imu_interpolator_;
+
+    tf2::Vector3 last_angular_velocity_;
+
+    geometry_msgs::TransformStamped last_filtered_transform_stamped_;
 };
 
 } // namespace iarc7_vision

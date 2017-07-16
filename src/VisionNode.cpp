@@ -127,6 +127,11 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.scale_factor));
         config.flow_scale_factor = flow_settings.scale_factor;
 
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/imu_update_timeout",
+                flow_settings.imu_update_timeout));
+        config.flow_imu_update_timeout = flow_settings.imu_update_timeout;
+
         first_run = false;
     }
     else {
@@ -154,6 +159,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.max_level = config.flow_max_level;
         flow_settings.iters = config.flow_iters;
         flow_settings.scale_factor = config.flow_scale_factor;
+        flow_settings.imu_update_timeout = config.flow_imu_update_timeout;
     }
 }
 
@@ -281,6 +287,7 @@ int main(int argc, char **argv)
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
     getFlowDebugSettings(private_nh, optical_flow_debug_settings);
     iarc7_vision::OpticalFlowEstimator optical_flow_estimator(
+            nh,
             optical_flow_estimator_settings,
             optical_flow_debug_settings);
 
@@ -293,6 +300,7 @@ int main(int argc, char **argv)
     double startup_timeout;
     ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
     ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+    ROS_ASSERT(optical_flow_estimator.waitUntilReady(ros::Duration(startup_timeout)));
 
     std::vector<sensor_msgs::Image::ConstPtr> message_queue;
 

@@ -33,3 +33,6 @@ optical_flow_estimator:
     # Debug settings for the optical flow estimator
     # Publish image with the velocity vectors drawn on it
     debug_vectors_image: true
+
+    # Timeout for imu updates
+    imu_update_timeout: 0.3
