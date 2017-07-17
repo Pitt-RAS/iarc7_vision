@@ -683,23 +683,24 @@ void GridLineEstimator::get2dPosition(
         }
 
 
-        int cell_shift = 0;
+        int cell_shift;
         if (wrapped_quad_position(i) - wrapped_position_estimate(i)
                 < -grid_spacing/2) {
             // we've moved into the next cell
-            //cell_shift = 1;
+            cell_shift = 1;
         } else if (wrapped_quad_position(i) - wrapped_position_estimate(i)
                 < grid_spacing/2) {
             // we're in the same cell
             cell_shift = 0;
         } else {
             // we've moved into the previous cell
-            //cell_shift = -1;
+            cell_shift = -1;
         }
 
         position(i) = (std::floor(position_estimate(i) / grid_spacing) + cell_shift)
                         * grid_spacing
                     + wrapped_quad_position(i);
+        position(i) = wrapped_quad_position(i);
     }
 
     if (use_last_x_shift) {
