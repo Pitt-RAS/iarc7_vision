@@ -433,10 +433,10 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                                        sqrt(1 + tan(p) + tan(r));
 
             cv::Point2f correction_vel;
-            correction_vel.x = distance_to_plane *
-                               last_angular_velocity_.x() * cos(p);
+            correction_vel.x = -1.0 * distance_to_plane *
+                               last_angular_velocity_.y() * cos(r);
             correction_vel.y = distance_to_plane *
-                               -last_angular_velocity_.y() * fabs(cos(r));
+                               -last_angular_velocity_.x() * fabs(cos(r));
 
             cv::Point2f corrected_vel;
             corrected_vel.x = vel.x - correction_vel.x;
@@ -444,19 +444,25 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
             twist.header.stamp = time;
             twist.header.frame_id = "bottom_camera_optical";
-            twist.twist.twist.linear.x = corrected_vel.y;
-            twist.twist.twist.linear.y = corrected_vel.x;
-            
-            //twist.twist.twist.linear.x = -corrected_vel.y;
+            //twist.twist.twist.linear.x = corrected_vel.y;
+            //twist.twist.twist.linear.y = corrected_vel.x;
+            twist.twist.twist.linear.x = vel.x;
+            twist.twist.twist.linear.y = -vel.y;
+            //twist.twist.twist.linear.y = corrected_vel.x;
+            //twist.twist.twist.linear.x = corrected_vel.y;
             //twist.twist.twist.linear.y = correction_vel.y;
-            //twist.twist.twist.linear.z = vel.y;
+            //twist.twist.twist.linear.z = correction_vel.x;
             cv_bridge::CvImage cv_image {
                 std_msgs::Header(),
                 sensor_msgs::image_encodings::RGBA8,
                 temp2
             };
 
-            debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+            static int i = 0;
+            if(i==0) {
+                debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+            }
+            i = (i + 1) % 6;
         }
 
         timeSec = (cv::getTickCount() - start) / cv::getTickFrequency();

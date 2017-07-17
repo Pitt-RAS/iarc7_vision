@@ -2,10 +2,37 @@
 optical_flow_estimator:
     # Pixels per meter to scale image to
     pixels_per_meter: 250
+
+    # fov of the camera
     fov: 1.64
 
     # Minimum altitude to run the detector
-    min_estimation_altitude: 1.0
+    min_estimation_altitude: 0.15
 
-# Debug settings for the optical flow estimator
-# optical_flow_estimator:
+    # Window size for optical flow
+    win_size: 20
+
+    # Levels of the pyramid to run the optical flow at
+    max_level: 3
+
+    # Number of iterations to run the optical flow
+    iters: 20
+
+    # Number of points to track
+    points: 300
+
+    # Quality level for the corner detector
+    quality_level: 0.01
+
+    # Min distance between points for the corner detector
+    min_dist: 15
+
+    # Image scale factor
+    scale_factor: 0.3
+
+    # Debug settings for the optical flow estimator
+    # Publish image with the velocity vectors drawn on it
+    debug_vectors_image: true
+
+    # Timeout for imu updates
+    imu_update_timeout: 0.3
