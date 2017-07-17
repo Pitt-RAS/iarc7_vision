@@ -619,7 +619,7 @@ void GridLineEstimator::get2dPosition(
                        shift_estimate_covariance(0, 0));
     } else {
         use_last_x_shift = true;
-        shift_estimate_covariance(0, 0) = grid_spacing;
+        shift_estimate_covariance(0, 0) = std::pow(grid_spacing, 2);
     }
 
     if (y_wrapped_dists.size() != 0) {
@@ -628,7 +628,7 @@ void GridLineEstimator::get2dPosition(
                        shift_estimate_covariance(1, 1));
     } else {
         use_last_y_shift = true;
-        shift_estimate_covariance(1, 1) = grid_spacing;
+        shift_estimate_covariance(1, 1) = std::pow(grid_spacing, 2);
     }
 
     if (shift_estimate(0) < 0 || shift_estimate(0) >= grid_spacing) {
