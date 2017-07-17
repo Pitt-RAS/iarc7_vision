@@ -319,10 +319,14 @@ int main(int argc, char **argv)
     {
         if (message_queue.size() > 0) {
 
+            if (message_queue.size() > 5) {
+                ROS_ERROR("QUEUE IS GROWING!!! %d", (int)message_queue.size());
+            }
+
             const auto message = message_queue.front();
             message_queue.erase(message_queue.begin());
-            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                                      message->header.stamp);
+            //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+            //                          message->header.stamp);
 
             optical_flow_estimator.update(message);
         }
