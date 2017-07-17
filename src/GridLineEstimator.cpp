@@ -243,7 +243,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv::gpu::GpuMat gpu_image_hsv_channels[3];
 
         gpu_image.upload(image);
-        ROS_DEBUG("Scale factor %f", scale_factor);
+        ROS_WARN("Scale factor %f", scale_factor);
 
         cv::gpu::resize(gpu_image,
                         gpu_image_sized,
@@ -654,14 +654,18 @@ void GridLineEstimator::get2dPosition(
         }
     }
 
-    if (wrapped_quad_position(0) < 0
-     || wrapped_quad_position(0) >= grid_spacing) {
-        throw ros::Exception("wrapped_quad_position out of bounds");
+    if (wrapped_quad_position(0) < -eps_
+     || wrapped_quad_position(0) >= grid_spacing + eps_) {
+        throw ros::Exception(str(
+                boost::format("wrapped_quad_position(0) (%f) out of bounds [0, %f)")
+                    % wrapped_quad_position(0) % grid_spacing));
     }
 
-    if (wrapped_quad_position(1) < 0
-     || wrapped_quad_position(1) >= grid_spacing) {
-        throw ros::Exception("wrapped_quad_position out of bounds");
+    if (wrapped_quad_position(1) < -eps_
+     || wrapped_quad_position(1) >= grid_spacing + eps_) {
+        throw ros::Exception(str(
+                boost::format("wrapped_quad_position(1) (%f) out of bounds [0, %f)")
+                    % wrapped_quad_position(1) % grid_spacing));
     }
 
     // Find new position estimate closest to last position

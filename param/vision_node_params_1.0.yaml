@@ -9,16 +9,16 @@ grid_estimator:
     grid_step: 0.01
 
     # Distance between the center of one gridline and the center of the next
-    grid_spacing: 0.229
+    grid_spacing: 0.458
 
     # Thickness of each gridline
     grid_line_thickness: 0.038
 
     # (x-location of gridline intersection) - (x-location of origin)
-    grid_zero_offset_x: 0.11
+    grid_zero_offset_x: 0
 
     # (y-location of gridline intersection) - (y-location of origin)
-    grid_zero_offset_y: 0.11
+    grid_zero_offset_y: 0
 
     # Number of times to iterate in get1dGridShift
     grid_translation_mean_iterations: 1

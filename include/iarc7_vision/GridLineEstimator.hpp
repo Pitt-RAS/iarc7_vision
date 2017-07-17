@@ -250,6 +250,8 @@ class GridLineEstimator {
     ros_utils::SafeTransformWrapper transform_wrapper_;
 
     ros::Time last_update_time_;
+
+    static constexpr const double eps_ = 1e-10;
 };
 
 } // namespace iarc7_vision
