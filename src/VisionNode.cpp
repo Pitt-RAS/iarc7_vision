@@ -13,7 +13,6 @@
 
 #include <dynamic_reconfigure/server.h>
 #include <iarc7_vision/VisionNodeConfig.h>
-#include <iarc7_vision/OpticalFlowEstimatorConfig.h>
 
 #include <sensor_msgs/image_encodings.h>
 
