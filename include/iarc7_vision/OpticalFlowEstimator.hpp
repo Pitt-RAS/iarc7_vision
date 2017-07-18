@@ -33,6 +33,8 @@ struct OpticalFlowEstimatorSettings {
     int min_dist;
     double scale_factor;
     double imu_update_timeout;
+    double variance;
+    double variance_scale;
 };
 
 struct OpticalFlowDebugSettings {

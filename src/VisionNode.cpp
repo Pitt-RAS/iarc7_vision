@@ -131,6 +131,16 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.imu_update_timeout));
         config.flow_imu_update_timeout = flow_settings.imu_update_timeout;
 
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/variance",
+                flow_settings.variance));
+        config.flow_variance = flow_settings.variance;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/variance_scale",
+                flow_settings.variance_scale));
+        config.flow_variance_scale = flow_settings.variance_scale;
+
         first_run = false;
     }
     else {
@@ -159,6 +169,9 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.iters = config.flow_iters;
         flow_settings.scale_factor = config.flow_scale_factor;
         flow_settings.imu_update_timeout = config.flow_imu_update_timeout;
+        flow_settings.variance = config.flow_variance;
+        flow_settings.variance_scale = config.flow_variance_scale;
+
     }
 }
 
@@ -321,14 +334,27 @@ int main(int argc, char **argv)
 
             if (message_queue.size() > 5) {
                 ROS_ERROR("QUEUE IS GROWING!!! %d", (int)message_queue.size());
+
+                const auto message = message_queue.back();
+                //message_queue.erase(message_queue.begin());
+                message_queue.clear();
+                //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+                //                          message->header.stamp);
+
+                optical_flow_estimator.update(message);
+            }
+            else { 
+
+                const auto message = message_queue.front();
+                message_queue.erase(message_queue.begin());
+                //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+                //                          message->header.stamp);
+
+                optical_flow_estimator.update(message);
+
             }
 
-            const auto message = message_queue.front();
-            message_queue.erase(message_queue.begin());
-            //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-            //                          message->header.stamp);
 
-            optical_flow_estimator.update(message);
         }
 
         ros::spinOnce();

@@ -36,3 +36,7 @@ optical_flow_estimator:
 
     # Timeout for imu updates
     imu_update_timeout: 0.3
+
+    variance: 0.1
+
+    variance_scale: 1.0
