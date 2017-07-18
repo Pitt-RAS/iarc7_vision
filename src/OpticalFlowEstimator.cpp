@@ -161,6 +161,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
             }
         }
         else {
+            // TODO almost identical code is run when the scale is changed. Maybe make this a function?
             cv::Mat image = cv_bridge::toCvShare(message)->image;
 
             // Create the first last image
