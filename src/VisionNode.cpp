@@ -19,6 +19,7 @@
 
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
+#include "iarc7_vision/RoombaEstimator.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
                             iarc7_vision::LineExtractorSettings& line_settings)
@@ -356,6 +357,7 @@ int main(int argc, char **argv)
             ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
         };
     dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
+    iarc7_vision::RoombaEstimator roomba_estimator(nh, private_nh);
 
     // Check for images at 100 Hz
     ros::Rate rate (100);
@@ -393,6 +395,11 @@ int main(int argc, char **argv)
         "/bottom_image_raw/image_raw",
         100,
         image_msg_handler);
+    ros::Subscriber sub2 = nh.subscribe(
+        "/bottom_camera/camera/camera_info",
+        10,
+        &iarc7_vision::RoombaEstimator::CameraInfoCallback,
+        &roomba_estimator);
 
     // Main loop
     while (ros::ok())
@@ -412,6 +419,9 @@ int main(int argc, char **argv)
                                       message->header.stamp);
 
             optical_flow_estimator.update(message);
+
+            roomba_estimator.update(cv_bridge::toCvShare(message)->image,
+                                    message->header.stamp);
         }
 
         ros::spinOnce();
