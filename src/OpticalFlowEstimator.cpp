@@ -446,10 +446,20 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
             twist.header.frame_id = "bottom_camera_optical";
             //twist.twist.twist.linear.x = corrected_vel.y;
             //twist.twist.twist.linear.y = corrected_vel.x;
-            twist.twist.twist.linear.x = vel.x;
+            twist.twist.twist.linear.x = -vel.x;
             twist.twist.twist.linear.y = -vel.y;
             //twist.twist.twist.linear.y = corrected_vel.x;
             //twist.twist.twist.linear.x = corrected_vel.y;
+
+            double x_variance = flow_estimator_settings_.variance_scale * last_angular_velocity_.y() + flow_estimator_settings_.variance;
+            x_variance *= x_variance;
+
+            double y_variance = flow_estimator_settings_.variance_scale * last_angular_velocity_.x() + flow_estimator_settings_.variance;
+            y_variance *= y_variance;
+
+            twist.twist.covariance[0] = flow_estimator_settings_.variance;
+            twist.twist.covariance[7] = flow_estimator_settings_.variance;
+
             //twist.twist.twist.linear.y = correction_vel.y;
             //twist.twist.twist.linear.z = correction_vel.x;
             cv_bridge::CvImage cv_image {
