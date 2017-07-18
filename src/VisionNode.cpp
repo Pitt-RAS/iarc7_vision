@@ -141,6 +141,17 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.variance_scale));
         config.flow_variance_scale = flow_settings.variance_scale;
 
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/cutoff_region_velocity_measurement",
+                flow_settings.variance_scale));
+        config.flow_cutoff_region_velocity_measurement =
+            flow_settings.cutoff_region_velocity_measurement;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/debug_frameskip",
+                flow_settings.variance_scale));
+        config.flow_debug_frameskip = flow_settings.debug_frameskip;
+
         first_run = false;
     }
     else {
@@ -171,6 +182,9 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.imu_update_timeout = config.flow_imu_update_timeout;
         flow_settings.variance = config.flow_variance;
         flow_settings.variance_scale = config.flow_variance_scale;
+        flow_settings.cutoff_region_velocity_measurement =
+            config.flow_cutoff_region_velocity_measurement;
+        flow_settings.debug_frameskip = config.flow_debug_frameskip;
 
     }
 }
@@ -243,25 +257,10 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/debug_vectors_image",
             settings.debug_vectors_image));
-    /*ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_direction",
-            settings.debug_direction));
+
     ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_edges",
-            settings.debug_edges));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_lines",
-            settings.debug_lines));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_line_markers",
-            settings.debug_line_markers));
-    if (private_nh.hasParam("grid_line_estimator/debug_height")) {
-        ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_height",
-            settings.debug_height));
-    } else {
-        settings.debug_height = std::numeric_limits<double>::quiet_NaN();
-    }*/
+        "optical_flow_estimator/debug_average_vector_image",
+        settings.debug_average_vector_image));
 }
 
 int main(int argc, char **argv)
@@ -271,10 +270,10 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
+    // Create dynamic reconfigure server and settings callback
     dynamic_reconfigure::Server<iarc7_vision::VisionNodeConfig> dynamic_reconfigure_server;
-
-    iarc7_vision::LineExtractorSettings line_extractor_settings;
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
+    iarc7_vision::LineExtractorSettings line_extractor_settings;
 
     boost::function<void(iarc7_vision::VisionNodeConfig &config,
                          uint32_t level)> dynamic_reconfigure_settings_callback =
@@ -287,6 +286,7 @@ int main(int argc, char **argv)
 
     dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
 
+    // Create and load grid estimator settings
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
     getGridEstimatorSettings(private_nh, grid_estimator_settings);
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
@@ -296,6 +296,7 @@ int main(int argc, char **argv)
             grid_estimator_settings,
             grid_line_debug_settings);
 
+    // Create and load optical flow debug settings
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
     getFlowDebugSettings(private_nh, optical_flow_debug_settings);
     iarc7_vision::OpticalFlowEstimator optical_flow_estimator(
@@ -303,17 +304,28 @@ int main(int argc, char **argv)
             optical_flow_estimator_settings,
             optical_flow_debug_settings);
 
+    // Check for images at 100 Hz
     ros::Rate rate (100);
+
+    // Wait for time to begin
     while (ros::ok() && ros::Time::now() == ros::Time(0)) {
         // wait
         ros::spinOnce();
     }
 
+    // Load the parameters specific to the vision node
     double startup_timeout;
     ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
+
+    int message_queue_item_limit;
+    ROS_ASSERT(private_nh.getParam("message_queue_item_limit", message_queue_item_limit));
+
+    // Initialize the vision classes
     ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
     ROS_ASSERT(optical_flow_estimator.waitUntilReady(ros::Duration(startup_timeout)));
 
+
+    // Queue and callback for collecting images
     std::vector<sensor_msgs::Image::ConstPtr> message_queue;
 
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
@@ -328,38 +340,32 @@ int main(int argc, char **argv)
         &std::function<void(const sensor_msgs::Image::ConstPtr&)>::operator(),
         &handler);
 
+    // Main loop
     while (ros::ok())
     {
         if (message_queue.size() > 0) {
 
-            if (message_queue.size() > 5) {
-                ROS_ERROR("QUEUE IS GROWING!!! %d", (int)message_queue.size());
+            sensor_msgs::Image::ConstPtr message;
+            if (static_cast<int>(message_queue.size()) > message_queue_item_limit) {
+                ROS_ERROR("Image queue has too many messages, clearing: %d images", (int)message_queue.size());
 
-                const auto message = message_queue.back();
-                //message_queue.erase(message_queue.begin());
+                message = message_queue.back();
                 message_queue.clear();
-                //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                //                          message->header.stamp);
-
-                optical_flow_estimator.update(message);
             }
-            else { 
-
-                const auto message = message_queue.front();
+            else {
+                message = message_queue.front();
                 message_queue.erase(message_queue.begin());
-                //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                //                          message->header.stamp);
-
-                optical_flow_estimator.update(message);
-
             }
 
+            // Don't use the gridline estimator right now for speed reasons
+            //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+            //                          message->header.stamp);
 
+            optical_flow_estimator.update(message);
         }
 
         ros::spinOnce();
         rate.sleep();
-
     }
 
     // All is good.

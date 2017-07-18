@@ -34,5 +34,20 @@ optical_flow_estimator:
     # Publish image with the velocity vectors drawn on it
     debug_vectors_image: true
 
+    # Publish image with average velocity vector drawn on it
+    debug_average_vector_image: true
+
+    # Frames to skip before publishing debug images
+    debug_frameskip: 0
+
     # Timeout for imu updates
     imu_update_timeout: 0.3
+
+    # Min variance to send with velocity measurements
+    variance: 0.1
+
+    # What to scale the variance on according to the rotation rate
+    variance_scale: 1.0
+
+    # Cutoff area where velocity vectors aren't included in the average
+    cutoff_region_velocity_measurement: 0.2
