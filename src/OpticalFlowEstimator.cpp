@@ -145,8 +145,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
     if (last_filtered_position_.point.z
             >= flow_estimator_settings_.min_estimation_altitude) {
-        if (last_scaled_image_.empty() ||
-            last_scaled_grayscale_image_.empty()) {
+        static bool ran_once = false;
+        if (ran_once) {
             try {
                 // Variables needed for estimate velocity
                 cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
@@ -186,6 +186,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
             last_scaled_image_ = scaled_image;
             last_scaled_grayscale_image_ = scaled_grayscale_image;
+
+            ran_once = true;
         }
 
         // Always save off the last message time
