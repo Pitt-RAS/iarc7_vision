@@ -149,7 +149,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
 
         ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/debug_frameskip",
-                flow_settings.variance_scale));
+                flow_settings.debug_frameskip));
         config.flow_debug_frameskip = flow_settings.debug_frameskip;
 
         ran = true;
