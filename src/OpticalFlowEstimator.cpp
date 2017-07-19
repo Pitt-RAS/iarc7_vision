@@ -173,14 +173,19 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
             image_size.height = image_size.height * flow_estimator_settings_.scale_factor;
 
             cv::gpu::GpuMat d_frame1_big(image);
+            cv::gpu::GpuMat scaled_image;
+            cv::gpu::GpuMat scaled_grayscale_image;
 
             cv::gpu::resize(d_frame1_big,
-                            last_scaled_image_,
+                            scaled_image,
                             image_size);
 
-            cv::gpu::cvtColor(last_scaled_image_,
-                              last_scaled_grayscale_image_,
+            cv::gpu::cvtColor(scaled_image,
+                              scaled_grayscale_image,
                               CV_RGBA2GRAY);
+
+            last_scaled_image_ = scaled_image;
+            last_scaled_grayscale_image_ = scaled_grayscale_image;
         }
 
         // Always save off the last message time
@@ -216,19 +221,20 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         static double last_scale = -1.0;
         // Fix scaling if the scaling changed
         if (last_scale != flow_estimator_settings_.scale_factor) {
-            cv::gpu::GpuMat old_size;
-            last_scaled_image_.copyTo(old_size);
+            cv::gpu::GpuMat d_frame1_big(image);
+            cv::gpu::GpuMat scaled_image;
+            cv::gpu::GpuMat scaled_grayscale_image;
 
-            cv::gpu::GpuMat old_size_gray;
-            last_scaled_grayscale_image_.copyTo(old_size_gray);
-
-            cv::gpu::resize(old_size,
-                            last_scaled_image_,
+            cv::gpu::resize(d_frame1_big,
+                            scaled_image,
                             image_size);
 
-            cv::gpu::resize(old_size_gray,
-                            last_scaled_grayscale_image_,
-                            image_size);
+            cv::gpu::cvtColor(scaled_image,
+                              scaled_grayscale_image,
+                              CV_RGBA2GRAY);
+
+            last_scaled_image_ = scaled_image;
+            last_scaled_grayscale_image_ = scaled_grayscale_image;
         }
 
         int64 start = cv::getTickCount();
