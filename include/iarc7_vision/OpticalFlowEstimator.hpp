@@ -101,6 +101,12 @@ class OpticalFlowEstimator {
     geometry_msgs::TransformStamped last_filtered_transform_stamped_;
 
     ros::Time last_message_time_;
+
+    ros::Publisher correction_pub_;
+    ros::Publisher raw_pub_;
+
+    double last_p_ = 0;
+    double last_r_ = 0;
 };
 
 } // namespace iarc7_vision
