@@ -51,6 +51,3 @@ optical_flow_estimator:
 
     # Cutoff area where velocity vectors aren't included in the average
     cutoff_region_velocity_measurement: 0.2
-
-    # Message queue item limit
-    message_queue_item_limit: 3
