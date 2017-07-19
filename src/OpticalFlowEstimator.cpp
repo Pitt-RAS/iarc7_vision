@@ -102,7 +102,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
         },
         100),
       last_filtered_transform_stamped_(),
-      last_message_time_()
+      last_message_time_(),
+      correction_pub_(),
+      raw_pub_()
     {
     ros::NodeHandle local_nh ("optical_flow_estimator");
 
@@ -119,7 +121,8 @@ OpticalFlowEstimator::OpticalFlowEstimator(
     twist_pub_
         = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist",
                                                                        10);
-
+    correction_pub_ = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist_correction", 10);
+    raw_pub_ = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist_raw", 10);
 }
 
 bool OpticalFlowEstimator::waitUntilReady(const ros::Duration& startup_timeout) {
@@ -290,18 +293,6 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                                                     cutoff_region_velocity_measurement,
                                                     image_size);
 
-        // m/px = camera_height / focal_length;
-        double current_meters_per_px = height
-                             / getFocalLength(image_size,
-                                              flow_estimator_settings_.fov);
-
-        // Calculate the average velocity
-        cv::Point2f velocity_uncorrected;
-        velocity_uncorrected.x = (average_vec.x * current_meters_per_px) / 
-                                 (time - last_message_time_).toSec();
-        velocity_uncorrected.y = (average_vec.y * current_meters_per_px) /
-                                 (time - last_message_time_).toSec();
-
         // Get the pitch and roll of the camera in eular angles
         tf2::Quaternion orientation;
         tf2::convert(last_filtered_transform_stamped_.transform.rotation, orientation);
@@ -310,18 +301,49 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         double y, p, r;
         matrix.getEulerYPR(y, p, r);
 
+        // m/px = camera_height / focal_length;
+        // In the projected camera plane
+        double current_meters_per_px = height
+                             / getFocalLength(image_size,
+                                              flow_estimator_settings_.fov);
+
+        // Calculate the average velocity
+        cv::Point2f velocity_uncorrected;
+        velocity_uncorrected.x = (average_vec.x * current_meters_per_px) /
+                                 std::cos(p) / 
+                                 (time - last_message_time_).toSec();
+        velocity_uncorrected.y = (average_vec.y * current_meters_per_px) /
+                                 -std::cos(r) /
+                                 (time - last_message_time_).toSec();
+
+        double angular_vel_y = -(p - last_p_) / (time - last_message_time_).toSec();
+        double angular_vel_x = (r - last_r_) / (time - last_message_time_).toSec();
+
         double distance_to_plane = last_filtered_position_.point.z *
                                    sqrt(1 + std::pow(tan(p), 2.0) + std::pow(tan(r), 2.0));
 
         cv::Point2f correction_vel;
         correction_vel.x = distance_to_plane *
-                           last_angular_velocity_.y() * fabs(cos(p));
+                           angular_vel_y * cos(p);
         correction_vel.y = distance_to_plane *
-                           last_angular_velocity_.x() * fabs(cos(r));
+                           angular_vel_x * -cos(r);
 
         cv::Point2f corrected_vel;
         corrected_vel.x = velocity_uncorrected.x - correction_vel.x;
         corrected_vel.y = velocity_uncorrected.y - correction_vel.y;
+
+        last_p_ = p;
+        last_r_ = r;
+
+        geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
+        twist_correction.twist.twist.linear.x = correction_vel.x;
+        twist_correction.twist.twist.linear.y = correction_vel.y;
+        correction_pub_.publish(twist_correction);
+
+        geometry_msgs::TwistWithCovarianceStamped twist_raw = twist;
+        twist_raw.twist.twist.linear.x = velocity_uncorrected.x;
+        twist_raw.twist.twist.linear.y = velocity_uncorrected.y;
+        raw_pub_.publish(twist_raw);
 
         // Fill out the twist
         // TODO switch to level quad and rotate the x and y vector accordingly
@@ -342,9 +364,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                             + flow_estimator_settings_.variance,
                             2.0);
 
-        twist.twist.covariance[0] = flow_estimator_settings_.variance;
-        twist.twist.covariance[7] = flow_estimator_settings_.variance;
-
+        twist.twist.covariance[0] = x_variance;
+        twist.twist.covariance[7] = y_variance;
 
         static int images_skipped = 0;
         if(images_skipped == 0) {
