@@ -343,6 +343,13 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         last_p_ = p;
         last_r_ = r;
 
+        // Fill out the twist
+        // TODO switch to level quad and rotate the x and y vector accordingly
+        twist.header.stamp = time;
+        twist.header.frame_id = "bottom_camera_optical";
+        twist.twist.twist.linear.x = corrected_vel.x;
+        twist.twist.twist.linear.y = corrected_vel.y;
+
         geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
         twist_correction.twist.twist.linear.x = correction_vel.x;
         twist_correction.twist.twist.linear.y = correction_vel.y;
@@ -352,13 +359,6 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         twist_raw.twist.twist.linear.x = velocity_uncorrected.x;
         twist_raw.twist.twist.linear.y = velocity_uncorrected.y;
         raw_pub_.publish(twist_raw);
-
-        // Fill out the twist
-        // TODO switch to level quad and rotate the x and y vector accordingly
-        twist.header.stamp = time;
-        twist.header.frame_id = "bottom_camera_optical";
-        twist.twist.twist.linear.x = corrected_vel.x;
-        twist.twist.twist.linear.y = corrected_vel.y;
 
         // Calculate variance
         double x_variance = std::pow(
