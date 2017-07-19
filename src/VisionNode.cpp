@@ -22,10 +22,10 @@
 void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                         const ros::NodeHandle& private_nh,
                         iarc7_vision::LineExtractorSettings& line_settings,
-                        iarc7_vision::OpticalFlowEstimatorSettings& flow_settings)
+                        iarc7_vision::OpticalFlowEstimatorSettings& flow_settings,
+                        bool& ran)
 {
-    static bool first_run = true;
-    if (first_run) {
+    if (!ran) {
         // Begin line extractor settings
         ROS_ASSERT(private_nh.getParam(
                 "line_extractor/pixels_per_meter",
@@ -152,7 +152,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.variance_scale));
         config.flow_debug_frameskip = flow_settings.debug_frameskip;
 
-        first_run = false;
+        ran = true;
     }
     else {
         // Begin line extractor settings
@@ -274,6 +274,7 @@ int main(int argc, char **argv)
     dynamic_reconfigure::Server<iarc7_vision::VisionNodeConfig> dynamic_reconfigure_server;
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
     iarc7_vision::LineExtractorSettings line_extractor_settings;
+    bool dynamic_reconfigure_called = false;
 
     boost::function<void(iarc7_vision::VisionNodeConfig &config,
                          uint32_t level)> dynamic_reconfigure_settings_callback =
@@ -281,7 +282,8 @@ int main(int argc, char **argv)
             getDynamicSettings(config,
                                private_nh,
                                line_extractor_settings,
-                               optical_flow_estimator_settings);
+                               optical_flow_estimator_settings,
+                               dynamic_reconfigure_called);
         };
 
     dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
@@ -308,7 +310,9 @@ int main(int argc, char **argv)
     ros::Rate rate (100);
 
     // Wait for time to begin
-    while (ros::ok() && ros::Time::now() == ros::Time(0)) {
+    while (ros::ok() &&
+           (ros::Time::now() == ros::Time(0) ||
+           !dynamic_reconfigure_called)) {
         // wait
         ros::spinOnce();
     }
