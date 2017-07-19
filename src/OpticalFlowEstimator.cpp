@@ -324,6 +324,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                                  -std::cos(r) /
                                  (time - last_message_time_).toSec();
 
+        if (last_p_ > CV_PI/2 && p < -CV_PI/2) last_p_-= 2*CV_PI;
+        if (last_p_ < -CV_PI/2 && p > CV_PI/2) last_p_+= 2*CV_PI;
+
         double angular_vel_y = -(p - last_p_) / (time - last_message_time_).toSec();
         double angular_vel_x = (r - last_r_) / (time - last_message_time_).toSec();
 
