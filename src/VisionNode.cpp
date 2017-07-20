@@ -370,8 +370,8 @@ int main(int argc, char **argv)
             }
 
             // Don't use the gridline estimator right now for speed reasons
-            //gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-            //                          message->header.stamp);
+            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+                                      message->header.stamp);
 
             optical_flow_estimator.update(message);
         }
