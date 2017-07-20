@@ -143,13 +143,13 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
 
         ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/x_cutoff_region_velocity_measurement",
-                flow_settings.variance_scale));
+                flow_settings.x_cutoff_region_velocity_measurement));
         config.flow_x_cutoff_region_velocity_measurement =
             flow_settings.x_cutoff_region_velocity_measurement;
 
         ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/y_cutoff_region_velocity_measurement",
-                flow_settings.variance_scale));
+                flow_settings.y_cutoff_region_velocity_measurement));
         config.flow_y_cutoff_region_velocity_measurement =
             flow_settings.y_cutoff_region_velocity_measurement;
 
