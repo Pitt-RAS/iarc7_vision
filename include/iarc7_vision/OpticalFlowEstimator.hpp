@@ -38,6 +38,7 @@ struct OpticalFlowEstimatorSettings {
     double x_cutoff_region_velocity_measurement;
     double y_cutoff_region_velocity_measurement;
     int debug_frameskip;
+    double orientation_image_time_offset;
 };
 
 struct OpticalFlowDebugSettings {

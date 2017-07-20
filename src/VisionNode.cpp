@@ -158,6 +158,11 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.debug_frameskip));
         config.flow_debug_frameskip = flow_settings.debug_frameskip;
 
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/orientation_image_time_offset",
+                flow_settings.orientation_image_time_offset));
+        config.flow_orientation_image_time_offset = flow_settings.orientation_image_time_offset;
+
         ran = true;
     }
     else {
@@ -193,6 +198,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.y_cutoff_region_velocity_measurement =
             config.flow_y_cutoff_region_velocity_measurement;
         flow_settings.debug_frameskip = config.flow_debug_frameskip;
+        flow_settings.orientation_image_time_offset = config.flow_orientation_image_time_offset;
 
     }
 }
