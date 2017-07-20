@@ -324,11 +324,20 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                                  -std::cos(r) /
                                  (time - last_message_time_).toSec();
 
-        if (last_p_ > CV_PI/2 && p < -CV_PI/2) last_p_-= 2*CV_PI;
-        if (last_p_ < -CV_PI/2 && p > CV_PI/2) last_p_+= 2*CV_PI;
 
-        double angular_vel_y = -(p - last_p_) / (time - last_message_time_).toSec();
-        double angular_vel_x = (r - last_r_) / (time - last_message_time_).toSec();
+        double dp;
+        double dr;
+
+        if (last_p_ > CV_PI/2 && p < -CV_PI/2) dp = -(p - 2*CV_PI - last_p_);
+        else if (last_p_ < -CV_PI/2 && p > CV_PI/2) dp = -(p - last_p_ + 2*CV_PI);
+        else dp = -(p - last_p_);
+
+        if (last_r_ > CV_PI/2 && r < -CV_PI/2) dr = (r - 2*CV_PI - last_r_);
+        else if (last_r_ < -CV_PI/2 && r > CV_PI/2) dr = (r - last_r_ + 2*CV_PI);
+        else dr = (r - last_r_);
+
+        double angular_vel_y = dp / (time - last_message_time_).toSec();
+        double angular_vel_x = dr / (time - last_message_time_).toSec();
 
         double distance_to_plane = last_filtered_position_.point.z *
                                    sqrt(1 + std::pow(tan(p), 2.0) + std::pow(tan(r), 2.0));
