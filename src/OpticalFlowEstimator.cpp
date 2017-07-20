@@ -17,6 +17,7 @@
 
 #include <geometry_msgs/Vector3Stamped.h>
 #include <iarc7_msgs/Float64Stamped.h>
+#include <iarc7_msgs/OrientationAnglesStamped.h>
 #include <visualization_msgs/Marker.h>
 
 #include "tf2/LinearMath/Matrix3x3.h"
@@ -121,6 +122,8 @@ OpticalFlowEstimator::OpticalFlowEstimator(
     twist_pub_
         = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist",
                                                                        10);
+
+    ori_pub = local_nh.advertise<iarc7_msgs::OrientationAnglesStamped>("ori", 10);
     correction_pub_ = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist_correction", 10);
     raw_pub_ = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist_raw", 10);
 }
@@ -176,6 +179,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
             cv::gpu::GpuMat scaled_image;
             cv::gpu::GpuMat scaled_grayscale_image;
 
+            ROS_WARN("w %d h %d", image_size.width, image_size.height);
+
             cv::gpu::resize(d_frame1_big,
                             scaled_image,
                             image_size);
@@ -220,9 +225,10 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
     } else {
 
-        static double last_scale = -1.0;
+        // static double last_scale = -1.0;
         // Fix scaling if the scaling changed
-        if (last_scale != flow_estimator_settings_.scale_factor) {
+        /// if (last_scale != flow_estimator_settings_.scale_factor) {
+        if (false) {
             cv::gpu::GpuMat d_frame1_big(image);
             cv::gpu::GpuMat scaled_image;
             cv::gpu::GpuMat scaled_grayscale_image;
@@ -297,8 +303,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::Point2f average_vec = findAverageVector(prevPts,
                                                     nextPts,
                                                     status,
-                                                    flow_estimator_settings_.
-                                                    cutoff_region_velocity_measurement,
+                                                    flow_estimator_settings_.x_cutoff_region_velocity_measurement,
+                                                    flow_estimator_settings_.y_cutoff_region_velocity_measurement,
                                                     image_size);
 
         // Get the pitch and roll of the camera in eular angles
@@ -308,6 +314,13 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         matrix.setRotation(orientation);
         double y, p, r;
         matrix.getEulerYPR(y, p, r);
+
+        iarc7_msgs::OrientationAnglesStamped ori_msg;
+        ori_msg.header.stamp = time;
+        ori_msg.data.pitch = p;
+        ori_msg.data.roll = r;
+        ori_msg.data.yaw = y;
+        ori_pub.publish(ori_msg);
 
         // m/px = camera_height / focal_length;
         // In the projected camera plane
@@ -325,15 +338,15 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                                  (time - last_message_time_).toSec();
 
 
-        double d_p;
-        double d_r;
+        double dp;
+        double dr;
 
         if (last_p_ > CV_PI/2 && p < -CV_PI/2) dp = -(p - 2*CV_PI - last_p_);
-        else if (last_p_ < -CV_PI/2 && p > CV_PI/2) -(p - last_p_ + 2*CV_PI);
+        else if (last_p_ < -CV_PI/2 && p > CV_PI/2) dp = -(p - last_p_ + 2*CV_PI);
         else dp = -(p - last_p_);
 
-        if (last_p_ > CV_PI/2 && p < -CV_PI/2) p -= 2*CV_PI;
-        else if (last_p_ < -CV_PI/2 && p > CV_PI/2) last_p_+= 2*CV_PI;
+        if (last_r_ > CV_PI/2 && r < -CV_PI/2) dr = (r - 2*CV_PI - last_r_);
+        else if (last_r_ < -CV_PI/2 && r > CV_PI/2) dr = (r - last_r_ + 2*CV_PI);
         else dr = (r - last_r_);
 
         double angular_vel_y = dp / (time - last_message_time_).toSec();
@@ -443,7 +456,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 cv::Point2f OpticalFlowEstimator::findAverageVector(const std::vector<cv::Point2f>& prevPts,
                                                     const std::vector<cv::Point2f>& nextPts,
                                                     const std::vector<uchar>& status,
-                                                    const double cutoff,
+                                                    const double x_cutoff,
+                                                    const double y_cutoff,
                                                     const cv::Size& image_size) {
     double averageX = 0.0;
     double averageY = 0.0;
@@ -453,10 +467,10 @@ cv::Point2f OpticalFlowEstimator::findAverageVector(const std::vector<cv::Point2
     for (size_t i = 0; i < prevPts.size(); ++i)
     {
         if (status[i] &&
-            prevPts[i].x > image_size.width * cutoff &&
-            prevPts[i].x < image_size.width * (1.0 - cutoff) &&
-            prevPts[i].y > image_size.height * cutoff && 
-            prevPts[i].y < image_size.height * (1.0 - cutoff))
+            prevPts[i].x > image_size.width * x_cutoff &&
+            prevPts[i].x < image_size.width * (1.0 - x_cutoff) &&
+            prevPts[i].y > image_size.height * y_cutoff &&
+            prevPts[i].y < image_size.height * (1.0 - y_cutoff))
         {
             cv::Point p = prevPts[i];
             cv::Point q = nextPts[i];
