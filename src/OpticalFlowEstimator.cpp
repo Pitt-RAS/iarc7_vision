@@ -342,9 +342,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         double dp;
         double dr;
 
-        if (last_p_ > CV_PI/2 && p < -CV_PI/2) dp = -(p + 2*CV_PI - last_p_);
-        else if (last_p_ < -CV_PI/2 && p > CV_PI/2) dp = -(p - last_p_ - 2*CV_PI);
-        else dp = -(p - last_p_);
+        if (last_p_ > CV_PI/2 && p < -CV_PI/2) dp = (p + 2*CV_PI - last_p_);
+        else if (last_p_ < -CV_PI/2 && p > CV_PI/2) dp = (p - last_p_ - 2*CV_PI);
+        else dp = (p - last_p_);
 
         if (last_r_ > CV_PI/2 && r < -CV_PI/2) dr = (r + 2*CV_PI - last_r_);
         else if (last_r_ < -CV_PI/2 && r > CV_PI/2) dr = (r - last_r_ - 2*CV_PI);
