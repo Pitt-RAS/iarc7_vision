@@ -243,6 +243,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
             last_scaled_image_ = scaled_image;
             last_scaled_grayscale_image_ = scaled_grayscale_image;
+
+            last_scale = flow_estimator_settings_.scale_factor;
         }
 
         int64 start = cv::getTickCount();
