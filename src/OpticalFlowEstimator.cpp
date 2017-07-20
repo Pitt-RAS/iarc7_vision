@@ -432,8 +432,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                 start_point[0].x = x_off;
                 start_point[0].y = y_off;
 
-                end_point[0].x = (3.0 * velocity_uncorrected.x) + x_off;
-                end_point[0].y = (3.0 * velocity_uncorrected.y) + y_off;
+                end_point[0].x = (3.0 * average_vec.x) + x_off;
+                end_point[0].y = (3.0 * average_vec.y) + y_off;
 
                 std::vector<uchar> fake_status(1);
                 fake_status[0] = 1;
