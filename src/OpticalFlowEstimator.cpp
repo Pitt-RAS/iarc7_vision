@@ -225,10 +225,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
     } else {
 
-        // static double last_scale = -1.0;
+        static double last_scale = -1.0;
         // Fix scaling if the scaling changed
-        /// if (last_scale != flow_estimator_settings_.scale_factor) {
-        if (false) {
+        if (last_scale != flow_estimator_settings_.scale_factor) {
             cv::gpu::GpuMat d_frame1_big(image);
             cv::gpu::GpuMat scaled_image;
             cv::gpu::GpuMat scaled_grayscale_image;
