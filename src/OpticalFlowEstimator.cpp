@@ -386,16 +386,14 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         raw_pub_.publish(twist_raw);
 
         // Calculate variance
-        double x_variance = std::pow(
-                            (flow_estimator_settings_.variance_scale *
-                            last_angular_velocity_.y())
-                            + flow_estimator_settings_.variance,
-                            2.0);
-        double y_variance = std::pow(
-                            (flow_estimator_settings_.variance_scale *
-                            last_angular_velocity_.x())
-                            + flow_estimator_settings_.variance,
-                            2.0);
+        double rotated_ang_vel_x = std::cos(y + M_PI) * angular_vel_x - std::sin(y + M_PI) * angular_vel_y;
+        double rotated_ang_vel_y = std::cos(y + M_PI) * angular_vel_y + std::sin(y + M_PI) * angular_vel_x;
+        double x_variance = std::pow(flow_estimator_settings_.variance_scale
+                                   * rotated_ang_vel_y, 2.0)
+                          + flow_estimator_settings_.variance;
+        double y_variance = std::pow(flow_estimator_settings_.variance_scale
+                                   * rotated_ang_vel_x, 2.0)
+                          + flow_estimator_settings_.variance;
 
         twist.twist.covariance[0] = x_variance;
         twist.twist.covariance[7] = y_variance;
