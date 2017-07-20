@@ -19,16 +19,16 @@ optical_flow_estimator:
     iters: 20
 
     # Number of points to track
-    points: 300
+    points: 100
 
     # Quality level for the corner detector
     quality_level: 0.01
 
     # Min distance between points for the corner detector
-    min_dist: 15
+    min_dist: 20
 
     # Image scale factor
-    scale_factor: 0.3
+    scale_factor: 0.5
 
     # Debug settings for the optical flow estimator
     # Publish image with the velocity vectors drawn on it
@@ -44,7 +44,7 @@ optical_flow_estimator:
     imu_update_timeout: 0.3
 
     # Min variance to send with velocity measurements
-    variance: 0.07
+    variance: 4
 
     # What to scale the variance on according to the rotation rate
     variance_scale: 1.0
@@ -52,3 +52,5 @@ optical_flow_estimator:
     # Cutoff area where velocity vectors aren't included in the average
     x_cutoff_region_velocity_measurement: 0.2
     y_cutoff_region_velocity_measurement: 0.2
+
+    orientation_image_time_offset: 0.02

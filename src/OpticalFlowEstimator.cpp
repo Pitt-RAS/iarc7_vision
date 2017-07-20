@@ -143,7 +143,7 @@ bool OpticalFlowEstimator::waitUntilReady(const ros::Duration& startup_timeout) 
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
     int64 start = cv::getTickCount();
-    updateFilteredPosition(message->header.stamp);
+    updateFilteredPosition(message->header.stamp + ros::Duration(flow_estimator_settings_.orientation_image_time_offset));
     ROS_WARN("updateFilteredPosition: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
 
     if (last_filtered_position_.point.z
