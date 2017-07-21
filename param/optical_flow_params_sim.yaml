@@ -53,3 +53,5 @@ optical_flow_estimator:
     cutoff_region_velocity_measurement: 0.2
 
     orientation_image_time_offset: 0.02
+
+    published_velocity_time_offset: 0.0
