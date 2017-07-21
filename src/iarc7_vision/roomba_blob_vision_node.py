@@ -60,6 +60,7 @@ import numpy as np
 import math
 import copy
 from sys import argv
+import threading
 
 NODE_NAME = "roomba_blob_vision_node"
 # From: iarc7_simulator/sim/src/sim/builder/robots/Roomba.py
@@ -239,7 +240,7 @@ class CameraProcessor(ImageRoombaFinder):
         self.debug = Debugger(debugging_on, debugging_on)
 
         self.odom_array = OdometryArray()
-        self.odom_lock = False
+        self.odom_lock = threading.Lock()
 
         self.bridge = CvBridge()
         self.camera = image_geometry.PinholeCameraModel()
@@ -277,9 +278,9 @@ class CameraProcessor(ImageRoombaFinder):
             rospy.logerr(e)
 
     def roombas_callback(self, msg):
-        while self.odom_lock:
-            rospy.sleep(0.001)
+        self.odom_lock.acquire()
         self.odom_array = msg
+        self.odom_lock.release()
 
 
     def filter_frame(self, frame, trans):
@@ -325,7 +326,7 @@ class CameraProcessor(ImageRoombaFinder):
 
             # Add the roomba to array and publish
             # TODO This can be improved
-            self.odom_lock = True
+            self.odom_lock.acquire()
             sq_tolerance = 0.1 if len(self.odom_array.data) < 10 else 1000
             # index = -1
             for i in xrange(len(self.odom_array.data)):
@@ -342,7 +343,7 @@ class CameraProcessor(ImageRoombaFinder):
                 item.pose.pose.position = roomba_pos
                 self.odom_array.data.append(item)
             self.publisher.publish(self.odom_array)
-            self.odom_lock = False
+            self.odom_lock.release()
                 
         self.debug.rviz_lines(points, 0)
 
