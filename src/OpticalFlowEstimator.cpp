@@ -371,7 +371,7 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         last_r_ = r;
 
         // Fill out the twist
-        twist.header.stamp = time;
+        twist.header.stamp = time + ros::Duration(flow_estimator_settings_.published_velocity_time_offset);
         twist.header.frame_id = "level_quad";
         twist.twist.twist.linear.x = std::cos(y + M_PI) * -corrected_vel.x - std::sin(y + M_PI) * corrected_vel.y;
         twist.twist.twist.linear.y = std::cos(y + M_PI) * corrected_vel.y + std::sin(y + M_PI) * -corrected_vel.x;
