@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 """
 Vision node to detect roombas based of red or green colored pixels, which are
-distinct from their black & white peppered background.
+distinct from their black & white peppered background. This node does not take
+advantage of the GPU in its current implementation. It is ideal for using as a
+side camera node.
 
 Algorithm:
 
@@ -21,7 +23,11 @@ Preconditions:
 
 Execution:
 
-    $ rosrun iarc7_vision roomba_blob_vision_node.py
+    $ rosrun iarc7_vision roomba_blob_vision_node.py [BASE_TOPIC] [...]
+
+Example:
+
+    $ rosrun iarc7_vision roomba_blob_vision_node.py left_camera right_camera
 
 .. note::
     Contrary to online code, the do_transform_vector3 method DOES NOT create a
@@ -53,6 +59,8 @@ import image_geometry
 import numpy as np
 import math
 import copy
+from sys import argv
+import threading
 
 NODE_NAME = "roomba_blob_vision_node"
 # From: iarc7_simulator/sim/src/sim/builder/robots/Roomba.py
@@ -69,7 +77,7 @@ class Debugger(object):
             self.rviz_frame = "map"
             self.rviz_namespace = NODE_NAME
         
-    def image_grid(self, *args):
+    def image_grid(self, title, *args):
         """
         Displays up to 4 images in a single window
 
@@ -85,12 +93,19 @@ class Debugger(object):
         f1 = args[0]
         black = np.zeros(f1.shape, dtype=f1.dtype)
         f2 = black if len(args) < 2 else args[1]
-        f3 = black if len(args) < 3 else args[2]
-        f4 = black if len(args) < 4 else args[3]
         row1 = np.hstack((f1, f2))
-        row2 = np.hstack((f3, f4))
-        columns = np.vstack((row1,row2))
-        cv2.imshow('Image Debugger', columns)
+        if len(args) < 3:
+            row1 = cv2.resize(row1,None,fx=0.5,fy=0.5,
+                              interpolation=cv2.INTER_CUBIC)
+            cv2.imshow(title, row1)
+        else:
+            f3 = black if len(args) < 3 else args[2]
+            f4 = black if len(args) < 4 else args[3]
+            row2 = np.hstack((f3, f4))
+            columns = np.vstack((row1,row2))
+            columns = cv2.resize(columns,None,fx=0.5,fy=0.5, 
+                              interpolation=cv2.INTER_CUBIC)
+            cv2.imshow(title, columns)
         cv2.waitKey(1)
 
     def rviz_lines(self, points, line_id):
@@ -215,16 +230,17 @@ class ImageRoombaFinder(object):
             cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 4)
             yield (x + w/2, y + h/2)
         # After the generator is done, debug the image
-        self.debug.image_grid(frame, roombas)
+        self.debug.image_grid(self.base_topic, frame, roombas)
 
 class CameraProcessor(ImageRoombaFinder):
 
-    def __init__(self, debugging_on):
-        rospy.init_node(NODE_NAME, anonymous=True)
+    def __init__(self, base_topic, debugging_on):
+        self.base_topic = base_topic
 
         self.debug = Debugger(debugging_on, debugging_on)
 
-        self.roombas = []
+        self.odom_array = OdometryArray()
+        self.odom_lock = threading.Lock()
 
         self.bridge = CvBridge()
         self.camera = image_geometry.PinholeCameraModel()
@@ -235,17 +251,13 @@ class CameraProcessor(ImageRoombaFinder):
         self.tf_buffer.lookup_transform('map', 'bottom_camera_optical',
                                         rospy.Time(0), rospy.Duration(3.0))
 
-        rospy.Subscriber("/bottom_camera/camera/image_raw", Image, self.callback)
-        rospy.Subscriber("/bottom_camera/camera/camera_info", CameraInfo,
+        rospy.Subscriber("/{}/camera/image_raw".format(base_topic), Image, self.callback)
+        rospy.Subscriber("/{}/camera/camera_info".format(base_topic), CameraInfo,
                          self.camera.fromCameraInfo)
+        rospy.Subscriber("/roombas", OdometryArray, self.roombas_callback)
         self.publisher = rospy.Publisher("/roombas", OdometryArray,
                                          queue_size=10)
 
-        # Starup the loop
-        try:
-            rospy.spin()
-        except KeyboardInterrupt:
-            rospy.loginfo("Shutting down")
         
     def callback(self, data):
         """
@@ -258,14 +270,17 @@ class CameraProcessor(ImageRoombaFinder):
         """
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
-            # cv_image = cv2.resize(cv_image,None,fx=0.5,fy=0.5, 
-            #                       interpolation=cv2.INTER_CUBIC)
             trans = self.tf_buffer.lookup_transform('map',
-                                'bottom_camera_optical', rospy.Time(0))
+                                data.header.frame_id, rospy.Time(0))
             self.filter_frame(cv_image, trans)
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, \
                 tf2_ros.ExtrapolationException, CvBridgeError) as e:
             rospy.logerr(e)
+
+    def roombas_callback(self, msg):
+        self.odom_lock.acquire()
+        self.odom_array = msg
+        self.odom_lock.release()
 
 
     def filter_frame(self, frame, trans):
@@ -311,26 +326,24 @@ class CameraProcessor(ImageRoombaFinder):
 
             # Add the roomba to array and publish
             # TODO This can be improved
-            sq_tolerance = 0.1 if len(self.roombas) < 10 else 1000
-            index = -1
-            for i in xrange(len(self.roombas)):
-                if (roomba_pos.x - self.roombas[i].x)**2 + \
-                   (roomba_pos.y - self.roombas[i].y)**2 < sq_tolerance:
-                    self.roombas[i] = roomba_pos
-                    index = i
+            self.odom_lock.acquire()
+            sq_tolerance = 0.1 if len(self.odom_array.data) < 10 else 1000
+            # index = -1
+            for i in xrange(len(self.odom_array.data)):
+                pt = self.odom_array.data[i].pose.pose.position
+                if (roomba_pos.x - pt.x)**2 + \
+                   (roomba_pos.y - pt.y)**2 < sq_tolerance:
+                    self.odom_array.data[i].pose.pose.position = roomba_pos
+                    # index = i
                     break
             else:
-                index = len(self.roombas)
-                self.roombas.append(roomba_pos)
-
-            out_msg = OdometryArray()
-            for pt in self.roombas:
+                # index = len(self.odom_array.data)
                 item = Odometry()
                 item.header.frame_id = "map"
-                item.pose.pose.position = pt
-                out_msg.data.append(item) 
-            self.publisher.publish(out_msg)
-
+                item.pose.pose.position = roomba_pos
+                self.odom_array.data.append(item)
+            self.publisher.publish(self.odom_array)
+            self.odom_lock.release()
                 
         self.debug.rviz_lines(points, 0)
 
@@ -356,6 +369,9 @@ class VideoProcessor(ImageRoombaFinder):
             cv2.waitKey(1)
 
 if __name__ == '__main__':
+    # Run as a node
+    rospy.init_node(NODE_NAME, anonymous=True)
+
     # Verify that the correct version of OpenCV is in use
     if cv2.__version__ != "2.4.13":
         raise SystemExit("You are using the incorrect version of OpenCV. " +
@@ -366,9 +382,17 @@ if __name__ == '__main__':
     # absolute path; do not use a tilda.
     # VideoProcessor("ABSOLUTE_PATH_TO_VIDEO.MP4")
 
-    # Run the main node functionality.
+    # Run the main node functionality on all the camera base topic provided as
+    # arguments to this node.
     # Change False to True to turn on debugging
-    CameraProcessor(False)
+    for i in xrange(1, len(argv)):
+        CameraProcessor(argv[i], False)
+
+    # Startup the loop
+    try:
+        rospy.spin()
+    except KeyboardInterrupt:
+        rospy.loginfo("Shutting down")
 
     # Make sure all the cv windows closed
     cv2.destroyAllWindows()
