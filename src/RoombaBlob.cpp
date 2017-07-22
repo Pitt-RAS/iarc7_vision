@@ -3,28 +3,34 @@
 namespace iarc7_vision
 {
 
+// inRange and medianBlur do not exist for the gpu
 void RoombaBlob::ThresholdFrame(const cv::Mat& image, cv::Mat& dst){
-    // std::vector<cv::Mat> bgr;
-    // cv::Mat antiblue = image.clone();
-    // cv::split(antiblue, bgr);
-    // cv::subtract(bgr[2], bgr[0], bgr[2]);
-    // cv::subtract(bgr[1], bgr[0], bgr[1]);
-    // bgr[0] = cv::Mat::zeros(image.rows, image.cols, CV_8UC1);
-    // cv::merge(bgr, antiblue);
-    // ROS_ERROR("There are now %d channels", antiblue.channels());
-    // cv::imshow("Anti blue", antiblue);
-
     cv::Mat hsv_image;
-    cv::cvtColor(image, hsv_image, cv::COLOR_BGR2HSV);
+    cv::cvtColor(image, hsv_image, cv::COLOR_RGB2HSV);
     cv::Mat hsv_channels[3];
     cv::split(hsv_image, hsv_channels);
-    cv::Mat dst3;
-    // Hue should be 57.43 / 180
-    cv::inRange(hsv_image, cv::Scalar(47, 20, 15), cv::Scalar(67,255,200), dst3);
-    cv::extractChannel(dst3, dst, 0);
+
+    dst = cv::Mat::zeros(image.rows, image.cols, CV_8U);
+    cv::Mat range_mask;
+    // Green slice (Hue should be 57.43 out of 180)
+    cv::inRange(hsv_image, cv::Scalar(47, 20, 15), cv::Scalar(67,255,200), range_mask);
+    cv::bitwise_or(dst, range_mask, dst);
+    // Upper red slice (Hue should be 3.14 out of 180)
+    cv::inRange(hsv_image, cv::Scalar(0, 20, 15), cv::Scalar(8,255,200), range_mask);
+    cv::bitwise_or(dst, range_mask, dst);
+    // Lower red slice (Hue should be 3.14 out of 180)
+    cv::inRange(hsv_image, cv::Scalar(170, 20, 15), cv::Scalar(180,255,200), range_mask);
+    cv::bitwise_or(dst, range_mask, dst);
+    // cv::inRange(hsv_image, cv::Scalar(47, 20, 15), cv::Scalar(67,255,200), dst);
+    // cv::extractChannel(dst3, dst, 0);
+    // ROS_ERROR("Number of channels: %d", dst.channels());
+
+    ROS_ASSERT(dst.channels() == 1);
+    
     cv::medianBlur(dst, dst, 5);
 }
 
+// findContours does not exist for the gpu
 void RoombaBlob::BoundMask(const cv::Mat& mask, cv::vector<cv::Rect>& boundRect){
     cv::vector<cv::vector<cv::Point>> contours;
     cv::findContours(mask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
