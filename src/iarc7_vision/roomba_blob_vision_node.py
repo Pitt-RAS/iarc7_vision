@@ -79,7 +79,7 @@ class Debugger(object):
         
     def image_grid(self, title, *args):
         """
-        Displays up to 4 images in a single window
+        Displays up to 4 RGB images in a single window.
 
         :param *args: Up to 4 numpy.ndarray images
         :return: None
@@ -87,6 +87,9 @@ class Debugger(object):
         .. note::
             All image arguments must have the same number of color channels,
             same dimensions, and same datatype. This is not validated.
+        .. note::
+            OpenCV imshow only displays BGR images, so this method has to
+            convert the RGB images before showing them.
         """
         if not self._image_enabled or len(args)==0:
             return
@@ -97,6 +100,7 @@ class Debugger(object):
         if len(args) < 3:
             row1 = cv2.resize(row1,None,fx=0.5,fy=0.5,
                               interpolation=cv2.INTER_CUBIC)
+            cv::cvtColor(row1, row1, cv::COLOR_RGB2BGR);
             cv2.imshow(title, row1)
         else:
             f3 = black if len(args) < 3 else args[2]
@@ -105,6 +109,7 @@ class Debugger(object):
             columns = np.vstack((row1,row2))
             columns = cv2.resize(columns,None,fx=0.5,fy=0.5, 
                               interpolation=cv2.INTER_CUBIC)
+            cv::cvtColor(columns, columns, cv::COLOR_RGB2BGR);
             cv2.imshow(title, columns)
         cv2.waitKey(1)
 
@@ -155,7 +160,7 @@ class ImageRoombaFinder(object):
         .. note::
             In OpenCV, the HSV ranges are [0,180], [0,255], [0,255].
         """
-        hsv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        hsv_image = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
         # Create black image the same size as frame
         out = np.zeros(frame.shape, dtype=frame.dtype)
         for r in ranges:
@@ -169,7 +174,7 @@ class ImageRoombaFinder(object):
         """
         Keep only the roombas in the frame
         
-        :param frame: raw BGR image in which to find roombas
+        :param frame: raw RGB image in which to find roombas
         :type frame: numpy.ndarray of shape 3 x WIDTH x HEIGHT with dtype uint8
         :return: filtered frame
         :rtype: numpy.ndarray of shape 3 x WIDTH x HEIGHT with dtype uint8
@@ -209,14 +214,14 @@ class ImageRoombaFinder(object):
     
         :param img_gray: single channel image used to find edges
         :type img_gray: numpy.ndarray of shape 1 x WIDTH x HEIGHT & dtype uint8
-        :param img: original three channel (BGR) image to draw boxes on
+        :param img: original three channel (RGB) image to draw boxes on
         :type img: numpy.ndarray of shape 3 x WIDTH x HEIGHT and dtype uint8
         :return: Iterator object containing (x, y) pairs
         """
         # remove everything from the original image that is not a roomba
         roombas = self.filter_roombas(frame)
         # convert original image to single channel
-        frame_gray = cv2.cvtColor(roombas, cv2.COLOR_BGR2GRAY)
+        frame_gray = cv2.cvtColor(roombas, cv2.COLOR_RGB2GRAY)
         # find the contours in this single channel image
         # RETR_EXTERNAL won't match boxes inside other boxes
         contours, _ = cv2.findContours(frame_gray,cv2.RETR_EXTERNAL,
@@ -285,10 +290,10 @@ class CameraProcessor(ImageRoombaFinder):
 
     def filter_frame(self, frame, trans):
         """
-        Applies a four-step algorithm to find all the roombas in a given BGR
+        Applies a four-step algorithm to find all the roombas in a given RGB
         image.
     
-        :param frame: raw BGR image in which to find roombas
+        :param frame: raw RGB image in which to find roombas
         :type frame: numpy.ndarray of shape 3 x WIDTH x HEIGHT with dtype uint8
         :return: None
     
