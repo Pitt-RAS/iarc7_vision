@@ -269,6 +269,8 @@ class CameraProcessor(ImageRoombaFinder):
         :return: None
         """
         try:
+            if rospy.Time.now() - data.header.stamp > 0.2:
+                return # Skip image if too old
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
             trans = self.tf_buffer.lookup_transform('map',
                                 data.header.frame_id, rospy.Time(0))
@@ -328,7 +330,6 @@ class CameraProcessor(ImageRoombaFinder):
             # TODO This can be improved
             self.odom_lock.acquire()
             sq_tolerance = 0.1 if len(self.odom_array.data) < 10 else 1000
-            # index = -1
             for i in xrange(len(self.odom_array.data)):
                 pt = self.odom_array.data[i].pose.pose.position
                 if (roomba_pos.x - pt.x)**2 + \
@@ -337,8 +338,8 @@ class CameraProcessor(ImageRoombaFinder):
                     # index = i
                     break
             else:
-                # index = len(self.odom_array.data)
                 item = Odometry()
+                item.child_frame_id = "roomba%d"%len(self.odom_array.data)
                 item.header.frame_id = "map"
                 item.pose.pose.position = roomba_pos
                 self.odom_array.data.append(item)
