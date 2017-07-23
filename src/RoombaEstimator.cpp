@@ -147,6 +147,8 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
                            settings.camera_canny_threshold);
 
         if(angle == -1) continue;
+        // divide by factor to convert coordinates back to original scaling
+        pos *= 1 / factor;
 
         nav_msgs::Odometry odom;
         CalcOdometry(pos, angle, odom);
