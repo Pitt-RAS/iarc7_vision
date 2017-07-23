@@ -1,5 +1,6 @@
 #include "iarc7_vision/RoombaEstimator.hpp"
 #include <cmath>
+#include <string>
 
 namespace iarc7_vision
 {
@@ -81,20 +82,22 @@ void RoombaEstimator::CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odom
 // This will get totally screwed when it finds all 10 Roombas
 void RoombaEstimator::ReportOdometry(nav_msgs::Odometry& odom){
     int index = -1;
-    float sq_tolerance = 0.254;
+    float sq_tolerance = 0.1; // Roomba diameter is 0.254 meters
     if(odom_vector.size()==10)
         sq_tolerance = 1000; // Impossible to attain, like my my love life
     for(unsigned int i=0;i<odom_vector.size();i++){
         float xdiff = odom.pose.pose.position.x - odom_vector[i].pose.pose.position.x;
         float ydiff = odom.pose.pose.position.y - odom_vector[i].pose.pose.position.y;
         if(xdiff*xdiff + ydiff*ydiff < sq_tolerance){
-            odom_vector[i] = odom;
             index = i;
+            odom.child_frame_id = "roomba" + std::to_string(index);
+            odom_vector[i] = odom;
             continue;
         }
     }
     if(index==-1){
         index = odom_vector.size();
+        odom.child_frame_id = "roomba" + std::to_string(index);
         odom_vector.push_back(odom);
     }
 }
