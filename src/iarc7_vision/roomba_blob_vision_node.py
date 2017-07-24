@@ -269,12 +269,14 @@ class CameraProcessor(ImageRoombaFinder):
         :return: None
         """
         try:
-            if rospy.Time.now() - data.header.stamp > 0.2:
+            if (rospy.Time.now() - data.header.stamp).to_sec() > 0.2:
                 return # Skip image if too old
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            # This should get the transform at the time of the image, but that
+            # causes errors
             trans = self.tf_buffer.lookup_transform('map',
                                 data.header.frame_id, rospy.Time(0))
-            self.filter_frame(cv_image, trans)
+            self.filter_frame(cv_image, trans, data.header.stamp)
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, \
                 tf2_ros.ExtrapolationException, CvBridgeError) as e:
             rospy.logerr(e)
@@ -285,7 +287,7 @@ class CameraProcessor(ImageRoombaFinder):
         self.odom_lock.release()
 
 
-    def filter_frame(self, frame, trans):
+    def filter_frame(self, frame, trans, stamp):
         """
         Applies a four-step algorithm to find all the roombas in a given BGR
         image.
@@ -327,21 +329,22 @@ class CameraProcessor(ImageRoombaFinder):
             points.append(roomba_pos)
 
             # Add the roomba to array and publish
-            # TODO This can be improved
             self.odom_lock.acquire()
             sq_tolerance = 0.1 if len(self.odom_array.data) < 10 else 1000
             for i in xrange(len(self.odom_array.data)):
                 pt = self.odom_array.data[i].pose.pose.position
                 if (roomba_pos.x - pt.x)**2 + \
                    (roomba_pos.y - pt.y)**2 < sq_tolerance:
+                    self.odom_array.data[i].header.stamp = stamp
                     self.odom_array.data[i].pose.pose.position = roomba_pos
-                    # index = i
                     break
             else:
                 item = Odometry()
                 item.child_frame_id = "roomba%d"%len(self.odom_array.data)
                 item.header.frame_id = "map"
+                item.header.stamp = stamp
                 item.pose.pose.position = roomba_pos
+                item.pose.pose.orientation.z = 1
                 self.odom_array.data.append(item)
             self.publisher.publish(self.odom_array)
             self.odom_lock.release()
