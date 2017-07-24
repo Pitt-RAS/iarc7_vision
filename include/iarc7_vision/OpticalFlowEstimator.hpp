@@ -45,6 +45,7 @@ struct OpticalFlowEstimatorSettings {
 struct OpticalFlowDebugSettings {
     bool debug_vectors_image;
     bool debug_average_vector_image;
+    bool debug_times;
 };
 
 class OpticalFlowEstimator {
@@ -52,7 +53,7 @@ class OpticalFlowEstimator {
     OpticalFlowEstimator(ros::NodeHandle nh,
                          const OpticalFlowEstimatorSettings& flow_estimator_settings,
                          const OpticalFlowDebugSettings& debug_settings);
-    void update(const sensor_msgs::Image::ConstPtr& message);
+    void update(const cv::Mat& frame, const ros::Time& time);
 
     bool waitUntilReady(const ros::Duration& startup_timeout);
 

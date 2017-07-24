@@ -140,11 +140,13 @@ bool OpticalFlowEstimator::waitUntilReady(const ros::Duration& startup_timeout) 
     return true;
 }
 
-void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
+void OpticalFlowEstimator::update(const cv::Mat& frame, const ros::Time& time)
 {
     int64 start = cv::getTickCount();
-    updateFilteredPosition(message->header.stamp + ros::Duration(flow_estimator_settings_.orientation_image_time_offset));
-    ROS_WARN("updateFilteredPosition: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+    updateFilteredPosition(time + ros::Duration(flow_estimator_settings_.orientation_image_time_offset));
+    if (debug_settings_.debug_times) {
+        ROS_WARN("updateFilteredPosition: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+    }
 
     if (last_filtered_position_.point.z
             >= flow_estimator_settings_.min_estimation_altitude) {
@@ -152,13 +154,18 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         if (ran_once) {
             try {
                 // Variables needed for estimate velocity
-                cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
+                cv::Mat curr_image = frame;
                 geometry_msgs::TwistWithCovarianceStamped velocity;
 
-                ROS_WARN("pre estimateVelocity: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
-                estimateVelocity(velocity, curr_image, last_filtered_position_.point.z, message->header.stamp);
-                ROS_WARN("post estimateVelocity: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+                if (debug_settings_.debug_times) {
+                    ROS_WARN("pre estimateVelocity: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+                }
+                estimateVelocity(velocity, curr_image, last_filtered_position_.point.z, time);
+                if (debug_settings_.debug_times) {
+                    ROS_WARN("post estimateVelocity: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+                }
 
+                //velocity.header.stamp = ros::Time::now();
                 twist_pub_.publish(velocity);
 
             } catch (const std::exception& ex) {
@@ -168,7 +175,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         }
         else {
             // TODO almost identical code is run when the scale is changed. Maybe make this a function?
-            cv::Mat image = cv_bridge::toCvShare(message)->image;
+            cv::Mat image = frame;
 
             // Create the first last image
             cv::Size image_size = image.size();
@@ -187,7 +194,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
             cv::gpu::cvtColor(scaled_image,
                               scaled_grayscale_image,
-                              CV_RGBA2GRAY);
+                              CV_BGR2GRAY);
 
             last_scaled_image_ = scaled_image;
             last_scaled_grayscale_image_ = scaled_grayscale_image;
@@ -196,7 +203,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         }
 
         // Always save off the last message time
-        last_message_time_ = message->header.stamp;
+        last_message_time_ = time;
 
     } else {
         ROS_WARN("Height (%f) is below min processing height (%f)",
@@ -238,7 +245,7 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
             cv::gpu::cvtColor(scaled_image,
                               scaled_grayscale_image,
-                              CV_RGBA2GRAY);
+                              CV_BGR2GRAY);
 
             last_scaled_image_ = scaled_image;
             last_scaled_grayscale_image_ = scaled_grayscale_image;
@@ -256,12 +263,16 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::gpu::resize(d_frame1_big,
                         d_frame1,
                         image_size);
-        ROS_WARN("post resize: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        if (debug_settings_.debug_times) {
+            ROS_WARN("post resize: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        }
 
         cv::gpu::cvtColor(d_frame1,
                           d_frame1Gray,
-                          CV_RGBA2GRAY);
-        ROS_WARN("post cvtColor: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+                          CV_BGR2GRAY);
+        if (debug_settings_.debug_times) {
+            ROS_WARN("post cvtColor: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        }
 
         // Create the feature detector and perform feature detection
         cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
@@ -271,7 +282,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::gpu::GpuMat d_prevPts;
 
         detector(last_scaled_grayscale_image_, d_prevPts);
-        ROS_WARN("post detector: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        if (debug_settings_.debug_times) {
+            ROS_WARN("post detector: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        }
 
         // Create optical flow object
         cv::gpu::PyrLKOpticalFlow d_pyrLK;
@@ -285,7 +298,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::gpu::GpuMat d_status;
 
         d_pyrLK.sparse(last_scaled_image_, d_frame1, d_prevPts, d_nextPts, d_status);
-        ROS_WARN("PYRLK sparse: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        if (debug_settings_.debug_times) {
+            ROS_WARN("PYRLK sparse: %f", (cv::getTickCount() - start) / cv::getTickFrequency());
+        }
 
         // Save off the current image
         last_scaled_image_ = d_frame1;
@@ -362,10 +377,6 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         correction_vel.y = distance_to_plane *
                            angular_vel_x * cos(r);
 
-        double hack_factor = 1.5;
-        correction_vel.x *= hack_factor;
-        correction_vel.y *= hack_factor;
-
         cv::Point2f corrected_vel;
         corrected_vel.x = velocity_uncorrected.x - correction_vel.x;
         corrected_vel.y = velocity_uncorrected.y - correction_vel.y;
@@ -374,6 +385,7 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         last_r_ = r;
 
         // Fill out the twist
+        //ROS_ERROR("%f", flow_estimator_settings_.published_velocity_time_offset);
         twist.header.stamp = time + ros::Duration(flow_estimator_settings_.published_velocity_time_offset);
         twist.header.frame_id = "level_quad";
         twist.twist.twist.linear.x = std::cos(y + M_PI) * -corrected_vel.x - std::sin(y + M_PI) * corrected_vel.y;
@@ -413,7 +425,7 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
                 cv_bridge::CvImage cv_image {
                     std_msgs::Header(),
-                    sensor_msgs::image_encodings::RGBA8,
+                    sensor_msgs::image_encodings::BGR8,
                     arrow_image
                 };
 
@@ -443,7 +455,7 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
                 cv_bridge::CvImage cv_image {
                     std_msgs::Header(),
-                    sensor_msgs::image_encodings::RGBA8,
+                    sensor_msgs::image_encodings::BGR8,
                     arrow_image
                 };
 

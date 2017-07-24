@@ -4,7 +4,7 @@ optical_flow_estimator:
     pixels_per_meter: 250
 
     # fov of the camera
-    fov: 1.64
+    fov: 1.07
 
     # Minimum altitude to run the detector
     min_estimation_altitude: 0.15
@@ -37,6 +37,8 @@ optical_flow_estimator:
     # Publish image with average velocity vector drawn on it
     debug_average_vector_image: true
 
+    debug_times: false
+
     # Frames to skip before publishing debug images
     debug_frameskip: 6
 
@@ -44,15 +46,17 @@ optical_flow_estimator:
     imu_update_timeout: 0.3
 
     # Min variance to send with velocity measurements
-    variance: 4
+    variance: 1.0
 
     # What to scale the variance on according to the rotation rate
-    variance_scale: 1.0
+    # 0.3s/90deg
+    variance_scale: 0.19
 
     # Cutoff area where velocity vectors aren't included in the average
     x_cutoff_region_velocity_measurement: 0.2
     y_cutoff_region_velocity_measurement: 0.2
 
-    orientation_image_time_offset: 0.02
+    orientation_image_time_offset: -0.075
 
-    published_velocity_time_offset: -0.3
+    published_velocity_time_offset: -0.25
+

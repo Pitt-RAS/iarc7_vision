@@ -8,4 +8,4 @@ line_extractor:
     hough_rho_resolution: 0.4
     hough_theta_resolution: 0.0087
     hough_thresh_fraction: 0.3
-    fov: 1.64
+    fov: 1.07

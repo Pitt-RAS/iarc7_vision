@@ -12,10 +12,10 @@ grid_estimator:
     grid_step: 0.01
 
     # Distance between the center of one gridline and the center of the next
-    grid_spacing: 0.458
+    grid_spacing: 0.81
 
     # Thickness of each gridline
-    grid_line_thickness: 0.038
+    grid_line_thickness: 0.0686
 
     # (x-location of gridline intersection) - (x-location of origin)
     grid_zero_offset_x: 0

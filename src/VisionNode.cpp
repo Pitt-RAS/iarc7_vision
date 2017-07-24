@@ -9,6 +9,7 @@
 #include <limits>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/opencv.hpp>
 #include <ros/ros.h>
 
 #include <dynamic_reconfigure/server.h>
@@ -281,6 +282,10 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
         "optical_flow_estimator/debug_average_vector_image",
         settings.debug_average_vector_image));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/debug_times",
+        settings.debug_times));
 }
 
 int main(int argc, char **argv)
@@ -364,29 +369,41 @@ int main(int argc, char **argv)
         &std::function<void(const sensor_msgs::Image::ConstPtr&)>::operator(),
         &handler);
 
+    cv::VideoCapture cap(0);
+    if (!cap.isOpened()) return 1;
+    cap.set(CV_CAP_PROP_FRAME_WIDTH, 640);
+    cap.set(CV_CAP_PROP_FRAME_HEIGHT, 360);
+//    cap.set(CV_CAP_PROP_FOURCC, CV_FOURCC('Y', 'U', 'Y', 'V'));
+    //cap.set(CV_CAP_PROP_FPS, 10);
+
     // Main loop
     while (ros::ok())
     {
-        if (message_queue.size() > 0) {
+        cv::Mat frame;
+        cap >> frame;
+        ros::Time time = ros::Time::now();
 
-            sensor_msgs::Image::ConstPtr message;
-            if (static_cast<int>(message_queue.size()) > message_queue_item_limit) {
-                ROS_ERROR("Image queue has too many messages, clearing: %d images", (int)message_queue.size());
+        //if (message_queue.size() > 0) {
 
-                message = message_queue.back();
-                message_queue.clear();
-            }
-            else {
-                message = message_queue.front();
-                message_queue.erase(message_queue.begin());
-            }
+        //    sensor_msgs::Image::ConstPtr message;
+        //    if (static_cast<int>(message_queue.size()) > message_queue_item_limit) {
+        //        ROS_ERROR("Image queue has too many messages, clearing: %d images", (int)message_queue.size());
 
-            // Don't use the gridline estimator right now for speed reasons
-            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                                      message->header.stamp);
+        //        message = message_queue.back();
+        //        message_queue.clear();
+        //    }
+        //    else {
+        //        message = message_queue.front();
+        //        message_queue.erase(message_queue.begin());
+        //    }
 
-            optical_flow_estimator.update(message);
-        }
+        //    // Don't use the gridline estimator right now for speed reasons
+        //    gridline_estimator.update(cv_bridge::toCvShare(message)->image,
+        //                              message->header.stamp);
+
+        //    optical_flow_estimator.update(message);
+        //}
+        optical_flow_estimator.update(frame, time);
 
         ros::spinOnce();
         rate.sleep();
