@@ -45,7 +45,7 @@ class RoombaEstimator{
     private:
         void getSettings(const ros::NodeHandle& private_nh);
         float getHeight(const ros::Time& time);
-        void CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odometry& out);
+        void CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odometry& out, const ros::Time& time);
         void ReportOdometry(nav_msgs::Odometry& odom);
         void PublishOdometry();
         image_geometry::PinholeCameraModel bottom_camera;

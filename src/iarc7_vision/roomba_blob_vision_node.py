@@ -390,7 +390,8 @@ if __name__ == '__main__':
     # arguments to this node.
     # Change False to True to turn on debugging
     for i in xrange(1, len(argv)):
-        CameraProcessor(argv[i], False)
+        if "camera" in argv[i]:
+            CameraProcessor(argv[i], True)
 
     # Startup the loop
     try:

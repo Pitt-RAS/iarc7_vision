@@ -1,6 +1,7 @@
 #include "iarc7_vision/RoombaEstimator.hpp"
 #include <cmath>
 #include <string>
+#include <tf/transform_datatypes.h>
 
 namespace iarc7_vision
 {
@@ -54,7 +55,7 @@ float RoombaEstimator::getHeight(const ros::Time& time){
     return cam_tf.transform.translation.z;
 }
 
-void RoombaEstimator::CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odometry& out){
+void RoombaEstimator::CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odometry& out, const ros::Time& time){
     geometry_msgs::Vector3 cam_pos = cam_tf.transform.translation;
 
     cv::Point3d cv_cam_ray = bottom_camera.projectPixelTo3dRay(pos);
@@ -74,9 +75,9 @@ void RoombaEstimator::CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odom
     position.z = 0;
 
     out.header.frame_id = "map";
+    out.header.stamp = time;
     out.pose.pose.position = position;
-    out.pose.pose.orientation.z = 1.0;
-    out.pose.pose.orientation.w = angle * 3.14159265358979323846264338327950288 / 90.0;
+    out.pose.pose.orientation = tf::createQuaternionMsgFromYaw(angle * 3.141592653589 / 90.0);
 }
 
 // This will get totally screwed when it finds all 10 Roombas
@@ -149,14 +150,6 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
         angle = ght.detect(frame, boundRect[i], pos,
                            settings.camera_canny_threshold);
 
-        if(angle == -1) continue;
-        // divide by factor to convert coordinates back to original scaling
-        pos *= 1 / factor;
-
-        nav_msgs::Odometry odom;
-        CalcOdometry(pos, angle, odom);
-        ReportOdometry(odom);
-        
         cv::Point2f P2;
         P2.x =  (int)round(pos.x + 100 * cos(angle * CV_PI / 180.0));
         P2.y =  (int)round(pos.y + 100 * sin(angle * CV_PI / 180.0));
@@ -174,6 +167,15 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
         cv::line(frame, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
         cv::line(frame, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
         cv::line(frame, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
+
+        if(angle == -1) continue;
+        // divide by factor to convert coordinates back to original scaling
+        pos *= 1 / factor;
+
+        nav_msgs::Odometry odom;
+        CalcOdometry(pos, angle, odom, time);
+        ReportOdometry(odom);
+        
     }
 
 
