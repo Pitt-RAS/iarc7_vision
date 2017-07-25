@@ -62,6 +62,13 @@ void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh){
             bottom_camera_aov));
 }
 
+void RoombaEstimator::OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg){
+    mtx.lock();
+    odom_vector = msg.data;
+    mtx.unlock();
+    ROS_ERROR_STREAM( "Odom Array Updated.");
+}
+
 float RoombaEstimator::getHeight(const ros::Time& time){
     if (!transform_wrapper_.getTransformAtTime(cam_tf,
                                                "map",
@@ -162,6 +169,7 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
     bounder.detect(frame, boundRect);
     bounder.DilateBounds(frame, boundRect);
 
+    mtx.lock();
     // Run the GHT on each blob
     for(unsigned int i=0;i<boundRect.size();i++){
         angle = ght.detect(frame, boundRect[i], pos,
@@ -194,16 +202,10 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
         
     }
 
-
   // publish
   PublishOdometry();
+  mtx.unlock();
 
-
-
-  // DEBUGGING
-  // for(unsigned int i=0;i<boundRect.size();i++){
-  //     cv::rectangle(frame, boundRect[i].tl(), boundRect[i].br(), cv::Scalar(255), 2, 8, 0);
-  // }
   cv::imshow("Frame", frame);
   cv::waitKey(2);
 }

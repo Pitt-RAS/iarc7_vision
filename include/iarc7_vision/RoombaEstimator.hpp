@@ -20,6 +20,8 @@
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Vector3Stamped.h>
 
+#include <mutex>
+
 
 namespace iarc7_vision
 {
@@ -39,10 +41,11 @@ struct RoombaEstimatorSettings {
 class RoombaEstimator{
     public:
         RoombaEstimator(ros::NodeHandle nh, const ros::NodeHandle& private_nh);
-        void CameraInfoCallback(const sensor_msgs::CameraInfoConstPtr& msg);
+        void OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg);
         void update(const cv::Mat& image, const ros::Time& time);
     private:
-        void pixelToRay(double px, double py, double pw, double ph, geometry_msgs::Vector3Stamped& ray);
+        void pixelToRay(double px, double py, double pw, double ph,
+                        geometry_msgs::Vector3Stamped& ray);
         void getSettings(const ros::NodeHandle& private_nh);
         float getHeight(const ros::Time& time);
         void CalcOdometry(cv::Point2f& pos, double pw, double ph, float angle,
@@ -57,6 +60,7 @@ class RoombaEstimator{
         RoombaBlob bounder;
         RoombaGHT ght;
         double bottom_camera_aov;
+        std::mutex mtx;
 };
 
 }
