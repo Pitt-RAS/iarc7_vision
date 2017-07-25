@@ -249,8 +249,11 @@ class ImageRoombaFinder(object):
         frame_gray = cv2.cvtColor(roombas, cv2.COLOR_BGR2GRAY)
         # find the contours in this single channel image
         # RETR_EXTERNAL won't match boxes inside other boxes
-        contours, _ = cv2.findContours(frame_gray,cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
+        results = cv2.findContours(frame_gray, cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_SIMPLE)
+        if cv2.__version__[0] == 3:
+            results.pop(0)
+        contours, _ = results
         for c in contours:
             rect = cv2.boundingRect(c)
             # Skip tiny boxes
@@ -402,11 +405,6 @@ if __name__ == '__main__':
     # Run as a node
     rospy.init_node(NODE_NAME, anonymous=True)
 
-    # Verify that the correct version of OpenCV is in use
-    if cv2.__version__ != "2.4.13":
-        raise SystemExit("You are using the incorrect version of OpenCV. " +
-                         "You should be using version 2.4.13, but you are " +
-                         "using version %s."%cv2.__version__)
     # Uncomment the following line to run on a sample video, and comment out
     # the CameraProcessor line below. You must pass this initializer an
     # absolute path; do not use a tilda.
