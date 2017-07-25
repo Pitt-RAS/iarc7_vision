@@ -6,6 +6,25 @@
 namespace iarc7_vision
 {
 
+void RoombaEstimator::pixelToRay(double px, double py, double pw, double ph, geometry_msgs::Vector3Stamped& ray){
+    px -= pw * 0.5;
+    py -= ph * 0.5;
+
+    double pix_r = std::sqrt( px*px + py*py );
+    double pix_R = std::sqrt( ph*ph + pw*pw ) * 0.5;
+
+    double max_phi = bottom_camera_aov * 3.141592653589 / 360;
+    double pix_focal = pix_R / tan( max_phi );
+    double theta = atan2( py, px );
+
+    double camera_focal = -1;
+    double camera_radius = camera_focal * pix_r / pix_focal;
+
+    ray.vector.x = camera_radius * cos( theta );
+    ray.vector.y = camera_radius * sin( theta );
+    ray.vector.z = camera_focal;
+}
+
 RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
                   const ros::NodeHandle& private_nh) : transform_wrapper_()
 {
@@ -38,10 +57,9 @@ void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh){
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/template_canny_threshold",
             settings.template_canny_threshold));
-}
-
-void RoombaEstimator::CameraInfoCallback(const sensor_msgs::CameraInfoConstPtr& msg){
-    bottom_camera.fromCameraInfo(msg);
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/bottom_camera_aov",
+            bottom_camera_aov));
 }
 
 float RoombaEstimator::getHeight(const ros::Time& time){
@@ -55,14 +73,12 @@ float RoombaEstimator::getHeight(const ros::Time& time){
     return cam_tf.transform.translation.z;
 }
 
-void RoombaEstimator::CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odometry& out, const ros::Time& time){
+void RoombaEstimator::CalcOdometry(cv::Point2f& pos, double pw, double ph, float angle, nav_msgs::Odometry& out, const ros::Time& time){
     geometry_msgs::Vector3 cam_pos = cam_tf.transform.translation;
 
-    cv::Point3d cv_cam_ray = bottom_camera.projectPixelTo3dRay(pos);
+
     geometry_msgs::Vector3Stamped camera_ray;
-    camera_ray.vector.x = cv_cam_ray.x;
-    camera_ray.vector.y = cv_cam_ray.y;
-    camera_ray.vector.z = cv_cam_ray.z;
+    pixelToRay(pos.x, pos.y, pw, ph, camera_ray);
 
     geometry_msgs::Vector3Stamped map_ray;
     tf2::doTransform(camera_ray, map_ray, cam_tf);
@@ -116,9 +132,6 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
     if(image.empty())
         return;
 
-    if(!bottom_camera.initialized())
-        return;
-
     float height = getHeight(time);
 
     if(height < 0.01)
@@ -130,9 +143,13 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
     float angle = 0;
 
     // Calculate the world field of view in meters and use to resize the image
-    cv::Point3d a = bottom_camera.projectPixelTo3dRay(cv::Point2d(0,0));
-    cv::Point3d b = bottom_camera.projectPixelTo3dRay(cv::Point2d(0,image.cols));
-    float distance = cv::sqrt((a.y-b.y)*(a.y-b.y) + (a.x-b.x)*(a.x-b.x));
+    geometry_msgs::Vector3Stamped a;
+    geometry_msgs::Vector3Stamped b;
+    pixelToRay(0,0,image.cols,image.rows,a);
+    pixelToRay(0,image.cols,image.cols,image.rows,b);
+
+    float distance = std::sqrt((a.vector.y-b.vector.y)*(a.vector.y-b.vector.y)
+                            + (a.vector.x-b.vector.x)*(a.vector.x-b.vector.x));
 
     distance *= height;
     float desired_width = settings.pixels_per_meter * distance;
@@ -170,10 +187,9 @@ void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
 
         if(angle == -1) continue;
         // divide by factor to convert coordinates back to original scaling
-        pos *= 1 / factor;
 
         nav_msgs::Odometry odom;
-        CalcOdometry(pos, angle, odom, time);
+        CalcOdometry(pos, frame.cols, frame.rows, angle, odom, time);
         ReportOdometry(odom);
         
     }

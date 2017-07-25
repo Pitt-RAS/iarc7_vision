@@ -14,7 +14,6 @@
 #include "iarc7_vision/RoombaGHT.hpp"
 
 #include <sensor_msgs/CameraInfo.h>
-#include <image_geometry/pinhole_camera_model.h>
 #include <nav_msgs/Odometry.h>
 #include <iarc7_msgs/OdometryArray.h>
 #include <geometry_msgs/Point.h>
@@ -43,12 +42,13 @@ class RoombaEstimator{
         void CameraInfoCallback(const sensor_msgs::CameraInfoConstPtr& msg);
         void update(const cv::Mat& image, const ros::Time& time);
     private:
+        void pixelToRay(double px, double py, double pw, double ph, geometry_msgs::Vector3Stamped& ray);
         void getSettings(const ros::NodeHandle& private_nh);
         float getHeight(const ros::Time& time);
-        void CalcOdometry(cv::Point2f& pos, float angle, nav_msgs::Odometry& out, const ros::Time& time);
+        void CalcOdometry(cv::Point2f& pos, double pw, double ph, float angle,
+                          nav_msgs::Odometry& out, const ros::Time& time);
         void ReportOdometry(nav_msgs::Odometry& odom);
         void PublishOdometry();
-        image_geometry::PinholeCameraModel bottom_camera;
         ros_utils::SafeTransformWrapper transform_wrapper_;
         geometry_msgs::TransformStamped cam_tf;
         ros::Publisher roomba_pub;
@@ -56,6 +56,7 @@ class RoombaEstimator{
         RoombaEstimatorSettings settings;
         RoombaBlob bounder;
         RoombaGHT ght;
+        double bottom_camera_aov;
 };
 
 }

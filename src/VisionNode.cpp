@@ -395,11 +395,6 @@ int main(int argc, char **argv)
         "/bottom_image_raw/image_raw",
         100,
         image_msg_handler);
-    ros::Subscriber sub2 = nh.subscribe(
-        "/bottom_camera/camera/camera_info",
-        10,
-        &iarc7_vision::RoombaEstimator::CameraInfoCallback,
-        &roomba_estimator);
 
     // Main loop
     while (ros::ok())
