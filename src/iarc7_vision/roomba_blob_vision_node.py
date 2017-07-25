@@ -66,6 +66,36 @@ NODE_NAME = "roomba_blob_vision_node"
 # From: iarc7_simulator/sim/src/sim/builder/robots/Roomba.py
 ROOMBA_HEIGHT = 0.065
 
+def pixel_to_ray(image_coords, image_shape, daov):
+    """
+    Convert 2D pixel coordinates to 3D ray
+
+    :param image_coords: (x,y) coordinates of the pixel
+    :param image_shape: numpy.shape in the form (rows, cols, channels)
+    :param daov: Diagonal angle of view in degrees
+    :return: direction from image pixels
+    """
+    rows = 1.*image_shape[0]
+    cols = 1.*image_shape[1]
+    pix_x = 1.*image_coords[0] - cols * 0.5
+    pix_y = 1.*image_coords[1] - rows * 0.5
+
+    pix_r = math.sqrt( pix_x*pix_x + pix_y*pix_y )
+    PR = math.sqrt( rows*rows + cols*cols ) * 0.5
+
+    max_phi = math.radians(daov * 0.5)
+    pix_focal = PR / math.tan(max_phi)
+    theta = math.atan2(pix_y, pix_x)
+
+    camera_focal = -1
+    camera_radius = camera_focal * pix_r / pix_focal
+
+    direction = Vector3Stamped()
+    direction.vector.x = camera_radius * math.cos( theta )
+    direction.vector.y = camera_radius * math.sin( theta )
+    direction.vector.z = camera_focal
+    return direction
+
 class Debugger(object):
     
     def __init__(self, image_on=True, rviz_on=True):
@@ -243,7 +273,8 @@ class CameraProcessor(ImageRoombaFinder):
         self.odom_lock = threading.Lock()
 
         self.bridge = CvBridge()
-        self.camera = image_geometry.PinholeCameraModel()
+
+        self.daov = rospy.get_param("~roomba_estimator_settings/%s_aov"%base_topic)
 
         self.tf_buffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tf_buffer)
@@ -252,8 +283,6 @@ class CameraProcessor(ImageRoombaFinder):
                                         rospy.Time(0), rospy.Duration(3.0))
 
         rospy.Subscriber("/{}/rgb/image_raw".format(base_topic), Image, self.callback)
-        rospy.Subscriber("/{}/rgb/camera_info".format(base_topic), CameraInfo,
-                         self.camera.fromCameraInfo)
         rospy.Subscriber("/roombas", OdometryArray, self.roombas_callback)
         self.publisher = rospy.Publisher("/roombas", OdometryArray,
                                          queue_size=10)
@@ -305,10 +334,7 @@ class CameraProcessor(ImageRoombaFinder):
         points = []
     
         for img_coords in self.bound_roombas(frame):
-            cam_ray = Vector3Stamped()
-            cam_ray.vector.x, cam_ray.vector.y, cam_ray.vector.z = \
-                                    self.camera.projectPixelTo3dRay(img_coords)
-            
+            cam_ray = pixel_to_ray(img_coords, frame.shape, self.daov)
             # Convert that camera ray to world space (map frame)
             # See note in script header about do_transform_vector3
             map_ray = tf2_geometry_msgs.do_transform_vector3(cam_ray,

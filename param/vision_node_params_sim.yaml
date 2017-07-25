@@ -72,3 +72,16 @@ roomba_estimator_settings:
     ght_votes_threshold: 15
     camera_canny_threshold: 160
     template_canny_threshold: 100
+    # Camera settings
+    # https://en.wikipedia.org/wiki/LifeCam#HD-6000
+
+    # Camera diagonal angle of view settings
+    #   E-con DFOV: 93.5 deg
+    #  Genius DFOV:  120 deg
+    #    C920 DFOV:   78 deg
+    # Lifecam DFOV:   66 deg
+    bottom_camera_aov: 78.0
+    front_camera_aov: 93.5
+    left_camera_aov: 93.5
+    right_camera_aov: 93.5
+    back_camera_aov: 93.5

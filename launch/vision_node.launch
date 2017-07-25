@@ -1,6 +1,10 @@
 <launch>
     <arg name="platform" default="1.0" />
 
+    <node pkg="iarc7_vision" type="roomba_blob_vision_node.py" name="roomba_blob_vision_node" args="bottom_camera">
+        <rosparam command="load" file="$(find iarc7_vision)/param/vision_node_params_$(arg platform).yaml" />
+    </node>
+
     <node pkg="iarc7_vision" type="iarc7_vision_node" name="iarc7_vision_node">
 
         <rosparam command="load" file="$(find iarc7_vision)/param/vision_node_params_$(arg platform).yaml" />
