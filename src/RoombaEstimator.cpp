@@ -81,8 +81,8 @@ float RoombaEstimator::getHeight(const ros::Time& time){
 }
 
 void RoombaEstimator::CalcOdometry(cv::Point2f& pos, double pw, double ph, float angle, nav_msgs::Odometry& out, const ros::Time& time){
+    float rads = angle * 3.141592653589 / 90.0;
     geometry_msgs::Vector3 cam_pos = cam_tf.transform.translation;
-
 
     geometry_msgs::Vector3Stamped camera_ray;
     pixelToRay(pos.x, pos.y, pw, ph, camera_ray);
@@ -97,10 +97,16 @@ void RoombaEstimator::CalcOdometry(cv::Point2f& pos, double pw, double ph, float
     position.y = cam_pos.y + map_ray.vector.y * ray_scale;
     position.z = 0;
 
+    geometry_msgs::Vector3 linear;
+    linear.x = 0.3 * cos(rads);
+    linear.y = 0.3 * sin(rads);
+    linear.z = 0;
+
     out.header.frame_id = "map";
     out.header.stamp = time;
     out.pose.pose.position = position;
-    out.pose.pose.orientation = tf::createQuaternionMsgFromYaw(angle * 3.141592653589 / 90.0);
+    out.pose.pose.orientation = tf::createQuaternionMsgFromYaw(rads);
+    out.twist.twist.linear = linear;
 }
 
 // This will get totally screwed when it finds all 10 Roombas
