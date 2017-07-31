@@ -403,6 +403,8 @@ int main(int argc, char **argv)
 
         //    optical_flow_estimator.update(message);
         //}
+            gridline_estimator.update(frame,
+                                      time);
         optical_flow_estimator.update(frame, time);
 
         ros::spinOnce();

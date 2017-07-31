@@ -34,23 +34,23 @@
 #include <iarc7_msgs/Float64Stamped.h>
 #include <visualization_msgs/Marker.h>
 
-static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
-{
-    for (auto& line : lines) {
-        float rho = line[0], theta = line[1];
-        cv::Point pt1, pt2;
-        double a = cos(theta);
-        double b = sin(theta);
-        double x0 = image.size().width/2 + a*rho;
-        double y0 = image.size().height/2 + b*rho;
-        double line_dist = 4*std::max(image.size().width, image.size().height);
-        pt1.x = cvRound(x0 + line_dist*(-b));
-        pt1.y = cvRound(y0 + line_dist*(a));
-        pt2.x = cvRound(x0 - line_dist*(-b));
-        pt2.y = cvRound(y0 - line_dist*(a));
-        cv::line(image, pt1, pt2, cv::Scalar(0, 0, 255), 3, CV_AA);
-    }
-}
+//static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
+//{
+//    for (auto& line : lines) {
+//        float rho = line[0], theta = line[1];
+//        cv::Point pt1, pt2;
+//        double a = cos(theta);
+//        double b = sin(theta);
+//        double x0 = image.size().width/2 + a*rho;
+//        double y0 = image.size().height/2 + b*rho;
+//        double line_dist = 4*std::max(image.size().width, image.size().height);
+//        pt1.x = cvRound(x0 + line_dist*(-b));
+//        pt1.y = cvRound(y0 + line_dist*(a));
+//        pt2.x = cvRound(x0 - line_dist*(-b));
+//        pt2.y = cvRound(y0 - line_dist*(a));
+//        cv::line(image, pt1, pt2, cv::Scalar(0, 0, 255), 3, CV_AA);
+//    }
+//}
 
 /// Chi^2 loss function, where the distance measurement for each datapoint
 /// is the distance from the point to the closest of the four vectors
@@ -314,8 +314,8 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         line[0] -= corner_to_center.dot(normal_dir);
     }
 
-    static int skipped_frames = 0;
-    if(skipped_frames == 0) {
+    //static int skipped_frames = 0;
+    //if(skipped_frames == 0) {
         if (debug_settings_.debug_edges) {
             cv_bridge::CvImage cv_image {
                 std_msgs::Header(),
@@ -328,7 +328,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
         if (debug_settings_.debug_lines) {
             cv::Mat image_lines = image.clone();
-            drawLines(lines, image_lines);
+            //drawLines(lines, image_lines);
             cv_bridge::CvImage cv_image {
                 std_msgs::Header(),
                 sensor_msgs::image_encodings::RGBA8,
@@ -336,8 +336,8 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
             };
             debug_lines_pub_.publish(cv_image.toImageMsg());
         }
-    }
-    skipped_frames = (skipped_frames+1)%6;
+    //}
+    //skipped_frames = (skipped_frames+1)%6;
 }
 
 void GridLineEstimator::getPlanesForImageLines(

@@ -30,7 +30,7 @@ grid_estimator:
     line_rejection_angle_threshold: 0.262 # pi/12
 
     # Minimum altitude to run the detector
-    min_extraction_altitude: 0.1
+    min_extraction_altitude: 0.4
 
     # Allowed lag between available position and frame timestamp
     allowed_position_stamp_error: 0.1
