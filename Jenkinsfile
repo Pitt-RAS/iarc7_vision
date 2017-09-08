@@ -19,7 +19,7 @@ pipeline {
                     catkin_make
                     source devel/setup.bash
                     cd src
-                    ln -s $WORKSPACE .
+                    ln -s $WORKSPACE jenkins_test_package
                     '''
             }
         }
