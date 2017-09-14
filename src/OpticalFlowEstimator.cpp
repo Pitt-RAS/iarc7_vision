@@ -17,6 +17,7 @@
 
 #include <geometry_msgs/Vector3Stamped.h>
 #include <iarc7_msgs/Float64Stamped.h>
+#include <iarc7_msgs/OrientationAnglesStamped.h>
 #include <visualization_msgs/Marker.h>
 
 #include "tf2/LinearMath/Matrix3x3.h"
@@ -121,6 +122,11 @@ OpticalFlowEstimator::OpticalFlowEstimator(
     twist_pub_
         = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist",
                                                                        10);
+
+    orientation_pub_ =
+            local_nh.advertise<iarc7_msgs::OrientationAnglesStamped>(
+                "orientation",
+                10);
     correction_pub_ = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist_correction", 10);
     raw_pub_ = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>("twist_raw", 10);
 }
@@ -308,6 +314,13 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         matrix.setRotation(orientation);
         double y, p, r;
         matrix.getEulerYPR(y, p, r);
+
+        iarc7_msgs::OrientationAnglesStamped ori_msg;
+        ori_msg.header.stamp = time;
+        ori_msg.data.pitch = p;
+        ori_msg.data.roll = r;
+        ori_msg.data.yaw = y;
+        orientation_pub_.publish(ori_msg);
 
         // m/px = camera_height / focal_length;
         // In the projected camera plane

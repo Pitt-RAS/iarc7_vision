@@ -104,6 +104,7 @@ class OpticalFlowEstimator {
 
     ros::Time last_message_time_;
 
+    ros::Publisher orientation_pub_;
     ros::Publisher correction_pub_;
     ros::Publisher raw_pub_;
 
