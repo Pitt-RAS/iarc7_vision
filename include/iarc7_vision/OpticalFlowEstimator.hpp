@@ -35,7 +35,8 @@ struct OpticalFlowEstimatorSettings {
     double imu_update_timeout;
     double variance;
     double variance_scale;
-    double cutoff_region_velocity_measurement;
+    double x_cutoff_region_velocity_measurement;
+    double y_cutoff_region_velocity_measurement;
     int debug_frameskip;
 };
 
@@ -70,7 +71,8 @@ class OpticalFlowEstimator {
     cv::Point2f findAverageVector(const std::vector<cv::Point2f>& prevPts,
                                   const std::vector<cv::Point2f>& nextPts,
                                   const std::vector<uchar>& status,
-                                  const double cutoff,
+                                  const double x_cutoff,
+                                  const double y_cutoff,
                                   const cv::Size& image_size);
 
     const OpticalFlowEstimatorSettings& flow_estimator_settings_;

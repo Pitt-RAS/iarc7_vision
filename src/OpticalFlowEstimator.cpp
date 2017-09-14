@@ -297,8 +297,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         cv::Point2f average_vec = findAverageVector(prevPts,
                                                     nextPts,
                                                     status,
-                                                    flow_estimator_settings_.
-                                                    cutoff_region_velocity_measurement,
+                                                    flow_estimator_settings_.x_cutoff_region_velocity_measurement,
+                                                    flow_estimator_settings_.y_cutoff_region_velocity_measurement,
                                                     image_size);
 
         // Get the pitch and roll of the camera in eular angles
@@ -443,7 +443,8 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 cv::Point2f OpticalFlowEstimator::findAverageVector(const std::vector<cv::Point2f>& prevPts,
                                                     const std::vector<cv::Point2f>& nextPts,
                                                     const std::vector<uchar>& status,
-                                                    const double cutoff,
+                                                    const double x_cutoff,
+                                                    const double y_cutoff,
                                                     const cv::Size& image_size) {
     double averageX = 0.0;
     double averageY = 0.0;
@@ -453,10 +454,10 @@ cv::Point2f OpticalFlowEstimator::findAverageVector(const std::vector<cv::Point2
     for (size_t i = 0; i < prevPts.size(); ++i)
     {
         if (status[i] &&
-            prevPts[i].x > image_size.width * cutoff &&
-            prevPts[i].x < image_size.width * (1.0 - cutoff) &&
-            prevPts[i].y > image_size.height * cutoff && 
-            prevPts[i].y < image_size.height * (1.0 - cutoff))
+            prevPts[i].x > image_size.width * x_cutoff &&
+            prevPts[i].x < image_size.width * (1.0 - x_cutoff) &&
+            prevPts[i].y > image_size.height * y_cutoff &&
+            prevPts[i].y < image_size.height * (1.0 - y_cutoff))
         {
             cv::Point p = prevPts[i];
             cv::Point q = nextPts[i];

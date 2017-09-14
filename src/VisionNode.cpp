@@ -142,10 +142,16 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         config.flow_variance_scale = flow_settings.variance_scale;
 
         ROS_ASSERT(private_nh.getParam(
-                "optical_flow_estimator/cutoff_region_velocity_measurement",
-                flow_settings.variance_scale));
-        config.flow_cutoff_region_velocity_measurement =
-            flow_settings.cutoff_region_velocity_measurement;
+                "optical_flow_estimator/x_cutoff_region_velocity_measurement",
+                flow_settings.x_cutoff_region_velocity_measurement));
+        config.flow_x_cutoff_region_velocity_measurement =
+            flow_settings.x_cutoff_region_velocity_measurement;
+
+        ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/y_cutoff_region_velocity_measurement",
+                flow_settings.y_cutoff_region_velocity_measurement));
+        config.flow_y_cutoff_region_velocity_measurement =
+            flow_settings.y_cutoff_region_velocity_measurement;
 
         ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/debug_frameskip",
@@ -182,8 +188,10 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.imu_update_timeout = config.flow_imu_update_timeout;
         flow_settings.variance = config.flow_variance;
         flow_settings.variance_scale = config.flow_variance_scale;
-        flow_settings.cutoff_region_velocity_measurement =
-            config.flow_cutoff_region_velocity_measurement;
+        flow_settings.x_cutoff_region_velocity_measurement =
+            config.flow_x_cutoff_region_velocity_measurement;
+        flow_settings.y_cutoff_region_velocity_measurement =
+            config.flow_y_cutoff_region_velocity_measurement;
         flow_settings.debug_frameskip = config.flow_debug_frameskip;
 
     }
