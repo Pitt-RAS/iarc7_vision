@@ -357,10 +357,10 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
                                    sqrt(1 + std::pow(tan(p), 2.0) + std::pow(tan(r), 2.0));
 
         cv::Point2f correction_vel;
-        correction_vel.x = distance_to_plane *
+        correction_vel.x = -distance_to_plane *
                            angular_vel_y * cos(p);
         correction_vel.y = distance_to_plane *
-                           angular_vel_x * -cos(r);
+                           angular_vel_x * cos(r);
 
         cv::Point2f corrected_vel;
         corrected_vel.x = velocity_uncorrected.x - correction_vel.x;
@@ -370,11 +370,10 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
         last_r_ = r;
 
         // Fill out the twist
-        // TODO switch to level quad and rotate the x and y vector accordingly
         twist.header.stamp = time;
-        twist.header.frame_id = "bottom_camera_optical";
-        twist.twist.twist.linear.x = corrected_vel.x;
-        twist.twist.twist.linear.y = corrected_vel.y;
+        twist.header.frame_id = "level_quad";
+        twist.twist.twist.linear.x = std::cos(y + M_PI) * -corrected_vel.x - std::sin(y + M_PI) * corrected_vel.y;
+        twist.twist.twist.linear.y = std::cos(y + M_PI) * corrected_vel.y + std::sin(y + M_PI) * -corrected_vel.x;
 
         geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
         twist_correction.twist.twist.linear.x = correction_vel.x;
