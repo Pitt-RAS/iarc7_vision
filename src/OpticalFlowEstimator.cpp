@@ -359,9 +359,9 @@ void OpticalFlowEstimator::estimateVelocity(geometry_msgs::TwistWithCovarianceSt
 
         cv::Point2f correction_vel;
         correction_vel.x = -distance_to_plane *
-                           angular_vel_y * cos(p);
+                           angular_vel_y / cos(p);
         correction_vel.y = distance_to_plane *
-                           angular_vel_x * cos(r);
+                           angular_vel_x / cos(r);
 
         cv::Point2f corrected_vel;
         corrected_vel.x = velocity_uncorrected.x - correction_vel.x;
