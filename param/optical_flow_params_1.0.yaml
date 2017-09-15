@@ -4,7 +4,7 @@ optical_flow_estimator:
     pixels_per_meter: 250
 
     # fov of the camera
-    fov: 1.64
+    fov: 1.07
 
     # Minimum altitude to run the detector
     min_estimation_altitude: 0.15
