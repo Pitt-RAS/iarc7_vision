@@ -47,10 +47,10 @@ optical_flow_estimator:
     imu_update_timeout: 0.3
 
     # Min variance to send with velocity measurements
-    variance: 4
+    variance: 1.0
 
     # What to scale the variance on according to the rotation rate
-    variance_scale: 1.0
+    variance_scale: 0.19 # 0.3s/90deg
 
     # Cutoff area where velocity vectors aren't included in the average
     x_cutoff_region_velocity_measurement: 0.2
