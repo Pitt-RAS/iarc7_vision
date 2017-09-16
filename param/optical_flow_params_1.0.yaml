@@ -37,6 +37,9 @@ optical_flow_estimator:
     # Publish image with average velocity vector drawn on it
     debug_average_vector_image: true
 
+    # Print out times when things are received/processed
+    debug_times: false
+
     # Frames to skip before publishing debug images
     debug_frameskip: 6
 

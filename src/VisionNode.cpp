@@ -281,6 +281,10 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
         "optical_flow_estimator/debug_average_vector_image",
         settings.debug_average_vector_image));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/debug_times",
+        settings.debug_times));
 }
 
 int main(int argc, char **argv)

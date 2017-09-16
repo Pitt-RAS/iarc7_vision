@@ -45,6 +45,7 @@ struct OpticalFlowEstimatorSettings {
 struct OpticalFlowDebugSettings {
     bool debug_vectors_image;
     bool debug_average_vector_image;
+    bool debug_times;
 };
 
 class OpticalFlowEstimator {
