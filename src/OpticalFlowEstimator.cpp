@@ -137,17 +137,13 @@ OpticalFlowEstimator::OpticalFlowEstimator(
             "twist_raw", 10);
 }
 
-bool OpticalFlowEstimator::waitUntilReady(
-        const ros::Duration& startup_timeout)
+bool __attribute__((warn_unused_result))
+        OpticalFlowEstimator::onSettingsChanged()
 {
-    bool success = imu_interpolator_.waitUntilReady(startup_timeout);
-    if (!success) {
-        ROS_ERROR("Failed to fetch initial fc imu message");
-        return false;
-    }
-
-    updateFilteredPosition(ros::Time::now());
-
+    target_size_.width = expected_input_size_.width
+                       * flow_estimator_settings_.scale_factor;
+    target_size_.height = expected_input_size_.height
+                        * flow_estimator_settings_.scale_factor;
     return true;
 }
 
@@ -172,11 +168,21 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         return;
     }
 
+    cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
+
     static bool ran_once = false;
     if (ran_once) {
+        if (curr_image.size() != expected_input_size_) {
+            ROS_WARN("Ignoring image of size (%dx%d), expected (%dx%d)",
+                     curr_image.size().width,
+                     curr_image.size().height,
+                     expected_input_size_.width,
+                     expected_input_size_.height);
+            return;
+        }
+
         try {
             // Variables needed for estimate velocity
-            cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
             geometry_msgs::TwistWithCovarianceStamped velocity;
 
             if (debug_settings_.debug_times) {
@@ -201,22 +207,18 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     } else {
         // TODO almost identical code is run when the scale is changed.
         // Maybe make this a function?
-        cv::Mat image = cv_bridge::toCvShare(message)->image;
+
+        expected_input_size_ = curr_image.size();
+        ROS_ASSERT(onSettingsChanged());
 
         // Create the first last image
-        cv::Size image_size = image.size();
-        image_size.width = image_size.width
-                         * flow_estimator_settings_.scale_factor;
-        image_size.height = image_size.height
-                          * flow_estimator_settings_.scale_factor;
-
-        cv::gpu::GpuMat d_frame1_big(image);
+        cv::gpu::GpuMat d_frame1_big(curr_image);
         cv::gpu::GpuMat scaled_image;
         cv::gpu::GpuMat scaled_grayscale_image;
 
         cv::gpu::resize(d_frame1_big,
                         scaled_image,
-                        image_size);
+                        target_size_);
 
         cv::gpu::cvtColor(scaled_image,
                           scaled_grayscale_image,
@@ -232,16 +234,26 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     last_message_time_ = message->header.stamp;
 }
 
+bool OpticalFlowEstimator::waitUntilReady(
+        const ros::Duration& startup_timeout)
+{
+    bool success = imu_interpolator_.waitUntilReady(startup_timeout);
+    if (!success) {
+        ROS_ERROR("Failed to fetch initial fc imu message");
+        return false;
+    }
+
+    updateFilteredPosition(ros::Time::now());
+
+    return true;
+}
+
 void OpticalFlowEstimator::estimateVelocity(
         geometry_msgs::TwistWithCovarianceStamped& twist,
         const cv::Mat& image,
         double height,
         const ros::Time& time)
 {
-    const cv::Size image_size(image.size().width
-                            * flow_estimator_settings_.scale_factor,
-                              image.size().height
-                            * flow_estimator_settings_.scale_factor);
 
     static double last_scale = -1.0;
 
@@ -253,7 +265,7 @@ void OpticalFlowEstimator::estimateVelocity(
 
         cv::gpu::resize(d_frame1_big,
                         scaled_image,
-                        image_size);
+                        target_size_);
 
         cv::gpu::cvtColor(scaled_image,
                           scaled_grayscale_image,
@@ -274,7 +286,7 @@ void OpticalFlowEstimator::estimateVelocity(
 
     cv::gpu::resize(d_frame1_big,
                     d_frame1,
-                    image_size);
+                    target_size_);
     if (debug_settings_.debug_times) {
         ROS_WARN("post resize: %f",
                  (cv::getTickCount() - start) / cv::getTickFrequency());
@@ -342,7 +354,7 @@ void OpticalFlowEstimator::estimateVelocity(
             status,
             flow_estimator_settings_.x_cutoff_region_velocity_measurement,
             flow_estimator_settings_.y_cutoff_region_velocity_measurement,
-            image_size);
+            target_size_);
 
     // Get the pitch and roll of the camera in euler angles
     tf2::Quaternion orientation;
@@ -363,7 +375,7 @@ void OpticalFlowEstimator::estimateVelocity(
     // m/px = camera_height / focal_length;
     // In the projected camera plane
     double current_meters_per_px = height
-                         / getFocalLength(image_size,
+                         / getFocalLength(target_size_,
                                           flow_estimator_settings_.fov);
 
     // Calculate the average velocity
@@ -472,8 +484,8 @@ void OpticalFlowEstimator::estimateVelocity(
             std::vector<cv::Point2f> end_point(1);
             std::vector<cv::Point2f> start_point(1);
 
-            int x_off = image_size.width/2;
-            int y_off = image_size.height/2;
+            int x_off = target_size_.width/2;
+            int y_off = target_size_.height/2;
             start_point[0].x = x_off;
             start_point[0].y = y_off;
 

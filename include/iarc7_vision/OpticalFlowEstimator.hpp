@@ -53,6 +53,8 @@ class OpticalFlowEstimator {
             const OpticalFlowEstimatorSettings& flow_estimator_settings,
             const OpticalFlowDebugSettings& debug_settings);
 
+    bool __attribute__((warn_unused_result)) onSettingsChanged();
+
     void update(const sensor_msgs::Image::ConstPtr& message);
 
     bool __attribute__((warn_unused_result)) waitUntilReady(
@@ -130,6 +132,9 @@ class OpticalFlowEstimator {
     geometry_msgs::TransformStamped last_filtered_transform_stamped_;
 
     ros::Time last_message_time_;
+
+    cv::Size expected_input_size_;
+    cv::Size target_size_;
 
     ros::Publisher orientation_pub_;
     ros::Publisher correction_pub_;
