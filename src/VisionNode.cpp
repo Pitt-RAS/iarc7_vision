@@ -158,19 +158,8 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                 flow_settings.debug_frameskip));
         config.flow_debug_frameskip = flow_settings.debug_frameskip;
 
-        ROS_ASSERT(private_nh.getParam(
-                "optical_flow_estimator/orientation_image_time_offset",
-                flow_settings.orientation_image_time_offset));
-        config.flow_orientation_image_time_offset = flow_settings.orientation_image_time_offset;
-
-        ROS_ASSERT(private_nh.getParam(
-                "optical_flow_estimator/published_velocity_time_offset",
-                flow_settings.published_velocity_time_offset));
-        config.flow_published_velocity_time_offset = flow_settings.published_velocity_time_offset;
-
         ran = true;
-    }
-    else {
+    } else {
         // Begin line extractor settings
         line_settings.pixels_per_meter = config.pixels_per_meter;
         line_settings.canny_high_threshold = config.canny_high_threshold;
@@ -203,8 +192,6 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.y_cutoff_region_velocity_measurement =
             config.flow_y_cutoff_region_velocity_measurement;
         flow_settings.debug_frameskip = config.flow_debug_frameskip;
-        flow_settings.orientation_image_time_offset = config.flow_orientation_image_time_offset;
-        flow_settings.published_velocity_time_offset = config.flow_published_velocity_time_offset;
 
     }
 }

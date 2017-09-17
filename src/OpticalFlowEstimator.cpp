@@ -157,9 +157,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     int64 start = cv::getTickCount();
 
     // make sure our current position is up to date
-    updateFilteredPosition(message->header.stamp
-        + ros::Duration(
-            flow_estimator_settings_.orientation_image_time_offset));
+    updateFilteredPosition(message->header.stamp);
 
     if (debug_settings_.debug_times) {
         ROS_WARN("updateFilteredPosition: %f",
@@ -411,8 +409,7 @@ void OpticalFlowEstimator::estimateVelocity(
     last_r_ = r;
 
     // Fill out the twist
-    twist.header.stamp = time + ros::Duration(
-            flow_estimator_settings_.published_velocity_time_offset);
+    twist.header.stamp = time;
     twist.header.frame_id = "level_quad";
     twist.twist.twist.linear.x = std::cos(y + M_PI) * -corrected_vel.x
                                - std::sin(y + M_PI) *  corrected_vel.y;
