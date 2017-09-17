@@ -11,7 +11,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <geometry_msgs/TwistWithCovarianceStamped.h>
 
-#include "ros_utils/LinearMsgInterpolator.hpp"
+#include <ros_utils/LinearMsgInterpolator.hpp>
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>
 
@@ -50,33 +50,59 @@ struct OpticalFlowDebugSettings {
 
 class OpticalFlowEstimator {
   public:
-    OpticalFlowEstimator(ros::NodeHandle nh,
-                         const OpticalFlowEstimatorSettings& flow_estimator_settings,
-                         const OpticalFlowDebugSettings& debug_settings);
+    OpticalFlowEstimator(
+            ros::NodeHandle& nh,
+            const OpticalFlowEstimatorSettings& flow_estimator_settings,
+            const OpticalFlowDebugSettings& debug_settings);
+
     void update(const sensor_msgs::Image::ConstPtr& message);
 
-    bool waitUntilReady(const ros::Duration& startup_timeout);
+    bool __attribute__((warn_unused_result)) waitUntilReady(
+            const ros::Duration& startup_timeout);
 
   private:
 
+    /// Calculate new velocity estimate
+    ///
+    /// @param[out] velocity   Velocity estimate
+    /// @param[in]  image      Next image to process
+    /// @param[in]  height     Altitude of the camera at `time`
+    /// @param[in]  time       Timestamp of the image
+    void estimateVelocity(geometry_msgs::TwistWithCovarianceStamped& velocity,
+                          const cv::Mat& image,
+                          double height,
+                          const ros::Time& time);
+
+    /// Finds the average of the given vectors, filtering out points outside
+    /// of the cutoff region
+    ///
+    /// @param[in] tails      Tails of the input vectors
+    /// @param[in] heads      Heads of the input vectors
+    /// @param[in] status     Status of each vector, 1 if valid and 0 otherwise
+    /// @param[in] x_cutoff   {Width of region to be discarded on each side as a
+    ///                        percentage of the total width}
+    /// @param[in] y_cutoff   {Height of region to be discarded on each side as
+    ///                        a percentage of the total height}
+    /// @param[in] image_size {Size of original image, used for calculating
+    ///                        cutoffs}
+    ///
+    /// @return               Average of input vectors
+    static cv::Point2f findAverageVector(const std::vector<cv::Point2f>& tails,
+                                         const std::vector<cv::Point2f>& heads,
+                                         const std::vector<uchar>& status,
+                                         const double x_cutoff,
+                                         const double y_cutoff,
+                                         const cv::Size& image_size);
+
     /// Compute the focal length (in px) from image size and dfov
     ///
-    /// @param[in] fov Field of view in radians
+    /// @param[in] fov  Field of view in radians
+    ///
+    /// @return         Focal length in pixels
     static double getFocalLength(const cv::Size& img_size, double fov);
 
-    void estimateVelocity(geometry_msgs::TwistWithCovarianceStamped& velocity,
-                                         const cv::Mat& image,
-                                         double height,
-                                         ros::Time time);
 
     void updateFilteredPosition(const ros::Time& time);
-
-    cv::Point2f findAverageVector(const std::vector<cv::Point2f>& prevPts,
-                                  const std::vector<cv::Point2f>& nextPts,
-                                  const std::vector<uchar>& status,
-                                  const double x_cutoff,
-                                  const double y_cutoff,
-                                  const cv::Size& image_size);
 
     const OpticalFlowEstimatorSettings& flow_estimator_settings_;
 
