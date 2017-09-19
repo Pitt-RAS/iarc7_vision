@@ -15,14 +15,11 @@
 #include <ros/ros.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Vector3.h>
 
 #include <ros_utils/SafeTransformWrapper.hpp>
 
-#include <geometry_msgs/Vector3Stamped.h>
-#include <iarc7_msgs/Float64Stamped.h>
+#include <geometry_msgs/PointStamped.h>
 #include <iarc7_msgs/OrientationAnglesStamped.h>
-#include <visualization_msgs/Marker.h>
 
 namespace iarc7_vision {
 
@@ -55,86 +52,64 @@ static void drawArrows(cv::Mat& frame,
             cv::Point q = next_pts[i];
 
             double angle = std::atan2(p.y - q.y, p.x - q.x);
-
             double hypotenuse = std::hypot(p.y - q.y, p.x - q.x);
-
-            if (hypotenuse < 1.0) {
-                continue;
-            }
 
             // Here we lengthen the arrow by a factor of three.
             q.x = p.x - 3 * hypotenuse * std::cos(angle);
             q.y = p.y - 3 * hypotenuse * std::sin(angle);
 
             // Now we draw the main line of the arrow.
-            line(frame, p, q, line_color, line_thickness);
+            cv::line(frame, p, q, line_color, line_thickness);
 
             // Now draw the tips of the arrow. I do some scaling so that the
             // tips look proportional to the main line of the arrow.
 
             p.x = q.x + 9 * std::cos(angle + CV_PI / 4);
             p.y = q.y + 9 * std::sin(angle + CV_PI / 4);
-            line(frame, p, q, line_color, line_thickness);
+            cv::line(frame, p, q, line_color, line_thickness);
 
             p.x = q.x + 9 * cos(angle - CV_PI / 4);
             p.y = q.y + 9 * sin(angle - CV_PI / 4);
-            line(frame, p, q, line_color, line_thickness);
+            cv::line(frame, p, q, line_color, line_thickness);
         }
     }
 }
 
 OpticalFlowEstimator::OpticalFlowEstimator(
-        ros::NodeHandle& nh,
         const OpticalFlowEstimatorSettings& flow_estimator_settings,
         const OpticalFlowDebugSettings& debug_settings)
     : flow_estimator_settings_(flow_estimator_settings),
       debug_settings_(debug_settings),
-      last_filtered_position_(),
-      transform_wrapper_(),
+      have_valid_last_image_(false),
+      images_skipped_(0),
       last_scaled_image_(),
       last_scaled_grayscale_image_(),
-      debug_velocity_vector_image_pub_(),
-      debug_average_velocity_vector_image_pub_(),
-      imu_interpolator_(
-        nh,
-        "fc_imu",
-        ros::Duration(flow_estimator_settings_.imu_update_timeout),
-        ros::Duration(0),
-        [](const sensor_msgs::Imu& msg) {
-            return tf2::Vector3(msg.angular_velocity.x,
-                                msg.angular_velocity.y,
-                                msg.angular_velocity.z);
-        },
-        100),
-      last_filtered_transform_stamped_(),
+      last_orientation_(),
+      transform_wrapper_(),
+      current_altitude_(0.0),
+      current_orientation_(),
       last_message_time_(),
-      correction_pub_(),
-      raw_pub_()
+      expected_input_size_(),
+      target_size_(),
+      local_nh_("optical_flow_estimator"),
+      debug_average_velocity_vector_image_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("average_vector_image",
+                                                     1)),
+      debug_velocity_vector_image_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
+      correction_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist_correction", 10)),
+      orientation_pub_(
+              local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
+                  "orientation", 10)),
+      raw_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist_raw", 10)),
+      twist_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist", 10))
 {
-    ros::NodeHandle local_nh ("optical_flow_estimator");
-
-    if (debug_settings_.debug_vectors_image) {
-        debug_velocity_vector_image_pub_
-            = local_nh.advertise<sensor_msgs::Image>("vector_image", 1);
-    }
-
-    if (debug_settings_.debug_average_vector_image) {
-        debug_average_velocity_vector_image_pub_
-            = local_nh.advertise<sensor_msgs::Image>("average_vector_image", 1);
-    }
-
-    twist_pub_
-        = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>(
-            "twist", 10);
-    orientation_pub_
-        = local_nh.advertise<iarc7_msgs::OrientationAnglesStamped>(
-            "orientation", 10);
-    correction_pub_
-        = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>(
-            "twist_correction", 10);
-    raw_pub_
-        = local_nh.advertise<geometry_msgs::TwistWithCovarianceStamped>(
-            "twist_raw", 10);
 }
 
 bool __attribute__((warn_unused_result))
@@ -144,232 +119,139 @@ bool __attribute__((warn_unused_result))
                        * flow_estimator_settings_.scale_factor;
     target_size_.height = expected_input_size_.height
                         * flow_estimator_settings_.scale_factor;
+
+    cv::gpu::GpuMat scaled_image;
+    cv::gpu::resize(last_scaled_image_,
+                    scaled_image,
+                    target_size_);
+    last_scaled_image_ = scaled_image;
+
+    cv::gpu::GpuMat scaled_grayscale_image;
+    cv::gpu::cvtColor(last_scaled_image_,
+                      scaled_grayscale_image,
+                      CV_RGBA2GRAY);
+    last_scaled_grayscale_image_ = scaled_grayscale_image;
+
     return true;
 }
 
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
     // initial time for measurement
-    int64 start = cv::getTickCount();
+    const int64 start = cv::getTickCount();
 
     // make sure our current position is up to date
-    updateFilteredPosition(message->header.stamp);
+    if (!updateFilteredPosition(
+                message->header.stamp,
+                ros::Duration(flow_estimator_settings_.tf_timeout))) {
+        ROS_ERROR("Unable to update position for optical flow");
+        return;
+    }
 
     if (debug_settings_.debug_times) {
         ROS_WARN("updateFilteredPosition: %f",
                  (cv::getTickCount() - start) / cv::getTickFrequency());
     }
 
-    if (last_filtered_position_.point.z
-      < flow_estimator_settings_.min_estimation_altitude) {
+    if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
         ROS_WARN("Height (%f) is below min processing height (%f)",
-                 last_filtered_position_.point.z,
+                 current_altitude_,
                  flow_estimator_settings_.min_estimation_altitude);
         return;
     }
 
-    cv::Mat curr_image = cv_bridge::toCvShare(message)->image;
+    const cv::Mat& curr_image = cv_bridge::toCvShare(message)->image;
 
-    static bool ran_once = false;
-    if (ran_once) {
+    if (have_valid_last_image_) {
         if (curr_image.size() != expected_input_size_) {
-            ROS_WARN("Ignoring image of size (%dx%d), expected (%dx%d)",
-                     curr_image.size().width,
-                     curr_image.size().height,
-                     expected_input_size_.width,
-                     expected_input_size_.height);
+            ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
+                      curr_image.size().width,
+                      curr_image.size().height,
+                      expected_input_size_.width,
+                      expected_input_size_.height);
             return;
         }
 
         try {
-            // Variables needed for estimate velocity
-            geometry_msgs::TwistWithCovarianceStamped velocity;
+            const int64 start = cv::getTickCount();
+
+            // Scale and convert input image
+            cv::gpu::GpuMat d_frame1_big(curr_image);
+            cv::gpu::GpuMat scaled_image;
+            cv::gpu::GpuMat scaled_gray_image;
+
+            cv::gpu::resize(d_frame1_big,
+                            scaled_image,
+                            target_size_);
 
             if (debug_settings_.debug_times) {
-                ROS_WARN("pre estimateVelocity: %f",
+                ROS_WARN("post resize: %f",
                          (cv::getTickCount() - start) / cv::getTickFrequency());
             }
-            estimateVelocity(velocity,
-                             curr_image,
-                             last_filtered_position_.point.z,
-                             message->header.stamp);
+
+            cv::gpu::cvtColor(scaled_image,
+                              scaled_gray_image,
+                              CV_RGBA2GRAY);
+
             if (debug_settings_.debug_times) {
-                ROS_WARN("post estimateVelocity: %f",
+                ROS_WARN("post cvtColor: %f",
                          (cv::getTickCount() - start) / cv::getTickFrequency());
             }
 
-            twist_pub_.publish(velocity);
+            // Get velocity estimate from average vector
+            processImage(scaled_image,
+                         scaled_gray_image,
+                         current_orientation_,
+                         message->header.stamp,
+                         current_altitude_,
+                         images_skipped_ == 0);
+            images_skipped_ = (images_skipped_ + 1)
+                           % flow_estimator_settings_.debug_frameskip;
 
+            last_scaled_image_ = scaled_image;
+            last_scaled_grayscale_image_ = scaled_gray_image;
         } catch (const std::exception& ex) {
             ROS_ERROR_STREAM("Caught exception processing image flow: "
                           << ex.what());
+            have_valid_last_image_ = false;
         }
     } else {
-        // TODO almost identical code is run when the scale is changed.
-        // Maybe make this a function?
-
         expected_input_size_ = curr_image.size();
+        last_scaled_image_.upload(curr_image);
         ROS_ASSERT(onSettingsChanged());
-
-        // Create the first last image
-        cv::gpu::GpuMat d_frame1_big(curr_image);
-        cv::gpu::GpuMat scaled_image;
-        cv::gpu::GpuMat scaled_grayscale_image;
-
-        cv::gpu::resize(d_frame1_big,
-                        scaled_image,
-                        target_size_);
-
-        cv::gpu::cvtColor(scaled_image,
-                          scaled_grayscale_image,
-                          CV_RGBA2GRAY);
-
-        last_scaled_image_ = scaled_image;
-        last_scaled_grayscale_image_ = scaled_grayscale_image;
-
-        ran_once = true;
+        have_valid_last_image_ = true;
     }
 
-    // Always save off the last message time
     last_message_time_ = message->header.stamp;
+    last_orientation_ = current_orientation_;
 }
 
 bool OpticalFlowEstimator::waitUntilReady(
         const ros::Duration& startup_timeout)
 {
-    bool success = imu_interpolator_.waitUntilReady(startup_timeout);
-    if (!success) {
-        ROS_ERROR("Failed to fetch initial fc imu message");
-        return false;
-    }
-
-    updateFilteredPosition(ros::Time::now());
-
-    return true;
+    return updateFilteredPosition(ros::Time::now(), startup_timeout);
 }
 
-void OpticalFlowEstimator::estimateVelocity(
-        geometry_msgs::TwistWithCovarianceStamped& twist,
-        const cv::Mat& image,
-        double height,
-        const ros::Time& time)
+geometry_msgs::TwistWithCovarianceStamped
+        OpticalFlowEstimator::estimateVelocity(
+                const cv::Point2f& average_vec,
+                const tf2::Quaternion& curr_orientation,
+                const tf2::Quaternion& last_orientation,
+                double height,
+                const ros::Time& time) const
 {
-
-    static double last_scale = -1.0;
-
-    // Fix scaling if the scaling changed
-    if (last_scale != flow_estimator_settings_.scale_factor) {
-        cv::gpu::GpuMat d_frame1_big(image);
-        cv::gpu::GpuMat scaled_image;
-        cv::gpu::GpuMat scaled_grayscale_image;
-
-        cv::gpu::resize(d_frame1_big,
-                        scaled_image,
-                        target_size_);
-
-        cv::gpu::cvtColor(scaled_image,
-                          scaled_grayscale_image,
-                          CV_RGBA2GRAY);
-
-        last_scaled_image_ = scaled_image;
-        last_scaled_grayscale_image_ = scaled_grayscale_image;
-
-        last_scale = flow_estimator_settings_.scale_factor;
-    }
-
-    int64 start = cv::getTickCount();
-
-    // Scale and convert input image
-    cv::gpu::GpuMat d_frame1_big(image);
-    cv::gpu::GpuMat d_frame1;
-    cv::gpu::GpuMat d_frame1Gray;
-
-    cv::gpu::resize(d_frame1_big,
-                    d_frame1,
-                    target_size_);
-    if (debug_settings_.debug_times) {
-        ROS_WARN("post resize: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
-    }
-
-    cv::gpu::cvtColor(d_frame1,
-                      d_frame1Gray,
-                      CV_RGBA2GRAY);
-    if (debug_settings_.debug_times) {
-        ROS_WARN("post cvtColor: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
-    }
-
-    // Create the feature detector and perform feature detection
-    cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
-                    flow_estimator_settings_.points,
-                    flow_estimator_settings_.quality_level,
-                    flow_estimator_settings_.min_dist);
-    cv::gpu::GpuMat d_prev_pts;
-
-    detector(last_scaled_grayscale_image_, d_prev_pts);
-    if (debug_settings_.debug_times) {
-        ROS_WARN("post detector: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
-    }
-
-    // Create optical flow object
-    cv::gpu::PyrLKOpticalFlow d_pyrLK;
-
-    d_pyrLK.winSize.width = flow_estimator_settings_.win_size;
-    d_pyrLK.winSize.height = flow_estimator_settings_.win_size;
-    d_pyrLK.maxLevel = flow_estimator_settings_.max_level;
-    d_pyrLK.iters = flow_estimator_settings_.iters;
-
-    cv::gpu::GpuMat d_next_pts;
-    cv::gpu::GpuMat d_status;
-
-    d_pyrLK.sparse(last_scaled_image_,
-                   d_frame1,
-                   d_prev_pts,
-                   d_next_pts,
-                   d_status);
-    if (debug_settings_.debug_times) {
-        ROS_WARN("PYRLK sparse: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
-    }
-
-    // Save off the current image
-    last_scaled_image_ = d_frame1;
-    last_scaled_grayscale_image_ = d_frame1Gray;
-
-    // Calculate the average vector
-    std::vector<cv::Point2f> prev_pts(d_prev_pts.cols);
-    download(d_prev_pts, prev_pts);
-
-    std::vector<cv::Point2f> next_pts(d_next_pts.cols);
-    download(d_next_pts, next_pts);
-
-    std::vector<uchar> status(d_status.cols);
-    download(d_status, status);
-
-    cv::Point2f average_vec = findAverageVector(
-            prev_pts,
-            next_pts,
-            status,
-            flow_estimator_settings_.x_cutoff_region_velocity_measurement,
-            flow_estimator_settings_.y_cutoff_region_velocity_measurement,
-            target_size_);
-
     // Get the pitch and roll of the camera in euler angles
-    tf2::Quaternion orientation;
-    tf2::convert(last_filtered_transform_stamped_.transform.rotation,
-                 orientation);
-    tf2::Matrix3x3 matrix;
-    matrix.setRotation(orientation);
-    double y, p, r;
-    matrix.getEulerYPR(y, p, r);
+    double yaw, pitch, roll;
+    getYPR(curr_orientation, yaw, pitch, roll);
+
+    double last_yaw, last_pitch, last_roll;
+    getYPR(last_orientation, last_yaw, last_pitch, last_roll);
 
     iarc7_msgs::OrientationAnglesStamped ori_msg;
     ori_msg.header.stamp = time;
-    ori_msg.data.pitch = p;
-    ori_msg.data.roll = r;
-    ori_msg.data.yaw = y;
+    ori_msg.data.pitch = pitch;
+    ori_msg.data.roll = roll;
+    ori_msg.data.yaw = yaw;
     orientation_pub_.publish(ori_msg);
 
     // m/px = camera_height / focal_length;
@@ -380,53 +262,63 @@ void OpticalFlowEstimator::estimateVelocity(
 
     // Calculate the average velocity
     cv::Point2f velocity_uncorrected;
-    velocity_uncorrected.x = (average_vec.x * current_meters_per_px) /
-                             std::cos(p) /
-                             (time - last_message_time_).toSec();
-    velocity_uncorrected.y = (average_vec.y * current_meters_per_px) /
-                             -std::cos(r) /
-                             (time - last_message_time_).toSec();
-
+    velocity_uncorrected.x = (average_vec.x * current_meters_per_px)
+                           / std::cos(pitch)
+                           / (time - last_message_time_).toSec();
+    velocity_uncorrected.y = (average_vec.y * current_meters_per_px)
+                           / -std::cos(roll)
+                           / (time - last_message_time_).toSec();
 
     double dp;
     double dr;
 
-    if (last_p_ > CV_PI/2 && p < -CV_PI/2) dp = (p + 2*CV_PI - last_p_);
-    else if (last_p_ < -CV_PI/2 && p > CV_PI/2) dp = (p - last_p_ - 2*CV_PI);
-    else dp = (p - last_p_);
+    if (last_pitch > CV_PI/2 && pitch < -CV_PI/2) {
+        dp = (pitch + 2*CV_PI - last_pitch);
+    } else if (last_pitch < -CV_PI/2 && pitch > CV_PI/2) {
+        dp = (pitch - last_pitch - 2*CV_PI);
+    } else {
+        dp = (pitch - last_pitch);
+    }
 
-    if (last_r_ > CV_PI/2 && r < -CV_PI/2) dr = (r + 2*CV_PI - last_r_);
-    else if (last_r_ < -CV_PI/2 && r > CV_PI/2) dr = (r - last_r_ - 2*CV_PI);
-    else dr = (r - last_r_);
+    if (last_roll > CV_PI/2 && roll < -CV_PI/2) {
+        dr = (roll + 2*CV_PI - last_roll);
+    } else if (last_roll < -CV_PI/2 && roll > CV_PI/2) {
+        dr = (roll - last_roll - 2*CV_PI);
+    } else {
+        dr = (roll - last_roll);
+    }
 
     double angular_vel_y = dp / (time - last_message_time_).toSec();
     double angular_vel_x = dr / (time - last_message_time_).toSec();
 
-    double distance_to_plane = last_filtered_position_.point.z
+    double distance_to_plane = current_altitude_
                              * std::sqrt(1.0
-                                       + std::pow(std::tan(p), 2.0)
-                                       + std::pow(std::tan(r), 2.0));
+                                       + std::pow(std::tan(pitch), 2.0)
+                                       + std::pow(std::tan(roll), 2.0));
 
     cv::Point2f correction_vel;
-    correction_vel.x = -distance_to_plane *
-                       angular_vel_y / cos(p);
-    correction_vel.y = distance_to_plane *
-                       angular_vel_x / cos(r);
+    correction_vel.x = -distance_to_plane
+                     * angular_vel_y
+                     / cos(pitch);
+    correction_vel.y = distance_to_plane
+                     * angular_vel_x
+                     / cos(roll);
 
     cv::Point2f corrected_vel;
     corrected_vel.x = velocity_uncorrected.x - correction_vel.x;
     corrected_vel.y = velocity_uncorrected.y - correction_vel.y;
 
-    last_p_ = p;
-    last_r_ = r;
+    last_pitch = pitch;
+    last_roll = roll;
 
     // Fill out the twist
+    geometry_msgs::TwistWithCovarianceStamped twist;
     twist.header.stamp = time;
     twist.header.frame_id = "level_quad";
-    twist.twist.twist.linear.x = std::cos(y + M_PI) * -corrected_vel.x
-                               - std::sin(y + M_PI) *  corrected_vel.y;
-    twist.twist.twist.linear.y = std::cos(y + M_PI) *  corrected_vel.y
-                               + std::sin(y + M_PI) * -corrected_vel.x;
+    twist.twist.twist.linear.x = std::cos(yaw + M_PI) * -corrected_vel.x
+                               - std::sin(yaw + M_PI) *  corrected_vel.y;
+    twist.twist.twist.linear.y = std::cos(yaw + M_PI) *  corrected_vel.y
+                               + std::sin(yaw + M_PI) * -corrected_vel.x;
 
     geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
     twist_correction.twist.twist.linear.x = correction_vel.x;
@@ -439,10 +331,10 @@ void OpticalFlowEstimator::estimateVelocity(
     raw_pub_.publish(twist_raw);
 
     // Calculate variance
-    double rotated_ang_vel_x = std::cos(y + M_PI) * angular_vel_x
-                             - std::sin(y + M_PI) * angular_vel_y;
-    double rotated_ang_vel_y = std::cos(y + M_PI) * angular_vel_y
-                             + std::sin(y + M_PI) * angular_vel_x;
+    double rotated_ang_vel_x = std::cos(yaw + M_PI) * angular_vel_x
+                             - std::sin(yaw + M_PI) * angular_vel_y;
+    double rotated_ang_vel_y = std::cos(yaw + M_PI) * angular_vel_y
+                             + std::sin(yaw + M_PI) * angular_vel_x;
     double x_variance = std::pow(flow_estimator_settings_.variance_scale
                                * rotated_ang_vel_y, 2.0)
                       + flow_estimator_settings_.variance;
@@ -453,73 +345,7 @@ void OpticalFlowEstimator::estimateVelocity(
     twist.twist.covariance[0] = x_variance;
     twist.twist.covariance[7] = y_variance;
 
-    static int images_skipped = 0;
-    if(images_skipped == 0) {
-        // Publish debugging image with all vectors drawn
-        if (debug_settings_.debug_vectors_image) {
-            // Draw arrows
-            cv::Mat arrow_image;
-            d_frame1.download(arrow_image);
-            drawArrows(arrow_image,
-                       prev_pts,
-                       next_pts,
-                       status,
-                       cv::Scalar(255, 0, 0));
-
-            cv_bridge::CvImage cv_image {
-                std_msgs::Header(),
-                sensor_msgs::image_encodings::RGBA8,
-                arrow_image
-            };
-
-            debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
-        }
-
-        // Publish debugging image with average vector drawn
-        if (debug_settings_.debug_average_vector_image) {
-            // Draw arrows
-            cv::Mat arrow_image;
-            d_frame1.download(arrow_image);
-
-            std::vector<cv::Point2f> end_point(1);
-            std::vector<cv::Point2f> start_point(1);
-
-            int x_off = target_size_.width/2;
-            int y_off = target_size_.height/2;
-            start_point[0].x = x_off;
-            start_point[0].y = y_off;
-
-            end_point[0].x = average_vec.x + x_off;
-            end_point[0].y = average_vec.y + y_off;
-
-            std::vector<uchar> fake_status(1);
-            fake_status[0] = 1;
-            drawArrows(arrow_image,
-                       start_point,
-                       end_point,
-                       fake_status,
-                       cv::Scalar(255, 0, 0));
-
-            cv_bridge::CvImage cv_image {
-                std_msgs::Header(),
-                sensor_msgs::image_encodings::RGBA8,
-                arrow_image
-            };
-
-            debug_average_velocity_vector_image_pub_.publish(
-                    cv_image.toImageMsg());
-        }
-    }
-
-    images_skipped = (images_skipped + 1)
-                   % flow_estimator_settings_.debug_frameskip;
-}
-
-double OpticalFlowEstimator::getFocalLength(
-        const cv::Size& img_size, double fov)
-{
-    return std::hypot(img_size.width/2.0, img_size.height/2.0)
-         / std::tan(fov / 2.0);
+    return twist;
 }
 
 cv::Point2f OpticalFlowEstimator::findAverageVector(
@@ -557,7 +383,170 @@ cv::Point2f OpticalFlowEstimator::findAverageVector(
     return avg_vector;
 }
 
-void OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time)
+void OpticalFlowEstimator::findFeatureVectors(
+        const cv::gpu::GpuMat& curr_frame,
+        const cv::gpu::GpuMat& /*curr_gray_frame*/,
+        const cv::gpu::GpuMat& /*last_frame*/,
+        const cv::gpu::GpuMat& last_gray_frame,
+        std::vector<cv::Point2f>& tails,
+        std::vector<cv::Point2f>& heads,
+        std::vector<uchar>& status,
+        bool debug) const
+{
+    int64 start = cv::getTickCount();
+
+    // Create the feature detector and perform feature detection
+    cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
+                    flow_estimator_settings_.points,
+                    flow_estimator_settings_.quality_level,
+                    flow_estimator_settings_.min_dist);
+    cv::gpu::GpuMat d_prev_pts;
+
+    detector(last_gray_frame, d_prev_pts);
+
+    if (debug_settings_.debug_times) {
+        ROS_WARN("post detector: %f",
+                 (cv::getTickCount() - start) / cv::getTickFrequency());
+    }
+
+    // Create optical flow object
+    cv::gpu::PyrLKOpticalFlow d_pyrLK;
+
+    d_pyrLK.winSize.width = flow_estimator_settings_.win_size;
+    d_pyrLK.winSize.height = flow_estimator_settings_.win_size;
+    d_pyrLK.maxLevel = flow_estimator_settings_.max_level;
+    d_pyrLK.iters = flow_estimator_settings_.iters;
+
+    cv::gpu::GpuMat d_next_pts;
+    cv::gpu::GpuMat d_status;
+
+    d_pyrLK.sparse(last_scaled_image_,
+                   curr_frame,
+                   d_prev_pts,
+                   d_next_pts,
+                   d_status);
+
+    if (debug_settings_.debug_times) {
+        ROS_WARN("PYRLK sparse: %f",
+                 (cv::getTickCount() - start) / cv::getTickFrequency());
+    }
+
+    tails.resize(d_prev_pts.cols);
+    download(d_prev_pts, tails);
+
+    heads.resize(d_next_pts.cols);
+    download(d_next_pts, heads);
+
+    status.resize(d_status.cols);
+    download(d_status, status);
+
+    // Publish debugging image with all vectors drawn
+    if (debug && debug_settings_.debug_vectors_image) {
+        // Draw arrows
+        cv::Mat arrow_image;
+        curr_frame.download(arrow_image);
+        drawArrows(arrow_image,
+                   tails,
+                   heads,
+                   status,
+                   cv::Scalar(255, 0, 0));
+
+        cv_bridge::CvImage cv_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::RGBA8,
+            arrow_image
+        };
+
+        debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+    }
+}
+
+double OpticalFlowEstimator::getFocalLength(
+        const cv::Size& img_size, double fov)
+{
+    return std::hypot(img_size.width/2.0, img_size.height/2.0)
+         / std::tan(fov / 2.0);
+}
+
+void OpticalFlowEstimator::getYPR(const tf2::Quaternion& orientation,
+                                  double& y,
+                                  double& p,
+                                  double& r)
+{
+    tf2::Matrix3x3 matrix;
+    matrix.setRotation(orientation);
+    matrix.getEulerYPR(y, p, r);
+}
+
+void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
+                                        const cv::gpu::GpuMat& gray_image,
+                                        const tf2::Quaternion& orientation,
+                                        const ros::Time& time,
+                                        double height,
+                                        bool debug) const
+{
+    // Find vectors from image
+    std::vector<cv::Point2f> tails;
+    std::vector<cv::Point2f> heads;
+    std::vector<uchar> status;
+    findFeatureVectors(image,
+                       gray_image,
+                       last_scaled_image_,
+                       last_scaled_grayscale_image_,
+                       tails,
+                       heads,
+                       status,
+                       debug);
+
+    // Calculate the average vector
+    cv::Point2f average_vec = findAverageVector(
+            tails,
+            heads,
+            status,
+            flow_estimator_settings_.x_cutoff_region_velocity_measurement,
+            flow_estimator_settings_.y_cutoff_region_velocity_measurement,
+            target_size_);
+
+    // Publish debugging image with average vector drawn
+    if (debug && debug_settings_.debug_average_vector_image) {
+        cv::Mat arrow_image;
+        last_scaled_image_.download(arrow_image);
+
+        const cv::Point2f start_point(target_size_.width / 2.0,
+                                      target_size_.height / 2.0);
+
+        const cv::Point2f end_point(average_vec.x + start_point.x,
+                                    average_vec.y + start_point.y);
+
+        drawArrows(arrow_image,
+                   { start_point },
+                   { end_point },
+                   { 1 },
+                   cv::Scalar(255, 0, 0));
+
+        const cv_bridge::CvImage cv_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::RGBA8,
+            arrow_image
+        };
+
+        debug_average_velocity_vector_image_pub_.publish(
+                cv_image.toImageMsg());
+    }
+
+    const geometry_msgs::TwistWithCovarianceStamped velocity = estimateVelocity(
+            average_vec,
+            orientation,
+            last_orientation_,
+            height,
+            time);
+
+    // Publish velocity estimate
+    twist_pub_.publish(velocity);
+}
+
+bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
+                                                  const ros::Duration& timeout)
 {
     geometry_msgs::TransformStamped filtered_position_transform_stamped;
     if (!transform_wrapper_.getTransformAtTime(
@@ -565,25 +554,19 @@ void OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time)
             "map",
             "bottom_camera_optical",
             time,
-            ros::Duration(1.0))) {
+            timeout)) {
         ROS_ERROR("Failed to fetch transform to bottom_camera_optical");
+        return false;
     } else {
         geometry_msgs::PointStamped camera_position;
         tf2::doTransform(camera_position,
                          camera_position,
                          filtered_position_transform_stamped);
+        current_altitude_ = camera_position.point.z;
 
-        last_filtered_position_ = camera_position;
-        last_filtered_transform_stamped_ = filtered_position_transform_stamped;
-    }
-
-    // Get the current acceleration of the quad
-    // TODO transform this into the cameras frame
-    bool success = imu_interpolator_.getInterpolatedMsgAtTime(
-            last_angular_velocity_, time);
-    if (!success) {
-        ROS_ERROR(
-                "Failed to get imu information in OpticalFlowEstimator::updateFilteredPosition");
+        tf2::convert(filtered_position_transform_stamped.transform.rotation,
+                     current_orientation_);
+        return true;
     }
 }
 

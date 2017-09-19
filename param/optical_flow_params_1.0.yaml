@@ -1,8 +1,5 @@
 # Settings for the optical flow estimator
 optical_flow_estimator:
-    # Pixels per meter to scale image to
-    pixels_per_meter: 250
-
     # fov of the camera
     fov: 1.07
 
@@ -40,9 +37,6 @@ optical_flow_estimator:
     # Print out times when things are received/processed
     debug_times: false
 
-    # Timeout for imu updates
-    imu_update_timeout: 0.3
-
     # Min variance to send with velocity measurements
     variance: 1.0
 
@@ -55,3 +49,6 @@ optical_flow_estimator:
 
     # Frames to skip before publishing debug images
     debug_frameskip: 6
+
+    # Timeout for updates from tf
+    tf_timeout: 1.0
