@@ -115,22 +115,35 @@ OpticalFlowEstimator::OpticalFlowEstimator(
 bool __attribute__((warn_unused_result))
         OpticalFlowEstimator::onSettingsChanged()
 {
-    target_size_.width = expected_input_size_.width
-                       * flow_estimator_settings_.scale_factor;
-    target_size_.height = expected_input_size_.height
-                        * flow_estimator_settings_.scale_factor;
+    cv::Size new_target_size;
+    new_target_size.width = expected_input_size_.width
+                          * flow_estimator_settings_.scale_factor;
+    new_target_size.height = expected_input_size_.height
+                           * flow_estimator_settings_.scale_factor;
 
-    cv::gpu::GpuMat scaled_image;
-    cv::gpu::resize(last_scaled_image_,
-                    scaled_image,
-                    target_size_);
-    last_scaled_image_ = scaled_image;
+    if (expected_input_size_ != cv::Size(0, 0)
+     && (new_target_size.width == 0 || new_target_size.height == 0)) {
+        ROS_ERROR_STREAM("Target size is zero after updating ("
+                      << new_target_size
+                      << ")");
+        return false;
+    }
 
-    cv::gpu::GpuMat scaled_grayscale_image;
-    cv::gpu::cvtColor(last_scaled_image_,
-                      scaled_grayscale_image,
-                      CV_RGBA2GRAY);
-    last_scaled_grayscale_image_ = scaled_grayscale_image;
+    target_size_ = new_target_size;
+
+    if (expected_input_size_ != cv::Size(0, 0)) {
+        cv::gpu::GpuMat scaled_image;
+        cv::gpu::resize(last_scaled_image_,
+                        scaled_image,
+                        target_size_);
+        last_scaled_image_ = scaled_image;
+
+        cv::gpu::GpuMat scaled_grayscale_image;
+        cv::gpu::cvtColor(last_scaled_image_,
+                          scaled_grayscale_image,
+                          CV_RGBA2GRAY);
+        last_scaled_grayscale_image_ = scaled_grayscale_image;
+    }
 
     return true;
 }
