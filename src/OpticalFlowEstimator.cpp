@@ -556,8 +556,18 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
             height,
             time);
 
-    // Publish velocity estimate
-    twist_pub_.publish(velocity);
+    if (!std::isfinite(velocity.twist.twist.linear.x)
+     || !std::isfinite(velocity.twist.twist.linear.y)
+     || !std::isfinite(velocity.twist.covariance[0])    // variance of x
+     || !std::isfinite(velocity.twist.covariance[1])    // covariance of x & y
+     || !std::isfinite(velocity.twist.covariance[6])    // covariance of x & y
+     || !std::isfinite(velocity.twist.covariance[7])) { // variance of y
+        ROS_ERROR_STREAM("Invalid measurement in OpticalFlowEstimator: "
+                      << velocity);
+    } else {
+        // Publish velocity estimate
+        twist_pub_.publish(velocity);
+    }
 }
 
 bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
