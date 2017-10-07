@@ -5,16 +5,17 @@
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
+#include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <limits>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <queue>
 #include <ros/ros.h>
-
-#include <dynamic_reconfigure/server.h>
-#include <iarc7_vision/VisionNodeConfig.h>
-
 #include <sensor_msgs/image_encodings.h>
+
+#include <iarc7_vision/VisionNodeConfig.h>
+#include <ros_utils/ParamUtils.hpp>
 
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
@@ -322,8 +323,8 @@ int main(int argc, char **argv)
     double startup_timeout;
     ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
 
-    int message_queue_item_limit;
-    ROS_ASSERT(private_nh.getParam("message_queue_item_limit", message_queue_item_limit));
+    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
+            private_nh, "message_queue_item_limit");
 
     // Initialize the vision classes
     ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
@@ -331,11 +332,11 @@ int main(int argc, char **argv)
 
 
     // Queue and callback for collecting images
-    std::vector<sensor_msgs::Image::ConstPtr> message_queue;
+    std::queue<sensor_msgs::Image::ConstPtr> message_queue;
 
     std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
-            message_queue.push_back(message);
+            message_queue.push(message);
         };
 
     image_transport::ImageTransport image_transporter{nh};
@@ -348,21 +349,18 @@ int main(int argc, char **argv)
     // Main loop
     while (ros::ok())
     {
-        if (message_queue.size() > 0) {
-
-            sensor_msgs::Image::ConstPtr message;
-            if (static_cast<int>(message_queue.size()) > message_queue_item_limit) {
-                ROS_ERROR("Image queue has too many messages, clearing: %d images", (int)message_queue.size());
-
-                message = message_queue.back();
-                message_queue.clear();
-            }
-            else {
-                message = message_queue.front();
-                message_queue.erase(message_queue.begin());
+        if (!message_queue.empty()) {
+            if (message_queue.size() > message_queue_item_limit) {
+                ROS_ERROR(
+                        "Image queue has too many messages, clearing: %lu images",
+                        message_queue.size());
+                message_queue = std::queue<sensor_msgs::Image::ConstPtr>();
+                continue;
             }
 
-            // Don't use the gridline estimator right now for speed reasons
+            sensor_msgs::Image::ConstPtr message = message_queue.front();
+            message_queue.pop();
+
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
 

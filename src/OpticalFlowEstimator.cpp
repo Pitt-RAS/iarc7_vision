@@ -221,7 +221,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                          current_altitude_,
                          images_skipped_ == 0);
             images_skipped_ = (images_skipped_ + 1)
-                           % flow_estimator_settings_.debug_frameskip;
+                           % (flow_estimator_settings_.debug_frameskip + 1);
 
             last_scaled_image_ = scaled_image;
             last_scaled_grayscale_image_ = scaled_gray_image;
