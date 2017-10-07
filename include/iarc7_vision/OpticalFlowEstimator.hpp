@@ -56,10 +56,14 @@ class OpticalFlowEstimator {
     // PUBLIC METHODS //
     ////////////////////
 
+    /// MUST be called when either of the settings objects passed into the
+    /// constructor have their variables changed
     bool __attribute__((warn_unused_result)) onSettingsChanged();
 
+    /// Process a new image message
     void update(const sensor_msgs::Image::ConstPtr& message);
 
+    /// MUST be called successfully before `update` is called
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& startup_timeout);
 
@@ -105,6 +109,19 @@ class OpticalFlowEstimator {
                                          const double y_cutoff,
                                          const cv::Size& image_size);
 
+    /// Process the given current and last frames to find flow vectors
+    ///
+    /// @param[in]  curr_frame       The current frame, in RGB8
+    /// @param[in]  curr_gray_frame  The current frame, in grayscale
+    /// @param[in]  last_frame       The last frame, in RGB8
+    /// @param[in]  last_gray_frame  The last frame, in grayscale
+    /// @param[out] tails            The tails of the flow vectors
+    /// @param[out] heads            The heads of the flow vectors
+    /// @param[out] status           {The status of each flow vector, nonzero
+    ///                               for valid}
+    /// @param[in]  debug            {Whether to spit out debug info, like
+    ///                               images from intermediate steps or with
+    ///                               arrows drawn}
     void findFeatureVectors(const cv::gpu::GpuMat& curr_frame,
                             const cv::gpu::GpuMat& curr_gray_frame,
                             const cv::gpu::GpuMat& last_frame,
@@ -128,6 +145,15 @@ class OpticalFlowEstimator {
                        double& p,
                        double& r);
 
+    /// Do all necessary processing on the new image, and publish results to
+    /// relevant topics
+    ///
+    /// @param[in] image        Current frame to process, in RGB8
+    /// @param[in] gray_image   Current frame to process, in MONO8
+    /// @param[in] orientation  Rotation from map to camera frame
+    /// @param[in] time         Timestamp when `image` was captured
+    /// @param[in] height       Altitude of the camera at `time`
+    /// @param[in] debug        Whether to spit out messages on debug topics
     void processImage(const cv::gpu::GpuMat& image,
                       const cv::gpu::GpuMat& gray_image,
                       const tf2::Quaternion& orientation,
@@ -135,6 +161,13 @@ class OpticalFlowEstimator {
                       double height,
                       bool debug=false) const;
 
+    /// Update altitude measurement and camera transform
+    ///
+    /// @param[in] time    {Time of latest measurements after function returns
+    ///                     successfully}
+    /// @param[in] timeout Max time to wait for transforms
+    ///
+    /// @return            True if transform was updated successfully
     bool __attribute__((warn_unused_result)) updateFilteredPosition(
             const ros::Time& time,
             const ros::Duration& timeout);
