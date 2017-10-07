@@ -173,7 +173,9 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         return;
     }
 
-    const cv::Mat& curr_image = cv_bridge::toCvShare(message)->image;
+    const boost::shared_ptr<const cv_bridge::CvImage> curr_image_msg
+        = cv_bridge::toCvShare(message);
+    const cv::Mat& curr_image = curr_image_msg->image;
 
     if (have_valid_last_image_) {
         if (curr_image.size() != expected_input_size_) {
