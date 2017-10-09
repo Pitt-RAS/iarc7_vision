@@ -42,7 +42,7 @@ static void drawArrows(cv::Mat& frame,
                        const std::vector<cv::Point2f>& prev_pts,
                        const std::vector<cv::Point2f>& next_pts,
                        const std::vector<uchar>& status,
-                       cv::Scalar line_color = cv::Scalar(0, 0, 255))
+                       cv::Scalar line_color)
 {
     for (size_t i = 0; i < prev_pts.size(); ++i) {
         if (status[i]) {
