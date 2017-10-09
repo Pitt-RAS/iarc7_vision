@@ -352,7 +352,7 @@ int main(int argc, char **argv)
             sensor_msgs::Image::ConstPtr message = message_queue.front();
             message_queue.pop();
 
-            if (message_queue.size() >= message_queue_item_limit) {
+            if (message_queue.size() > message_queue_item_limit - 1) {
                 ROS_ERROR(
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
