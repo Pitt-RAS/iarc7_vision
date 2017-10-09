@@ -151,7 +151,7 @@ bool __attribute__((warn_unused_result))
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
     // initial time for measurement
-    const int64 start = cv::getTickCount();
+    const ros::WallTime start = ros::WallTime::now();
 
     // make sure our current position is up to date
     if (!updateFilteredPosition(
@@ -162,8 +162,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     }
 
     if (debug_settings_.debug_times) {
-        ROS_WARN("updateFilteredPosition: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
+        ROS_WARN_STREAM("updateFilteredPosition: "
+                     << ros::WallTime::now() - start);
     }
 
     if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
@@ -188,30 +188,14 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         }
 
         try {
-            const int64 start = cv::getTickCount();
-
             // Scale and convert input image
-            cv::gpu::GpuMat d_frame1_big(curr_image);
+            cv::gpu::GpuMat curr_gpu_image(curr_image);
             cv::gpu::GpuMat scaled_image;
             cv::gpu::GpuMat scaled_gray_image;
 
-            cv::gpu::resize(d_frame1_big,
-                            scaled_image,
-                            target_size_);
-
-            if (debug_settings_.debug_times) {
-                ROS_WARN("post resize: %f",
-                         (cv::getTickCount() - start) / cv::getTickFrequency());
-            }
-
-            cv::gpu::cvtColor(scaled_image,
-                              scaled_gray_image,
-                              CV_RGBA2GRAY);
-
-            if (debug_settings_.debug_times) {
-                ROS_WARN("post cvtColor: %f",
-                         (cv::getTickCount() - start) / cv::getTickFrequency());
-            }
+            resizeAndConvertImages(curr_gpu_image,
+                                   scaled_image,
+                                   scaled_gray_image);
 
             // Get velocity estimate from average vector
             processImage(scaled_image,
@@ -408,7 +392,7 @@ void OpticalFlowEstimator::findFeatureVectors(
         std::vector<uchar>& status,
         bool debug) const
 {
-    int64 start = cv::getTickCount();
+    const ros::WallTime start = ros::WallTime::now();
 
     // Create the feature detector and perform feature detection
     cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
@@ -420,8 +404,7 @@ void OpticalFlowEstimator::findFeatureVectors(
     detector(last_gray_frame, d_prev_pts);
 
     if (debug_settings_.debug_times) {
-        ROS_WARN("post detector: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
+        ROS_WARN_STREAM("post detector: " << ros::WallTime::now() - start);
     }
 
     // Create optical flow object
@@ -442,8 +425,7 @@ void OpticalFlowEstimator::findFeatureVectors(
                    d_status);
 
     if (debug_settings_.debug_times) {
-        ROS_WARN("PYRLK sparse: %f",
-                 (cv::getTickCount() - start) / cv::getTickFrequency());
+        ROS_WARN_STREAM("PYRLK sparse: " << ros::WallTime::now() - start);
     }
 
     tails.resize(d_prev_pts.cols);
@@ -567,6 +549,29 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
     } else {
         // Publish velocity estimate
         twist_pub_.publish(velocity);
+    }
+}
+
+void OpticalFlowEstimator::resizeAndConvertImages(const cv::gpu::GpuMat& image,
+                                                  cv::gpu::GpuMat& scaled,
+                                                  cv::gpu::GpuMat& gray) const
+{
+    const ros::WallTime start = ros::WallTime::now();
+
+    cv::gpu::resize(image,
+                    scaled,
+                    target_size_);
+
+    if (debug_settings_.debug_times) {
+        ROS_WARN_STREAM("post resize: " << ros::WallTime::now() - start);
+    }
+
+    cv::gpu::cvtColor(scaled,
+                      gray,
+                      CV_RGBA2GRAY);
+
+    if (debug_settings_.debug_times) {
+        ROS_WARN_STREAM("post cvtColor: " << ros::WallTime::now() - start);
     }
 }
 

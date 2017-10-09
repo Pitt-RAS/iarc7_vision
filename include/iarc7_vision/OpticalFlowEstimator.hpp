@@ -161,6 +161,15 @@ class OpticalFlowEstimator {
                       double height,
                       bool debug=false) const;
 
+    /// Resize image and convert to grayscale
+    ///
+    /// @param[in]  image   Image to resize
+    /// @param[out] scaled  Image resized to target_size_
+    /// @param[out] gray    Grayscale image resized to target_size_
+    void resizeAndConvertImages(const cv::gpu::GpuMat& image,
+                                cv::gpu::GpuMat& scaled,
+                                cv::gpu::GpuMat& gray) const;
+
     /// Update altitude measurement and camera transform
     ///
     /// @param[in] time    {Time of latest measurements after function returns
