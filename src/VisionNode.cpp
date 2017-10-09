@@ -271,7 +271,7 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
-    // Create dynamic reconfigure server and settings callback
+    // Create settings objects
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
     iarc7_vision::LineExtractorSettings line_extractor_settings;
 
@@ -334,32 +334,30 @@ int main(int argc, char **argv)
     // Queue and callback for collecting images
     std::queue<sensor_msgs::Image::ConstPtr> message_queue;
 
-    std::function<void(const sensor_msgs::Image::ConstPtr&)> handler =
+    std::function<void(const sensor_msgs::Image::ConstPtr&)> image_msg_handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
             message_queue.push(message);
         };
 
     image_transport::ImageTransport image_transporter{nh};
-    ros::Subscriber sub = nh.subscribe(
+    image_transport::Subscriber sub = image_transporter.subscribe(
         "/bottom_image_raw/image_raw",
         100,
-        &std::function<void(const sensor_msgs::Image::ConstPtr&)>::operator(),
-        &handler);
+        image_msg_handler);
 
     // Main loop
     while (ros::ok())
     {
         if (!message_queue.empty()) {
-            if (message_queue.size() > message_queue_item_limit) {
+            sensor_msgs::Image::ConstPtr message = message_queue.front();
+            message_queue.pop();
+
+            if (message_queue.size() >= message_queue_item_limit) {
                 ROS_ERROR(
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
                 message_queue = std::queue<sensor_msgs::Image::ConstPtr>();
-                continue;
             }
-
-            sensor_msgs::Image::ConstPtr message = message_queue.front();
-            message_queue.pop();
 
             gridline_estimator.update(cv_bridge::toCvShare(message)->image,
                                       message->header.stamp);
