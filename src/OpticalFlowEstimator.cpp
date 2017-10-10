@@ -5,6 +5,13 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <cv_bridge/cv_bridge.h>
 #pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#include <Eigen/Geometry>
+#pragma GCC diagnostic pop
 // END BAD HEADER
 
 #include <opencv2/opencv.hpp>
@@ -202,7 +209,6 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                          scaled_gray_image,
                          current_orientation_,
                          message->header.stamp,
-                         current_altitude_,
                          images_skipped_ == 0);
             images_skipped_ = (images_skipped_ + 1)
                            % (flow_estimator_settings_.debug_frameskip + 1);
@@ -236,16 +242,18 @@ geometry_msgs::TwistWithCovarianceStamped
                 const cv::Point2f& average_vec,
                 const tf2::Quaternion& curr_orientation,
                 const tf2::Quaternion& last_orientation,
-                double height,
                 const ros::Time& time) const
 {
     // Get the pitch and roll of the camera in euler angles
+    // NOTE: CAMERA FRAME CONVENTIONS ARE DIFFERENT, SEE REP103
+    // http://www.ros.org/reps/rep-0103.html
     double yaw, pitch, roll;
     getYPR(curr_orientation, yaw, pitch, roll);
 
     double last_yaw, last_pitch, last_roll;
     getYPR(last_orientation, last_yaw, last_pitch, last_roll);
 
+    // Publish the orientation we're using for debugging purposes
     iarc7_msgs::OrientationAnglesStamped ori_msg;
     ori_msg.header.stamp = time;
     ori_msg.data.pitch = pitch;
@@ -253,18 +261,27 @@ geometry_msgs::TwistWithCovarianceStamped
     ori_msg.data.yaw = yaw;
     orientation_pub_.publish(ori_msg);
 
-    // m/px = camera_height / focal_length;
-    // In the projected camera plane
-    double current_meters_per_px = height
+    // Distance from the camera to the ground plane, along the camera's +z axis
+    double distance_to_plane = current_altitude_
+                             * std::sqrt(1.0
+                                       + std::pow(std::tan(pitch), 2.0)
+                                       + std::pow(std::tan(roll), 2.0));
+
+    // Converts measurements in pixels to measurements in meters in the plane
+    // parallel to the camera's xy plane and going through the point Pg, where
+    // Pg is intersection between the camera's +z axis and the ground plane
+    double current_meters_per_px = distance_to_plane
                          / getFocalLength(target_size_,
                                           flow_estimator_settings_.fov);
 
-    // Calculate the average velocity
+    // Calculate the average velocity in the level camera frame (i.e. camera
+    // frame if our pitch and roll were zero)
+    // Note that cos(roll) is negative, because the z axis is down
     cv::Point2f velocity_uncorrected;
-    velocity_uncorrected.x = (average_vec.x * current_meters_per_px)
+    velocity_uncorrected.x = (-average_vec.x * current_meters_per_px)
                            / std::cos(pitch)
                            / (time - last_message_time_).toSec();
-    velocity_uncorrected.y = (average_vec.y * current_meters_per_px)
+    velocity_uncorrected.y = (-average_vec.y * current_meters_per_px)
                            / -std::cos(roll)
                            / (time - last_message_time_).toSec();
 
@@ -287,38 +304,70 @@ geometry_msgs::TwistWithCovarianceStamped
         dr = (roll - last_roll);
     }
 
-    double angular_vel_y = dp / (time - last_message_time_).toSec();
-    double angular_vel_x = dr / (time - last_message_time_).toSec();
+    double dpitch_dt = dp / (time - last_message_time_).toSec();
+    double droll_dt = dr / (time - last_message_time_).toSec();
 
-    double distance_to_plane = current_altitude_
-                             * std::sqrt(1.0
-                                       + std::pow(std::tan(pitch), 2.0)
-                                       + std::pow(std::tan(roll), 2.0));
-
+    // Observed velocity in camera frame due to rotation
+    //
+    // Positive dpdt means that the x vector rotates down, which means we think
+    // we're moving in the -x direction
+    //
+    // Positive drdt means that the y vector rotates down, which means we think
+    // we're moving in the -y direction
+    //
+    // Note again that cos(roll) is negative, because the z axis is down
     cv::Point2f correction_vel;
-    correction_vel.x = -distance_to_plane
-                     * angular_vel_y
-                     / cos(pitch);
+    correction_vel.x = distance_to_plane
+                     * -dpitch_dt
+                     / std::cos(pitch);
     correction_vel.y = distance_to_plane
-                     * angular_vel_x
-                     / cos(roll);
+                     * -droll_dt
+                     / -std::cos(roll);
 
-    cv::Point2f corrected_vel;
-    corrected_vel.x = velocity_uncorrected.x - correction_vel.x;
-    corrected_vel.y = velocity_uncorrected.y - correction_vel.y;
+    // Actual velocity in level camera frame (i.e. camera frame if our pitch
+    // and roll were zero)
+    Eigen::Vector3d corrected_vel(
+        velocity_uncorrected.x - correction_vel.x,
+        velocity_uncorrected.y - correction_vel.y,
+        0.0);
 
     last_pitch = pitch;
     last_roll = roll;
+
+    // Calculate covariance
+    Eigen::Matrix3d covariance;
+    covariance(0, 0) = std::pow(flow_estimator_settings_.variance_scale
+                              * dpitch_dt, 2.0)
+                      + flow_estimator_settings_.variance;
+    covariance(1, 1) = std::pow(flow_estimator_settings_.variance_scale
+                              * droll_dt, 2.0)
+                      + flow_estimator_settings_.variance;
+
+    // Rotation matrix from level camera frame to level_quad
+    Eigen::Matrix3d rotation_matrix;
+    rotation_matrix = Eigen::AngleAxisd(M_PI, Eigen::Vector3d::UnitX())
+                    * Eigen::AngleAxisd(-yaw, Eigen::Vector3d::UnitZ());
+
+    // Get velocity and covariance in level_quad frame
+    Eigen::Vector3d level_quad_vel = rotation_matrix * corrected_vel;
+    Eigen::Matrix3d level_quad_covariance = rotation_matrix
+                                          * covariance
+                                          * rotation_matrix.inverse();
 
     // Fill out the twist
     geometry_msgs::TwistWithCovarianceStamped twist;
     twist.header.stamp = time;
     twist.header.frame_id = "level_quad";
-    twist.twist.twist.linear.x = std::cos(yaw + M_PI) * -corrected_vel.x
-                               - std::sin(yaw + M_PI) *  corrected_vel.y;
-    twist.twist.twist.linear.y = std::cos(yaw + M_PI) *  corrected_vel.y
-                               + std::sin(yaw + M_PI) * -corrected_vel.x;
+    twist.twist.twist.linear.x = level_quad_vel.x();
+    twist.twist.twist.linear.y = level_quad_vel.y();
+    twist.twist.twist.linear.z = 0.0;
 
+    twist.twist.covariance[0] = level_quad_covariance(0, 0);
+    twist.twist.covariance[1] = level_quad_covariance(0, 1);
+    twist.twist.covariance[6] = level_quad_covariance(1, 0);
+    twist.twist.covariance[7] = level_quad_covariance(1, 1);
+
+    // Publish intermediate twists for debugging
     geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
     twist_correction.twist.twist.linear.x = correction_vel.x;
     twist_correction.twist.twist.linear.y = correction_vel.y;
@@ -329,31 +378,17 @@ geometry_msgs::TwistWithCovarianceStamped
     twist_raw.twist.twist.linear.y = velocity_uncorrected.y;
     raw_pub_.publish(twist_raw);
 
-    // Calculate variance
-    double rotated_ang_vel_x = std::cos(yaw + M_PI) * angular_vel_x
-                             - std::sin(yaw + M_PI) * angular_vel_y;
-    double rotated_ang_vel_y = std::cos(yaw + M_PI) * angular_vel_y
-                             + std::sin(yaw + M_PI) * angular_vel_x;
-    double x_variance = std::pow(flow_estimator_settings_.variance_scale
-                               * rotated_ang_vel_y, 2.0)
-                      + flow_estimator_settings_.variance;
-    double y_variance = std::pow(flow_estimator_settings_.variance_scale
-                               * rotated_ang_vel_x, 2.0)
-                      + flow_estimator_settings_.variance;
-
-    twist.twist.covariance[0] = x_variance;
-    twist.twist.covariance[7] = y_variance;
-
     return twist;
 }
 
-cv::Point2f OpticalFlowEstimator::findAverageVector(
+bool OpticalFlowEstimator::findAverageVector(
         const std::vector<cv::Point2f>& tails,
         const std::vector<cv::Point2f>& heads,
         const std::vector<uchar>& status,
         const double x_cutoff,
         const double y_cutoff,
-        const cv::Size& image_size)
+        const cv::Size& image_size,
+        cv::Point2f& average)
 {
     double total_x = 0.0;
     double total_y = 0.0;
@@ -367,19 +402,20 @@ cv::Point2f OpticalFlowEstimator::findAverageVector(
          && tails[i].y > image_size.height * y_cutoff
          && tails[i].y < image_size.height * (1.0 - y_cutoff)) {
 
-            cv::Point p = tails[i];
-            cv::Point q = heads[i];
-            total_x += p.x - q.x;
-            total_y += p.y - q.y;
+            cv::Point tail = tails[i];
+            cv::Point head = heads[i];
+            total_x += head.x - tail.x;
+            total_y += head.y - tail.y;
             num_points++;
         }
     }
 
-    cv::Point2f avg_vector;
-    avg_vector.x = total_x / static_cast<double>(num_points);
-    avg_vector.y = total_y / static_cast<double>(num_points);
+    if (num_points != 0) {
+        average.x = total_x / static_cast<double>(num_points);
+        average.y = total_y / static_cast<double>(num_points);
+    }
 
-    return avg_vector;
+    return num_points != 0;
 }
 
 void OpticalFlowEstimator::findFeatureVectors(
@@ -479,7 +515,6 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
                                         const cv::gpu::GpuMat& gray_image,
                                         const tf2::Quaternion& orientation,
                                         const ros::Time& time,
-                                        double height,
                                         bool debug) const
 {
     // Find vectors from image
@@ -495,14 +530,21 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
                        status,
                        debug);
 
-    // Calculate the average vector
-    cv::Point2f average_vec = findAverageVector(
+    // Calculate the average movement of the features in the camera frame
+    cv::Point2f average_vec;
+    bool found_average = findAverageVector(
             tails,
             heads,
             status,
             flow_estimator_settings_.x_cutoff_region_velocity_measurement,
             flow_estimator_settings_.y_cutoff_region_velocity_measurement,
-            target_size_);
+            target_size_,
+            average_vec);
+
+    if (!found_average) {
+        ROS_ERROR("OpticalFlow image with no valid features, returning");
+        return;
+    }
 
     // Publish debugging image with average vector drawn
     if (debug && debug_settings_.debug_average_vector_image) {
@@ -535,7 +577,6 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
             average_vec,
             orientation,
             last_orientation_,
-            height,
             time);
 
     if (!std::isfinite(velocity.twist.twist.linear.x)

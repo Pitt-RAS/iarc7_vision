@@ -75,8 +75,8 @@ class OpticalFlowEstimator {
 
     /// Calculate new velocity estimate
     ///
-    /// @param[in]  average_vec {Movement since last frame, averaged over all
-    ///                          features}
+    /// @param[in]  average_vec {Movement of the average feature between the
+    ///                          previous frame and the current frame}
     /// @param[in]  height      Altitude of the camera at `time`
     /// @param[in]  time        Timestamp of the image
     ///
@@ -85,29 +85,34 @@ class OpticalFlowEstimator {
             const cv::Point2f& average_vec,
             const tf2::Quaternion& curr_orientation,
             const tf2::Quaternion& last_orientation,
-            double height,
             const ros::Time& time) const;
 
-    /// Finds the average of the given vectors, filtering out points outside
-    /// of the cutoff region
+    /// Finds the average of the given feature vectors, filtering out points
+    /// outside of the cutoff region
     ///
-    /// @param[in] tails      Tails of the input vectors
-    /// @param[in] heads      Heads of the input vectors
-    /// @param[in] status     Status of each vector, 1 if valid and 0 otherwise
-    /// @param[in] x_cutoff   {Width of region to be discarded on each side as a
-    ///                        percentage of the total width}
-    /// @param[in] y_cutoff   {Height of region to be discarded on each side as
-    ///                        a percentage of the total height}
-    /// @param[in] image_size {Size of image that the points are from, used for
-    ///                        calculating cutoffs}
+    /// Each feature vector is the movement of the feature in the camera frame
+    /// from the previous frame to the current frame
     ///
-    /// @return               Average of valid input vectors
-    static cv::Point2f findAverageVector(const std::vector<cv::Point2f>& tails,
+    /// @param[in]  tails      Tails of the input vectors
+    /// @param[in]  heads      Heads of the input vectors
+    /// @param[in]  status     Status of each vector, 1 if valid and 0 otherwise
+    /// @param[in]  x_cutoff   {Width of region to be discarded on each side as a
+    ///                         percentage of the total width}
+    /// @param[in]  y_cutoff   {Height of region to be discarded on each side as
+    ///                         a percentage of the total height}
+    /// @param[in]  image_size {Size of image that the points are from, used for
+    ///                         calculating cutoffs}
+    /// @param[out] average    Average movement of the features in the frame
+    ///
+    /// @return                {True if result is valid (i.e. at least one
+    ///                         valid point)}
+    static bool findAverageVector(const std::vector<cv::Point2f>& tails,
                                          const std::vector<cv::Point2f>& heads,
                                          const std::vector<uchar>& status,
                                          const double x_cutoff,
                                          const double y_cutoff,
-                                         const cv::Size& image_size);
+                                         const cv::Size& image_size,
+                                         cv::Point2f& average);
 
     /// Process the given current and last frames to find flow vectors
     ///
@@ -158,7 +163,6 @@ class OpticalFlowEstimator {
                       const cv::gpu::GpuMat& gray_image,
                       const tf2::Quaternion& orientation,
                       const ros::Time& time,
-                      double height,
                       bool debug=false) const;
 
     /// Resize image and convert to grayscale
