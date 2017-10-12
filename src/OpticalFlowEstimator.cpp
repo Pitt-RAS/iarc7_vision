@@ -23,64 +23,13 @@
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 
+#include "iarc7_vision/cv_utils.hpp"
 #include <ros_utils/SafeTransformWrapper.hpp>
 
 #include <geometry_msgs/PointStamped.h>
 #include <iarc7_msgs/OrientationAnglesStamped.h>
 
 namespace iarc7_vision {
-
-static void download(const cv::gpu::GpuMat& d_mat,
-                     std::vector<cv::Point2f>& vec)
-{
-    vec.resize(d_mat.cols);
-    cv::Mat mat(1, d_mat.cols, CV_32FC2, (void*)&vec[0]);
-    d_mat.download(mat);
-}
-
-static void download(const cv::gpu::GpuMat& d_mat, std::vector<uchar>& vec)
-{
-    vec.resize(d_mat.cols);
-    cv::Mat mat(1, d_mat.cols, CV_8UC1, (void*)&vec[0]);
-    d_mat.download(mat);
-}
-
-static void drawArrows(cv::Mat& frame,
-                       const std::vector<cv::Point2f>& prev_pts,
-                       const std::vector<cv::Point2f>& next_pts,
-                       const std::vector<uchar>& status,
-                       cv::Scalar line_color)
-{
-    for (size_t i = 0; i < prev_pts.size(); ++i) {
-        if (status[i]) {
-            int line_thickness = 1;
-
-            cv::Point p = prev_pts[i];
-            cv::Point q = next_pts[i];
-
-            double angle = std::atan2(p.y - q.y, p.x - q.x);
-            double hypotenuse = std::hypot(p.y - q.y, p.x - q.x);
-
-            // Here we lengthen the arrow by a factor of three.
-            q.x = p.x - 3 * hypotenuse * std::cos(angle);
-            q.y = p.y - 3 * hypotenuse * std::sin(angle);
-
-            // Now we draw the main line of the arrow.
-            cv::line(frame, p, q, line_color, line_thickness);
-
-            // Now draw the tips of the arrow. I do some scaling so that the
-            // tips look proportional to the main line of the arrow.
-
-            p.x = q.x + 9 * std::cos(angle + CV_PI / 4);
-            p.y = q.y + 9 * std::sin(angle + CV_PI / 4);
-            cv::line(frame, p, q, line_color, line_thickness);
-
-            p.x = q.x + 9 * cos(angle - CV_PI / 4);
-            p.y = q.y + 9 * sin(angle - CV_PI / 4);
-            cv::line(frame, p, q, line_color, line_thickness);
-        }
-    }
-}
 
 OpticalFlowEstimator::OpticalFlowEstimator(
         const OpticalFlowEstimatorSettings& flow_estimator_settings,
@@ -465,24 +414,24 @@ void OpticalFlowEstimator::findFeatureVectors(
     }
 
     tails.resize(d_prev_pts.cols);
-    download(d_prev_pts, tails);
+    cv_utils::downloadVector(d_prev_pts, tails);
 
     heads.resize(d_next_pts.cols);
-    download(d_next_pts, heads);
+    cv_utils::downloadVector(d_next_pts, heads);
 
     status.resize(d_status.cols);
-    download(d_status, status);
+    cv_utils::downloadVector(d_status, status);
 
     // Publish debugging image with all vectors drawn
     if (debug && debug_settings_.debug_vectors_image) {
         // Draw arrows
         cv::Mat arrow_image;
         curr_frame.download(arrow_image);
-        drawArrows(arrow_image,
-                   tails,
-                   heads,
-                   status,
-                   cv::Scalar(255, 0, 0));
+        cv_utils::drawArrows(arrow_image,
+                             tails,
+                             heads,
+                             status,
+                             cv::Scalar(255, 0, 0));
 
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
@@ -557,11 +506,11 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
         const cv::Point2f end_point(average_vec.x + start_point.x,
                                     average_vec.y + start_point.y);
 
-        drawArrows(arrow_image,
-                   { start_point },
-                   { end_point },
-                   { 1 },
-                   cv::Scalar(255, 0, 0));
+        cv_utils::drawArrows(arrow_image,
+                             { start_point },
+                             { end_point },
+                             { 1 },
+                             cv::Scalar(255, 0, 0));
 
         const cv_bridge::CvImage cv_image {
             std_msgs::Header(),

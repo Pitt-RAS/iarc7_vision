@@ -160,11 +160,18 @@ include_directories(
 # add_dependencies(iarc7_vision ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-add_executable(iarc7_vision_node src/VisionNode.cpp src/GridLineEstimator.cpp src/OpticalFlowEstimator.cpp)
+add_executable(iarc7_vision_node
+    src/VisionNode.cpp
+    src/GridLineEstimator.cpp
+    src/OpticalFlowEstimator.cpp
+    src/cv_utils.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-add_dependencies(iarc7_vision_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencfg)
+add_dependencies(iarc7_vision_node
+    ${${PROJECT_NAME}_EXPORTED_TARGETS}
+    ${catkin_EXPORTED_TARGETS}
+    ${PROJECT_NAME}_gencfg)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(iarc7_vision_node
