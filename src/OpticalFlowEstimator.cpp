@@ -88,17 +88,13 @@ bool __attribute__((warn_unused_result))
     target_size_ = new_target_size;
 
     if (expected_input_size_ != cv::Size(0, 0)) {
+        // Note: neither of the outputs can be the input image, so we need to
+        // do this copying thing
         cv::gpu::GpuMat scaled_image;
-        cv::gpu::resize(last_scaled_image_,
-                        scaled_image,
-                        target_size_);
+        resizeAndConvertImages(last_scaled_image_,
+                               scaled_image,
+                               last_scaled_grayscale_image_);
         last_scaled_image_ = scaled_image;
-
-        cv::gpu::GpuMat scaled_grayscale_image;
-        cv::gpu::cvtColor(last_scaled_image_,
-                          scaled_grayscale_image,
-                          CV_RGBA2GRAY);
-        last_scaled_grayscale_image_ = scaled_grayscale_image;
     }
 
     return true;

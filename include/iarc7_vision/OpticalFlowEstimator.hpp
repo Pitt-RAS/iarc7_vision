@@ -167,6 +167,9 @@ class OpticalFlowEstimator {
 
     /// Resize image and convert to grayscale
     ///
+    /// All three of the inputs should be different images (or either of the
+    /// outputs can be empty)
+    ///
     /// @param[in]  image   Image to resize
     /// @param[out] scaled  Image resized to target_size_
     /// @param[out] gray    Grayscale image resized to target_size_
