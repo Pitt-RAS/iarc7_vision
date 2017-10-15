@@ -200,12 +200,14 @@ class OpticalFlowEstimator {
 
     cv::gpu::GpuMat last_scaled_image_;
     cv::gpu::GpuMat last_scaled_grayscale_image_;
-    tf2::Quaternion last_orientation_;
 
     const ros_utils::SafeTransformWrapper transform_wrapper_;
 
     double current_altitude_;
     tf2::Quaternion current_orientation_;
+    tf2::Quaternion last_orientation_;
+    geometry_msgs::TransformStamped current_camera_to_level_quad_tf_;
+    geometry_msgs::TransformStamped last_camera_to_level_quad_tf_;
 
     /// Timestamp from last message received
     ros::Time last_message_time_;

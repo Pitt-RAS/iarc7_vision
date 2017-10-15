@@ -22,6 +22,7 @@
 #include <ros/ros.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include "iarc7_vision/cv_utils.hpp"
 #include <ros_utils/SafeTransformWrapper.hpp>
@@ -40,10 +41,12 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       images_skipped_(0),
       last_scaled_image_(),
       last_scaled_grayscale_image_(),
-      last_orientation_(),
       transform_wrapper_(),
       current_altitude_(0.0),
       current_orientation_(),
+      last_orientation_(),
+      current_camera_to_level_quad_tf_(),
+      last_camera_to_level_quad_tf_(),
       last_message_time_(),
       expected_input_size_(),
       target_size_(),
@@ -174,6 +177,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
     last_message_time_ = message->header.stamp;
     last_orientation_ = current_orientation_;
+    last_camera_to_level_quad_tf_ = current_camera_to_level_quad_tf_;
 }
 
 bool OpticalFlowEstimator::waitUntilReady(
@@ -197,6 +201,9 @@ geometry_msgs::TwistWithCovarianceStamped
 
     double last_yaw, last_pitch, last_roll;
     getYPR(last_orientation, last_yaw, last_pitch, last_roll);
+
+    // Calculate time between last and current frame
+    double dt = (time - last_message_time_).toSec();
 
     // Publish the orientation we're using for debugging purposes
     iarc7_msgs::OrientationAnglesStamped ori_msg;
@@ -225,10 +232,10 @@ geometry_msgs::TwistWithCovarianceStamped
     cv::Point2f velocity_uncorrected;
     velocity_uncorrected.x = (-average_vec.x * current_meters_per_px)
                            / std::cos(pitch)
-                           / (time - last_message_time_).toSec();
+                           / dt;
     velocity_uncorrected.y = (-average_vec.y * current_meters_per_px)
                            / -std::cos(roll)
-                           / (time - last_message_time_).toSec();
+                           / dt;
 
     double dp;
     double dr;
@@ -249,8 +256,8 @@ geometry_msgs::TwistWithCovarianceStamped
         dr = (roll - last_roll);
     }
 
-    double dpitch_dt = dp / (time - last_message_time_).toSec();
-    double droll_dt = dr / (time - last_message_time_).toSec();
+    double dpitch_dt = dp / dt;
+    double droll_dt = dr / dt;
 
     // Observed velocity in camera frame due to rotation
     //
@@ -280,7 +287,7 @@ geometry_msgs::TwistWithCovarianceStamped
     last_roll = roll;
 
     // Calculate covariance
-    Eigen::Matrix3d covariance;
+    Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
     covariance(0, 0) = std::pow(flow_estimator_settings_.variance_scale
                               * dpitch_dt, 2.0)
                       + flow_estimator_settings_.variance;
@@ -298,6 +305,15 @@ geometry_msgs::TwistWithCovarianceStamped
     Eigen::Matrix3d level_quad_covariance = rotation_matrix
                                           * covariance
                                           * rotation_matrix.inverse();
+
+    // Correct for movement of camera relative to level_quad
+    geometry_msgs::PointStamped curr_pos, last_pos;
+    tf2::doTransform(curr_pos, curr_pos, current_camera_to_level_quad_tf_);
+    tf2::doTransform(last_pos, last_pos, last_camera_to_level_quad_tf_);
+    double camera_relative_vel_x = (curr_pos.point.x - last_pos.point.x) / dt;
+    double camera_relative_vel_y = (curr_pos.point.y - last_pos.point.y) / dt;
+    level_quad_vel.x() -= camera_relative_vel_x;
+    level_quad_vel.y() -= camera_relative_vel_y;
 
     // Fill out the twist
     geometry_msgs::TwistWithCovarianceStamped twist;
@@ -560,13 +576,20 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
                                                   const ros::Duration& timeout)
 {
     geometry_msgs::TransformStamped filtered_position_transform_stamped;
+    geometry_msgs::TransformStamped camera_to_level_quad_tf_stamped;
     if (!transform_wrapper_.getTransformAtTime(
             filtered_position_transform_stamped,
             "map",
             "bottom_camera_optical",
             time,
             timeout)) {
-        ROS_ERROR("Failed to fetch transform to bottom_camera_optical");
+        return false;
+    } else if (!transform_wrapper_.getTransformAtTime(
+            camera_to_level_quad_tf_stamped,
+            "level_quad",
+            "bottom_camera_optical",
+            time,
+            timeout)) {
         return false;
     } else {
         geometry_msgs::PointStamped camera_position;
@@ -577,6 +600,8 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
 
         tf2::convert(filtered_position_transform_stamped.transform.rotation,
                      current_orientation_);
+
+        current_camera_to_level_quad_tf_ = camera_to_level_quad_tf_stamped;
         return true;
     }
 }
