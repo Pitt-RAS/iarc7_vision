@@ -409,13 +409,8 @@ void OpticalFlowEstimator::findFeatureVectors(
         ROS_WARN_STREAM("PYRLK sparse: " << ros::WallTime::now() - start);
     }
 
-    tails.resize(d_prev_pts.cols);
     cv_utils::downloadVector(d_prev_pts, tails);
-
-    heads.resize(d_next_pts.cols);
     cv_utils::downloadVector(d_next_pts, heads);
-
-    status.resize(d_status.cols);
     cv_utils::downloadVector(d_status, status);
 
     // Publish debugging image with all vectors drawn
