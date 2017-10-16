@@ -5,6 +5,7 @@ set("OpenCV_DIR" "/usr/local/share/OpenCV")
 set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE "" INTERNAL)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Werror ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DROS_ASSERT_ENABLED")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
