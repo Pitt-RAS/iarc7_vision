@@ -122,7 +122,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     }
 
     if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
-        ROS_WARN("Height (%f) is below min processing height (%f)",
+        ROS_WARN_THROTTLE(2.0, "Height (%f) is below min processing height (%f)",
                  current_altitude_,
                  flow_estimator_settings_.min_estimation_altitude);
         return;
