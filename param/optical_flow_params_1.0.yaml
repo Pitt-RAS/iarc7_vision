@@ -4,7 +4,7 @@ optical_flow_estimator:
     fov: 1.07
 
     # Minimum altitude to run the detector
-    min_estimation_altitude: 0.15
+    min_estimation_altitude: 0.3
 
     # Window size for optical flow
     win_size: 20
