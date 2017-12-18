@@ -14,11 +14,6 @@
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/gpu/gpu.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
 #include <ros/ros.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -103,7 +98,7 @@ bool __attribute__((warn_unused_result))
     if (expected_input_size_ != cv::Size(0, 0)) {
         // Note: neither of the outputs can be the input image, so we need to
         // do this copying thing
-        cv::gpu::GpuMat scaled_image;
+        cv::cuda::GpuMat scaled_image;
         resizeAndConvertImages(last_scaled_image_,
                                scaled_image,
                                last_scaled_grayscale_image_);
@@ -161,9 +156,9 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
         try {
             // Scale and convert input image
-            cv::gpu::GpuMat curr_gpu_image(curr_image);
-            cv::gpu::GpuMat scaled_image;
-            cv::gpu::GpuMat scaled_gray_image;
+            cv::cuda::GpuMat curr_gpu_image(curr_image);
+            cv::cuda::GpuMat scaled_image;
+            cv::cuda::GpuMat scaled_gray_image;
 
             resizeAndConvertImages(curr_gpu_image,
                                    scaled_image,
@@ -472,10 +467,10 @@ bool OpticalFlowEstimator::findAverageVector(
 }
 
 void OpticalFlowEstimator::findFeatureVectors(
-        const cv::gpu::GpuMat& curr_frame,
-        const cv::gpu::GpuMat& /*curr_gray_frame*/,
-        const cv::gpu::GpuMat& /*last_frame*/,
-        const cv::gpu::GpuMat& last_gray_frame,
+        const cv::cuda::GpuMat& curr_frame,
+        const cv::cuda::GpuMat& /*curr_gray_frame*/,
+        const cv::cuda::GpuMat& /*last_frame*/,
+        const cv::cuda::GpuMat& last_gray_frame,
         std::vector<cv::Point2f>& tails,
         std::vector<cv::Point2f>& heads,
         std::vector<uchar>& status,
@@ -484,34 +479,36 @@ void OpticalFlowEstimator::findFeatureVectors(
     const ros::WallTime start = ros::WallTime::now();
 
     // Create the feature detector and perform feature detection
-    cv::gpu::GoodFeaturesToTrackDetector_GPU detector(
-                    flow_estimator_settings_.points,
-                    flow_estimator_settings_.quality_level,
-                    flow_estimator_settings_.min_dist);
-    cv::gpu::GpuMat d_prev_pts;
+    cv::Ptr<cv::cuda::CornersDetector> detector
+                             = cv::cuda::createGoodFeaturesToTrackDetector(
+                               last_gray_frame.type(),
+                               flow_estimator_settings_.points,
+                               flow_estimator_settings_.quality_level,
+                               flow_estimator_settings_.min_dist);
 
-    detector(last_gray_frame, d_prev_pts);
+    cv::cuda::GpuMat d_prev_pts;
+    detector->detect(last_gray_frame, d_prev_pts);
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("post detector: " << ros::WallTime::now() - start);
     }
 
     // Create optical flow object
-    cv::gpu::PyrLKOpticalFlow d_pyrLK;
+    cv::Ptr<cv::cuda::SparsePyrLKOpticalFlow> d_pyrLK
+                                    = cv::cuda::SparsePyrLKOpticalFlow::create(
+                                    cv::Size(flow_estimator_settings_.win_size,
+                                            flow_estimator_settings_.win_size),
+                                    flow_estimator_settings_.max_level,
+                                    flow_estimator_settings_.iters);
 
-    d_pyrLK.winSize.width = flow_estimator_settings_.win_size;
-    d_pyrLK.winSize.height = flow_estimator_settings_.win_size;
-    d_pyrLK.maxLevel = flow_estimator_settings_.max_level;
-    d_pyrLK.iters = flow_estimator_settings_.iters;
+    cv::cuda::GpuMat d_next_pts;
+    cv::cuda::GpuMat d_status;
 
-    cv::gpu::GpuMat d_next_pts;
-    cv::gpu::GpuMat d_status;
-
-    d_pyrLK.sparse(last_scaled_image_,
-                   curr_frame,
-                   d_prev_pts,
-                   d_next_pts,
-                   d_status);
+    d_pyrLK->calc(last_scaled_image_,
+                  curr_frame,
+                  d_prev_pts,
+                  d_next_pts,
+                  d_status);
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("PYRLK sparse: " << ros::WallTime::now() - start);
@@ -561,8 +558,8 @@ void OpticalFlowEstimator::getYPR(const tf2::Quaternion& orientation,
     matrix.getEulerYPR(y, p, r);
 }
 
-void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
-                                        const cv::gpu::GpuMat& gray_image,
+void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
+                                        const cv::cuda::GpuMat& gray_image,
                                         const ros::Time& time,
                                         bool debug) const
 {
@@ -640,13 +637,13 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
     }
 }
 
-void OpticalFlowEstimator::resizeAndConvertImages(const cv::gpu::GpuMat& image,
-                                                  cv::gpu::GpuMat& scaled,
-                                                  cv::gpu::GpuMat& gray) const
+void OpticalFlowEstimator::resizeAndConvertImages(const cv::cuda::GpuMat& image,
+                                                  cv::cuda::GpuMat& scaled,
+                                                  cv::cuda::GpuMat& gray) const
 {
     const ros::WallTime start = ros::WallTime::now();
 
-    cv::gpu::resize(image,
+    cv::cuda::resize(image,
                     scaled,
                     target_size_);
 
@@ -654,7 +651,7 @@ void OpticalFlowEstimator::resizeAndConvertImages(const cv::gpu::GpuMat& image,
         ROS_WARN_STREAM("post resize: " << ros::WallTime::now() - start);
     }
 
-    cv::gpu::cvtColor(scaled,
+    cv::cuda::cvtColor(scaled,
                       gray,
                       CV_RGBA2GRAY);
 

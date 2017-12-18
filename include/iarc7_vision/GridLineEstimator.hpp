@@ -11,10 +11,10 @@
 // END BAD HEADERS
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/gpu/gpu.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/core.hpp>
+#include "opencv2/cudaimgproc.hpp"
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 #include <ros/ros.h>
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>

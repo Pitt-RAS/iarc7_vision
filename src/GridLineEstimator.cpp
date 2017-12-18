@@ -20,11 +20,6 @@
 #include <exception>
 #include <iterator>
 #include <limits>
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/gpu/gpu.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
 #include <ros/ros.h>
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -204,7 +199,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
     double scale_factor = current_meters_per_px / desired_meters_per_px;
 
     cv::Mat image_edges;
-    if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
+    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
         ROS_WARN_ONCE("Doing OpenCV operations on CPU");
 
         cv::Mat image_sized;
@@ -234,42 +229,44 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                      / image_edges.size().height;
         }
     } else {
-        cv::gpu::HoughLinesBuf gpu_hough_buf;
-        cv::gpu::GpuMat gpu_image;
-        cv::gpu::GpuMat gpu_image_sized;
-        cv::gpu::GpuMat gpu_image_hsv;
-        cv::gpu::GpuMat gpu_image_edges;
-        cv::gpu::GpuMat gpu_lines;
-        cv::gpu::GpuMat gpu_image_hsv_channels[3];
+        //cv::cuda::HoughLinesBuf gpu_hough_buf;
+        cv::cuda::GpuMat gpu_image;
+        cv::cuda::GpuMat gpu_image_sized;
+        cv::cuda::GpuMat gpu_image_hsv;
+        cv::cuda::GpuMat gpu_image_edges;
+        cv::cuda::GpuMat gpu_lines;
+        cv::cuda::GpuMat gpu_image_hsv_channels[3];
 
         gpu_image.upload(image);
         ROS_DEBUG("Scale factor %f", scale_factor);
 
-        cv::gpu::resize(gpu_image,
+        cv::cuda::resize(gpu_image,
                         gpu_image_sized,
                         cv::Size(),
                         scale_factor,
                         scale_factor);
-        cv::gpu::cvtColor(gpu_image_sized, gpu_image_hsv, CV_RGB2HSV);
+        cv::cuda::cvtColor(gpu_image_sized, gpu_image_hsv, CV_RGB2HSV);
 
-        cv::gpu::split(gpu_image_hsv, gpu_image_hsv_channels);
+        cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
 
         // Turns out that cpu canny isn't the same as gpu Canny
         // Using a seperate sobel operator with a scaling factor
         // achieves similar resuts to the CPU canny
-        cv::gpu::GpuMat dx;
-        cv::gpu::GpuMat dy;
-        cv::gpu::Sobel(gpu_image_hsv_channels[2], dx, CV_32S, 1, 0, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
-        cv::gpu::Sobel(gpu_image_hsv_channels[2], dy, CV_32S, 0, 1, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
+        //cv::cuda::GpuMat dx;
+        //cv::cuda::GpuMat dy;
+        //cv::cuda::Sobel(gpu_image_hsv_channels[2], dx, CV_32S, 1, 0, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
+        //cv::cuda::Sobel(gpu_image_hsv_channels[2], dy, CV_32S, 0, 1, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
 
-        cv::gpu::Canny(dx,
-                       dy,
-                       gpu_image_edges,
-                       line_extractor_settings_.canny_low_threshold,
-                       line_extractor_settings_.canny_high_threshold);
+        cv::Ptr<cv::cuda::CannyEdgeDetector> canny
+                            = cv::cuda::createCannyEdgeDetector(
+                                line_extractor_settings_.canny_low_threshold,
+                                line_extractor_settings_.canny_high_threshold,
+                                line_extractor_settings_.canny_sobel_size);
+
+        canny->detect(gpu_image_hsv_channels[2], gpu_image_edges);
 
         // Commented out integrated gpu canny with sobel
-        /*cv::gpu::Canny(gpu_image_hsv_channels[2],
+        /*cv::cuda::Canny(gpu_image_hsv_channels[2],
                        gpu_image_edges,
                        line_extractor_settings_.canny_low_threshold,
                        line_extractor_settings_.canny_high_threshold,
@@ -286,14 +283,16 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
         double hough_threshold = gpu_image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;
-        cv::gpu::HoughLines(gpu_image_edges,
-                            gpu_lines,
-                            gpu_hough_buf,
-                            line_extractor_settings_.hough_rho_resolution,
-                            line_extractor_settings_.hough_theta_resolution,
-                            hough_threshold);
+        
+        cv::Ptr<cv::cuda::HoughLinesDetector> hough
+                            = cv::cuda::createHoughLinesDetector(
+                                line_extractor_settings_.hough_rho_resolution,
+                                line_extractor_settings_.hough_theta_resolution,
+                                hough_threshold);
 
-        cv::gpu::HoughLinesDownload(gpu_lines, lines);
+        hough->detect(gpu_image_edges, gpu_lines);
+
+        hough->downloadResults(gpu_lines, lines);
 
         // rescale lines back to original image size
         for (cv::Vec2f& line : lines) {

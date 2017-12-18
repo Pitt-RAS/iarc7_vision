@@ -4,7 +4,7 @@ namespace iarc7_vision {
 
 namespace cv_utils {
 
-void downloadVector(const cv::gpu::GpuMat& mat,
+void downloadVector(const cv::cuda::GpuMat& mat,
                     std::vector<cv::Point2f>& vector)
 {
     vector.resize(mat.cols);
@@ -12,7 +12,7 @@ void downloadVector(const cv::gpu::GpuMat& mat,
     mat.download(cpu_mat);
 }
 
-void downloadVector(const cv::gpu::GpuMat& mat,
+void downloadVector(const cv::cuda::GpuMat& mat,
                     std::vector<uchar>& vector)
 {
     vector.resize(mat.cols);

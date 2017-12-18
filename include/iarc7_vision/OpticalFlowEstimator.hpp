@@ -2,10 +2,10 @@
 #define IARC7_VISION_OPTICAL_FLOW_ESTIMATOR_HPP_
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/gpu/gpu.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/cudaoptflow.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 #include <ros/ros.h>
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -133,10 +133,10 @@ class OpticalFlowEstimator {
     /// @param[in]  debug            {Whether to spit out debug info, like
     ///                               images from intermediate steps or with
     ///                               arrows drawn}
-    void findFeatureVectors(const cv::gpu::GpuMat& curr_frame,
-                            const cv::gpu::GpuMat& curr_gray_frame,
-                            const cv::gpu::GpuMat& last_frame,
-                            const cv::gpu::GpuMat& last_gray_frame,
+    void findFeatureVectors(const cv::cuda::GpuMat& curr_frame,
+                            const cv::cuda::GpuMat& curr_gray_frame,
+                            const cv::cuda::GpuMat& last_frame,
+                            const cv::cuda::GpuMat& last_gray_frame,
                             std::vector<cv::Point2f>& tails,
                             std::vector<cv::Point2f>& heads,
                             std::vector<uchar>& status,
@@ -163,8 +163,8 @@ class OpticalFlowEstimator {
     /// @param[in] gray_image   Current frame to process, in MONO8
     /// @param[in] time         Timestamp when `image` was captured
     /// @param[in] debug        Whether to spit out messages on debug topics
-    void processImage(const cv::gpu::GpuMat& image,
-                      const cv::gpu::GpuMat& gray_image,
+    void processImage(const cv::cuda::GpuMat& image,
+                      const cv::cuda::GpuMat& gray_image,
                       const ros::Time& time,
                       bool debug=false) const;
 
@@ -176,9 +176,9 @@ class OpticalFlowEstimator {
     /// @param[in]  image   Image to resize
     /// @param[out] scaled  Image resized to target_size_
     /// @param[out] gray    Grayscale image resized to target_size_
-    void resizeAndConvertImages(const cv::gpu::GpuMat& image,
-                                cv::gpu::GpuMat& scaled,
-                                cv::gpu::GpuMat& gray) const;
+    void resizeAndConvertImages(const cv::cuda::GpuMat& image,
+                                cv::cuda::GpuMat& scaled,
+                                cv::cuda::GpuMat& gray) const;
 
     /// Update altitude measurement and camera transform
     ///
@@ -201,8 +201,8 @@ class OpticalFlowEstimator {
     bool have_valid_last_image_;
     size_t images_skipped_;
 
-    cv::gpu::GpuMat last_scaled_image_;
-    cv::gpu::GpuMat last_scaled_grayscale_image_;
+    cv::cuda::GpuMat last_scaled_image_;
+    cv::cuda::GpuMat last_scaled_grayscale_image_;
 
     const ros_utils::SafeTransformWrapper transform_wrapper_;
 
