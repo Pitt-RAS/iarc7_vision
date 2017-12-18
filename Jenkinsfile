@@ -34,6 +34,7 @@ pipeline {
                     fi
                     wstool update
                     cd ..
+                    apt-get update
                     rosdep install -y --from-paths src --ignore-src --rosdistro kinetic
                     '''
             }
