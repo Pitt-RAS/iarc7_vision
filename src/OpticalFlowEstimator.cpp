@@ -126,6 +126,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                 message->header.stamp,
                 ros::Duration(flow_estimator_settings_.tf_timeout))) {
         ROS_ERROR("Unable to update position for optical flow");
+        have_valid_last_image_ = false;
         return;
     }
 
@@ -136,6 +137,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
     // Make sure we're in an allowed position to calculate optical flow
     if (!canEstimateFlow()) {
+        have_valid_last_image_ = false;
         return;
     }
 
@@ -150,6 +152,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                       curr_image.size().height,
                       expected_input_size_.width,
                       expected_input_size_.height);
+            have_valid_last_image_ = false;
             return;
         }
 
@@ -179,10 +182,22 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
             have_valid_last_image_ = false;
         }
     } else {
-        expected_input_size_ = curr_image.size();
-        last_scaled_image_.upload(curr_image);
-        ROS_ASSERT(onSettingsChanged());
-        have_valid_last_image_ = true;
+        if (expected_input_size_ == cv::Size()) {
+            expected_input_size_ = curr_image.size();
+            last_scaled_image_.upload(curr_image);
+            ROS_ASSERT(onSettingsChanged());
+            have_valid_last_image_ = true;
+        } else if (expected_input_size_ == curr_image.size()) {
+            last_scaled_image_.upload(curr_image);
+            ROS_ASSERT(onSettingsChanged());
+            have_valid_last_image_ = true;
+        } else {
+            ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
+                      curr_image.size().width,
+                      curr_image.size().height,
+                      expected_input_size_.width,
+                      expected_input_size_.height);
+        }
     }
 
     last_message_time_ = message->header.stamp;
