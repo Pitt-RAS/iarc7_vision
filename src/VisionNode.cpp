@@ -83,6 +83,12 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         config.flow_min_estimation_altitude = flow_settings.min_estimation_altitude;
 
         ROS_ASSERT(private_nh.getParam(
+                "optical_flow_estimator/camera_vertical_threshold",
+                flow_settings.camera_vertical_threshold));
+        config.flow_camera_vertical_threshold
+            = flow_settings.camera_vertical_threshold;
+
+        ROS_ASSERT(private_nh.getParam(
                 "optical_flow_estimator/points",
                 flow_settings.points));
         config.flow_points = flow_settings.points;
@@ -166,7 +172,10 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
 
         // Begin optical flow estimator settings
         flow_settings.fov = config.flow_fov;
-        flow_settings.min_estimation_altitude = config.flow_min_estimation_altitude;
+        flow_settings.min_estimation_altitude
+            = config.flow_min_estimation_altitude;
+        flow_settings.camera_vertical_threshold
+            = config.flow_camera_vertical_threshold;
         flow_settings.points = config.flow_points;
         flow_settings.quality_level = config.flow_quality_level;
         flow_settings.min_dist = config.flow_min_dist;

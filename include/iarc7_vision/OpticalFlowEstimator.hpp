@@ -20,6 +20,7 @@ namespace iarc7_vision {
 struct OpticalFlowEstimatorSettings {
     double fov;
     double min_estimation_altitude;
+    double camera_vertical_threshold;
     int win_size;
     int max_level;
     int iters;
@@ -72,6 +73,12 @@ class OpticalFlowEstimator {
     /////////////////////
     // PRIVATE METHODS //
     /////////////////////
+
+    /// Decides whether the drone is in a position where it can make an optical
+    /// flow estimate
+    ///
+    /// @returns  True if a flow estimate can be made, false otherwise
+    bool canEstimateFlow() const;
 
     /// Calculate new velocity estimate
     ///

@@ -28,6 +28,7 @@
 #include <ros_utils/SafeTransformWrapper.hpp>
 
 #include <geometry_msgs/PointStamped.h>
+#include <geometry_msgs/Vector3Stamped.h>
 #include <iarc7_msgs/OrientationAnglesStamped.h>
 
 namespace iarc7_vision {
@@ -121,10 +122,8 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
                      << ros::WallTime::now() - start);
     }
 
-    if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
-        ROS_WARN_THROTTLE(2.0, "Height (%f) is below min processing height (%f)",
-                 current_altitude_,
-                 flow_estimator_settings_.min_estimation_altitude);
+    // Make sure we're in an allowed position to calculate optical flow
+    if (!canEstimateFlow()) {
         return;
     }
 
@@ -184,6 +183,34 @@ bool OpticalFlowEstimator::waitUntilReady(
         const ros::Duration& startup_timeout)
 {
     return updateFilteredPosition(ros::Time::now(), startup_timeout);
+}
+
+bool OpticalFlowEstimator::canEstimateFlow() const
+{
+    if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
+        ROS_WARN_THROTTLE(2.0,
+                          "Height (%f) is below min processing height (%f)",
+                          current_altitude_,
+                          flow_estimator_settings_.min_estimation_altitude);
+        return false;
+    }
+
+    geometry_msgs::Vector3Stamped camera_forward_vector;
+    camera_forward_vector.vector.x = 0;
+    camera_forward_vector.vector.y = 0;
+    camera_forward_vector.vector.z = 1;
+    tf2::doTransform(camera_forward_vector,
+                     camera_forward_vector,
+                     current_camera_to_level_quad_tf_);
+    if (camera_forward_vector.vector.z
+            > -flow_estimator_settings_.camera_vertical_threshold) {
+        ROS_WARN_THROTTLE(
+                2.0,
+                "Camera is not close enough to vertical to calculate flow");
+        return false;
+    }
+
+    return true;
 }
 
 geometry_msgs::TwistWithCovarianceStamped

@@ -6,6 +6,11 @@ optical_flow_estimator:
     # Minimum altitude to run the detector
     min_estimation_altitude: 0.15
 
+    # Camera vertical threshold
+    # Minimum dot product between camera forward vector and down vector
+    # required for optical flow to run
+    camera_vertical_threshold: 0.9
+
     # Window size for optical flow
     win_size: 20
 
