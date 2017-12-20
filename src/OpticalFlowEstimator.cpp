@@ -55,6 +55,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       debug_average_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("average_vector_image",
                                                      1)),
+      debug_level_quad_raw_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist_level_quad_uncorrected", 10)),
       debug_camera_rel_raw_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist_camera_relative", 10)),
@@ -382,15 +385,17 @@ geometry_msgs::TwistWithCovarianceStamped
     tf2::doTransform(last_pos, last_pos, last_camera_to_level_quad_tf_);
     double camera_relative_vel_x = (curr_pos.point.x - last_pos.point.x) / dt;
     double camera_relative_vel_y = (curr_pos.point.y - last_pos.point.y) / dt;
-    level_quad_vel.x() -= camera_relative_vel_x;
-    level_quad_vel.y() -= camera_relative_vel_y;
+
+    Eigen::Vector3d corrected_level_quad_vel = level_quad_vel;
+    corrected_level_quad_vel.x() -= camera_relative_vel_x;
+    corrected_level_quad_vel.y() -= camera_relative_vel_y;
 
     // Fill out the twist
     geometry_msgs::TwistWithCovarianceStamped twist;
     twist.header.stamp = time;
     twist.header.frame_id = "level_quad";
-    twist.twist.twist.linear.x = level_quad_vel.x();
-    twist.twist.twist.linear.y = level_quad_vel.y();
+    twist.twist.twist.linear.x = corrected_level_quad_vel.x();
+    twist.twist.twist.linear.y = corrected_level_quad_vel.y();
     twist.twist.twist.linear.z = 0.0;
 
     twist.twist.covariance[0] = level_quad_covariance(0, 0);
@@ -419,6 +424,11 @@ geometry_msgs::TwistWithCovarianceStamped
         twist_camera_rel.twist.twist.linear.x = camera_relative_vel_x;
         twist_camera_rel.twist.twist.linear.y = camera_relative_vel_y;
         debug_camera_rel_raw_pub_.publish(twist_camera_rel);
+
+        geometry_msgs::TwistWithCovarianceStamped twist_level_quad = twist;
+        twist_level_quad.twist.twist.linear.x = level_quad.x();
+        twist_level_quad.twist.twist.linear.y = level_quad.y();
+        debug_level_quad_raw_pub_.publish(twist_camera_rel);
     }
 
     return twist;
