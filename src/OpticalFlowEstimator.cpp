@@ -112,6 +112,12 @@ bool __attribute__((warn_unused_result))
 
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
+    if (cv::gpu::getCudaEnabledDeviceCount() == 0) {
+        ROS_ERROR_ONCE("Unable to run OpticalFlow without CUDA");
+        have_valid_last_image_ = false;
+        return;
+    }
+
     // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
 
