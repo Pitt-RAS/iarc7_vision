@@ -112,7 +112,7 @@ bool __attribute__((warn_unused_result))
 
 void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 {
-    // initial time for measurement
+    // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
 
     // make sure our current position is up to date
@@ -246,14 +246,25 @@ geometry_msgs::TwistWithCovarianceStamped
     }
 
     // Distance from the camera to the ground plane, along the camera's +z axis
+    //
+    // Calculation based on a right triangle with one vertex at the camera,
+    // one vertex on the ground directly below the camera, and one vertex at
+    // the intersection of the camera's forward vector with the ground.  This
+    // calculates the hypotenuse if the vertical leg has length
+    // current_altitude_ and the horizontal leg has length
+    // ((current_altitude_*tan(pitch))^2 + (current_altitude_*tan(roll))^2)^0.5
     double distance_to_plane = current_altitude_
                              * std::sqrt(1.0
                                        + std::pow(std::tan(pitch), 2.0)
                                        + std::pow(std::tan(roll), 2.0));
 
-    // Converts measurements in pixels to measurements in meters in the plane
-    // parallel to the camera's xy plane and going through the point Pg, where
-    // Pg is intersection between the camera's +z axis and the ground plane
+    // Multiplier that converts measurements in pixels to measurements in
+    // meters in the plane parallel to the camera's xy plane and going through
+    // the point Pg, where Pg is intersection between the camera's +z axis and
+    // the ground plane
+    //
+    // Focal length gives distance from camera to image plane in pixels, so
+    // dividing distance to plane by this number gives the multiplier we want
     double current_meters_per_px = distance_to_plane
                          / getFocalLength(target_size_,
                                           flow_estimator_settings_.fov);
@@ -272,6 +283,11 @@ geometry_msgs::TwistWithCovarianceStamped
     double dp;
     double dr;
 
+    // These two if statements make sure that dp and dr are the shortest change
+    // in angle that would produce the new observed orientation
+    //
+    // i.e. a change from 0.1rad to (2pi-0.1)rad should result in a delta of
+    // -0.2rad, not (2pi-0.2)rad
     if (last_pitch > CV_PI/2 && pitch < -CV_PI/2) {
         dp = (pitch + 2*CV_PI - last_pitch);
     } else if (last_pitch < -CV_PI/2 && pitch > CV_PI/2) {
@@ -338,7 +354,11 @@ geometry_msgs::TwistWithCovarianceStamped
                                           * covariance
                                           * rotation_matrix.inverse();
 
-    // Correct for movement of camera relative to level_quad
+    // Correct for movement of camera frame relative to level_quad
+    //
+    // When the drone rotates the camera has some velocity relative to the
+    // ground even if the center of the drone doesn't move relative to the
+    // ground, this cancels that effect
     geometry_msgs::PointStamped curr_pos, last_pos;
     tf2::doTransform(curr_pos, curr_pos, current_camera_to_level_quad_tf_);
     tf2::doTransform(last_pos, last_pos, last_camera_to_level_quad_tf_);
@@ -497,6 +517,8 @@ void OpticalFlowEstimator::findFeatureVectors(
 double OpticalFlowEstimator::getFocalLength(
         const cv::Size& img_size, double fov)
 {
+    // Calculates distance from image center to corner, divides by tan of half
+    // the FOV to get distance from focal point to center of image plane
     return std::hypot(img_size.width/2.0, img_size.height/2.0)
          / std::tan(fov / 2.0);
 }
@@ -618,33 +640,40 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
 {
     geometry_msgs::TransformStamped filtered_position_transform_stamped;
     geometry_msgs::TransformStamped camera_to_level_quad_tf_stamped;
-    if (!transform_wrapper_.getTransformAtTime(
+
+    bool success = transform_wrapper_.getTransformAtTime(
             filtered_position_transform_stamped,
             "map",
             "bottom_camera_optical",
             time,
-            timeout)) {
+            timeout);
+
+    if (!success) {
         return false;
-    } else if (!transform_wrapper_.getTransformAtTime(
+    }
+
+    success = transform_wrapper_.getTransformAtTime(
             camera_to_level_quad_tf_stamped,
             "level_quad",
             "bottom_camera_optical",
             time,
-            timeout)) {
+            timeout);
+
+    if (!success) {
         return false;
-    } else {
-        geometry_msgs::PointStamped camera_position;
-        tf2::doTransform(camera_position,
-                         camera_position,
-                         filtered_position_transform_stamped);
-        current_altitude_ = camera_position.point.z;
-
-        tf2::convert(filtered_position_transform_stamped.transform.rotation,
-                     current_orientation_);
-
-        current_camera_to_level_quad_tf_ = camera_to_level_quad_tf_stamped;
-        return true;
     }
+
+    geometry_msgs::PointStamped camera_position;
+    tf2::doTransform(camera_position,
+                     camera_position,
+                     filtered_position_transform_stamped);
+    current_altitude_ = camera_position.point.z;
+
+    tf2::convert(filtered_position_transform_stamped.transform.rotation,
+                 current_orientation_);
+
+    current_camera_to_level_quad_tf_ = camera_to_level_quad_tf_stamped;
+    return true;
 }
 
 } // namespace iarc7_vision
