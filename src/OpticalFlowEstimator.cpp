@@ -229,7 +229,7 @@ bool OpticalFlowEstimator::canEstimateFlow() const
                      camera_forward_vector,
                      current_camera_to_level_quad_tf_);
     if (camera_forward_vector.vector.z
-            > -flow_estimator_settings_.camera_vertical_threshold) {
+            > -std::cos(flow_estimator_settings_.camera_vertical_threshold)) {
         ROS_WARN_THROTTLE(
                 2.0,
                 "Camera is not close enough to vertical to calculate flow");

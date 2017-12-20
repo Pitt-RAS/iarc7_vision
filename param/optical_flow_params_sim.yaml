@@ -7,9 +7,9 @@ optical_flow_estimator:
     min_estimation_altitude: 0.3
 
     # Camera vertical threshold
-    # Minimum dot product between camera forward vector and down vector
+    # Maximum angle between camera forward vector and down vector
     # required for optical flow to run
-    camera_vertical_threshold: 0.9
+    camera_vertical_threshold: 0.3
 
     # Window size for optical flow
     win_size: 20
