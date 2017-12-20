@@ -154,7 +154,6 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
             // Get velocity estimate from average vector
             processImage(scaled_image,
                          scaled_gray_image,
-                         current_orientation_,
                          message->header.stamp,
                          images_skipped_ == 0);
             images_skipped_ = (images_skipped_ + 1)
@@ -214,20 +213,18 @@ bool OpticalFlowEstimator::canEstimateFlow() const
 }
 
 geometry_msgs::TwistWithCovarianceStamped
-        OpticalFlowEstimator::estimateVelocity(
+        OpticalFlowEstimator::estimateVelocityFromFlowVector(
                 const cv::Point2f& average_vec,
-                const tf2::Quaternion& curr_orientation,
-                const tf2::Quaternion& last_orientation,
                 const ros::Time& time) const
 {
     // Get the pitch and roll of the camera in euler angles
     // NOTE: CAMERA FRAME CONVENTIONS ARE DIFFERENT, SEE REP103
     // http://www.ros.org/reps/rep-0103.html
     double yaw, pitch, roll;
-    getYPR(curr_orientation, yaw, pitch, roll);
+    getYPR(current_orientation_, yaw, pitch, roll);
 
     double last_yaw, last_pitch, last_roll;
-    getYPR(last_orientation, last_yaw, last_pitch, last_roll);
+    getYPR(last_orientation_, last_yaw, last_pitch, last_roll);
 
     // Calculate time between last and current frame
     double dt = (time - last_message_time_).toSec();
@@ -496,7 +493,6 @@ void OpticalFlowEstimator::getYPR(const tf2::Quaternion& orientation,
 
 void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
                                         const cv::gpu::GpuMat& gray_image,
-                                        const tf2::Quaternion& orientation,
                                         const ros::Time& time,
                                         bool debug) const
 {
@@ -556,11 +552,9 @@ void OpticalFlowEstimator::processImage(const cv::gpu::GpuMat& image,
                 cv_image.toImageMsg());
     }
 
-    const geometry_msgs::TwistWithCovarianceStamped velocity = estimateVelocity(
-            average_vec,
-            orientation,
-            last_orientation_,
-            time);
+    const geometry_msgs::TwistWithCovarianceStamped velocity
+        = estimateVelocityFromFlowVector(average_vec,
+                                         time);
 
     if (!std::isfinite(velocity.twist.twist.linear.x)
      || !std::isfinite(velocity.twist.twist.linear.y)

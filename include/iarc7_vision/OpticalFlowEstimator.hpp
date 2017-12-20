@@ -84,14 +84,11 @@ class OpticalFlowEstimator {
     ///
     /// @param[in]  average_vec {Movement of the average feature between the
     ///                          previous frame and the current frame}
-    /// @param[in]  height      Altitude of the camera at `time`
     /// @param[in]  time        Timestamp of the image
     ///
     /// @return                 Velocity estimate
-    geometry_msgs::TwistWithCovarianceStamped estimateVelocity(
+    geometry_msgs::TwistWithCovarianceStamped estimateVelocityFromFlowVector(
             const cv::Point2f& average_vec,
-            const tf2::Quaternion& curr_orientation,
-            const tf2::Quaternion& last_orientation,
             const ros::Time& time) const;
 
     /// Finds the average of the given feature vectors, filtering out points
@@ -162,13 +159,10 @@ class OpticalFlowEstimator {
     ///
     /// @param[in] image        Current frame to process, in RGB8
     /// @param[in] gray_image   Current frame to process, in MONO8
-    /// @param[in] orientation  Rotation from map to camera frame
     /// @param[in] time         Timestamp when `image` was captured
-    /// @param[in] height       Altitude of the camera at `time`
     /// @param[in] debug        Whether to spit out messages on debug topics
     void processImage(const cv::gpu::GpuMat& image,
                       const cv::gpu::GpuMat& gray_image,
-                      const tf2::Quaternion& orientation,
                       const ros::Time& time,
                       bool debug=false) const;
 
