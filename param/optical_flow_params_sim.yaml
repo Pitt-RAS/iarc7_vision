@@ -4,7 +4,7 @@ optical_flow_estimator:
     fov: 1.00
 
     # Minimum altitude to run the detector
-    min_estimation_altitude: 0.15
+    min_estimation_altitude: 0.3
 
     # Camera vertical threshold
     # Minimum dot product between camera forward vector and down vector

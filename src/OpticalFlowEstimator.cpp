@@ -352,9 +352,6 @@ geometry_msgs::TwistWithCovarianceStamped
         velocity_uncorrected.y - correction_vel.y,
         0.0);
 
-    last_pitch = pitch;
-    last_roll = roll;
-
     // Calculate covariance
     Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
     covariance(0, 0) = std::pow(flow_estimator_settings_.variance_scale
