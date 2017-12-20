@@ -37,9 +37,11 @@ struct OpticalFlowEstimatorSettings {
 };
 
 struct OpticalFlowDebugSettings {
-    bool debug_vectors_image;
     bool debug_average_vector_image;
+    bool debug_intermediate_velocities;
+    bool debug_orientation;
     bool debug_times;
+    bool debug_vectors_image;
 };
 
 class OpticalFlowEstimator {
@@ -220,10 +222,12 @@ class OpticalFlowEstimator {
     /// Publishers
     ros::NodeHandle local_nh_;
     const ros::Publisher debug_average_velocity_vector_image_pub_;
+    const ros::Publisher debug_camera_rel_raw_pub_;
+    const ros::Publisher debug_correction_pub_;
+    const ros::Publisher debug_raw_pub_;
+    const ros::Publisher debug_unrotated_vel_pub_;
     const ros::Publisher debug_velocity_vector_image_pub_;
-    const ros::Publisher correction_pub_;
     const ros::Publisher orientation_pub_;
-    const ros::Publisher raw_pub_;
     const ros::Publisher twist_pub_;
 };
 

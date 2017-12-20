@@ -55,17 +55,23 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       debug_average_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("average_vector_image",
                                                      1)),
-      debug_velocity_vector_image_pub_(
-              local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
-      correction_pub_(
+      debug_camera_rel_raw_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist_camera_relative", 10)),
+      debug_correction_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist_correction", 10)),
+      debug_raw_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist_raw", 10)),
+      debug_unrotated_vel_pub_(
+              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
+                  "twist_unrotated", 10)),
+      debug_velocity_vector_image_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
       orientation_pub_(
               local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
                   "orientation", 10)),
-      raw_pub_(
-              local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
-                  "twist_raw", 10)),
       twist_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist", 10))
@@ -230,12 +236,14 @@ geometry_msgs::TwistWithCovarianceStamped
     double dt = (time - last_message_time_).toSec();
 
     // Publish the orientation we're using for debugging purposes
-    iarc7_msgs::OrientationAnglesStamped ori_msg;
-    ori_msg.header.stamp = time;
-    ori_msg.data.pitch = pitch;
-    ori_msg.data.roll = roll;
-    ori_msg.data.yaw = yaw;
-    orientation_pub_.publish(ori_msg);
+    if (debug_settings_.debug_orientation) {
+        iarc7_msgs::OrientationAnglesStamped ori_msg;
+        ori_msg.header.stamp = time;
+        ori_msg.data.pitch = pitch;
+        ori_msg.data.roll = roll;
+        ori_msg.data.yaw = yaw;
+        orientation_pub_.publish(ori_msg);
+    }
 
     // Distance from the camera to the ground plane, along the camera's +z axis
     double distance_to_plane = current_altitude_
@@ -353,15 +361,27 @@ geometry_msgs::TwistWithCovarianceStamped
     twist.twist.covariance[7] = level_quad_covariance(1, 1);
 
     // Publish intermediate twists for debugging
-    geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
-    twist_correction.twist.twist.linear.x = correction_vel.x;
-    twist_correction.twist.twist.linear.y = correction_vel.y;
-    correction_pub_.publish(twist_correction);
+    if (debug_settings_.debug_intermediate_velocities) {
+        geometry_msgs::TwistWithCovarianceStamped twist_correction = twist;
+        twist_correction.twist.twist.linear.x = correction_vel.x;
+        twist_correction.twist.twist.linear.y = correction_vel.y;
+        debug_correction_pub_.publish(twist_correction);
 
-    geometry_msgs::TwistWithCovarianceStamped twist_raw = twist;
-    twist_raw.twist.twist.linear.x = velocity_uncorrected.x;
-    twist_raw.twist.twist.linear.y = velocity_uncorrected.y;
-    raw_pub_.publish(twist_raw);
+        geometry_msgs::TwistWithCovarianceStamped twist_raw = twist;
+        twist_raw.twist.twist.linear.x = velocity_uncorrected.x;
+        twist_raw.twist.twist.linear.y = velocity_uncorrected.y;
+        debug_raw_pub_.publish(twist_raw);
+
+        geometry_msgs::TwistWithCovarianceStamped twist_unrotated = twist;
+        twist_unrotated.twist.twist.linear.x = corrected_vel.x();
+        twist_unrotated.twist.twist.linear.y = corrected_vel.y();
+        debug_unrotated_vel_pub_.publish(twist_unrotated);
+
+        geometry_msgs::TwistWithCovarianceStamped twist_camera_rel = twist;
+        twist_camera_rel.twist.twist.linear.x = camera_relative_vel_x;
+        twist_camera_rel.twist.twist.linear.y = camera_relative_vel_y;
+        debug_camera_rel_raw_pub_.publish(twist_camera_rel);
+    }
 
     return twist;
 }

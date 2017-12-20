@@ -32,15 +32,27 @@ optical_flow_estimator:
     # Image scale factor
     scale_factor: 0.3
 
-    # Debug settings for the optical flow estimator
-    # Publish image with the velocity vectors drawn on it
-    debug_vectors_image: true
+    ###############################
+    ########## DEBUGGING ##########
+    ###############################
 
     # Publish image with average velocity vector drawn on it
     debug_average_vector_image: true
 
+    # Publish lots of intermediate velocity calculations
+    debug_intermediate_velocities: false
+
+    # Publish the orientation used by the optical flow estimator
+    debug_orientation: true
+
     # Print out times when things are received/processed
     debug_times: false
+
+    # Debug settings for the optical flow estimator
+    # Publish image with the velocity vectors drawn on it
+    debug_vectors_image: true
+
+    ################################
 
     # Min variance to send with velocity measurements
     variance: 0.1

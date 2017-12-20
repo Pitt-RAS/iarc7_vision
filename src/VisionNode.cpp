@@ -261,16 +261,24 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
                           iarc7_vision::OpticalFlowDebugSettings& settings)
 {
     ROS_ASSERT(private_nh.getParam(
-            "optical_flow_estimator/debug_vectors_image",
-            settings.debug_vectors_image));
-
-    ROS_ASSERT(private_nh.getParam(
         "optical_flow_estimator/debug_average_vector_image",
         settings.debug_average_vector_image));
 
     ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/debug_intermediate_velocities",
+        settings.debug_intermediate_velocities));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/debug_orientation",
+        settings.debug_orientation));
+
+    ROS_ASSERT(private_nh.getParam(
         "optical_flow_estimator/debug_times",
         settings.debug_times));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/debug_vectors_image",
+            settings.debug_vectors_image));
 }
 
 int main(int argc, char **argv)
