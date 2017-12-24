@@ -1,0 +1,54 @@
+# Settings for the optical flow estimator
+optical_flow_estimator:
+    # fov of the camera
+    fov: 1.07
+
+    # Minimum altitude to run the detector
+    min_estimation_altitude: 0.3
+
+    # Window size for optical flow
+    win_size: 20
+
+    # Levels of the pyramid to run the optical flow at
+    max_level: 3
+
+    # Number of iterations to run the optical flow
+    iters: 20
+
+    # Number of points to track
+    points: 100
+
+    # Quality level for the corner detector
+    quality_level: 0.01
+
+    # Min distance between points for the corner detector
+    min_dist: 20
+
+    # Image scale factor
+    scale_factor: 0.5
+
+    # Debug settings for the optical flow estimator
+    # Publish image with the velocity vectors drawn on it
+    debug_vectors_image: true
+
+    # Publish image with average velocity vector drawn on it
+    debug_average_vector_image: true
+
+    # Print out times when things are received/processed
+    debug_times: false
+
+    # Min variance to send with velocity measurements
+    variance: 1.0
+
+    # What to scale the variance on according to the rotation rate
+    variance_scale: 0.19 # 0.3s/90deg
+
+    # Cutoff area where velocity vectors aren't included in the average
+    x_cutoff_region_velocity_measurement: 0.2
+    y_cutoff_region_velocity_measurement: 0.2
+
+    # Frames to skip before publishing debug images
+    debug_frameskip: 6
+
+    # Timeout for updates from tf
+    tf_timeout: 1.0
