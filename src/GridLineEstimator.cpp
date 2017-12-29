@@ -249,14 +249,6 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
         cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
 
-        // Turns out that cpu canny isn't the same as gpu Canny
-        // Using a seperate sobel operator with a scaling factor
-        // achieves similar resuts to the CPU canny
-        //cv::cuda::GpuMat dx;
-        //cv::cuda::GpuMat dy;
-        //cv::cuda::Sobel(gpu_image_hsv_channels[2], dx, CV_32S, 1, 0, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
-        //cv::cuda::Sobel(gpu_image_hsv_channels[2], dy, CV_32S, 0, 1, line_extractor_settings_.canny_sobel_size, 0.5, cv::BORDER_REPLICATE);
-
         cv::Ptr<cv::cuda::CannyEdgeDetector> canny
                             = cv::cuda::createCannyEdgeDetector(
                                 line_extractor_settings_.canny_low_threshold,
@@ -264,22 +256,6 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                                 line_extractor_settings_.canny_sobel_size);
 
         canny->detect(gpu_image_hsv_channels[2], gpu_image_edges);
-
-        // Commented out integrated gpu canny with sobel
-        /*cv::cuda::Canny(gpu_image_hsv_channels[2],
-                       gpu_image_edges,
-                       line_extractor_settings_.canny_low_threshold,
-                       line_extractor_settings_.canny_high_threshold,
-                       line_extractor_settings_.canny_sobel_size, true);*/
-
-        // Commented out cpu only canny
-        /*cv::Canny((cv::Mat)gpu_image_hsv_channels[2],
-                  image_edges,
-                  line_extractor_settings_.canny_low_threshold,
-                  line_extractor_settings_.canny_high_threshold,
-                  line_extractor_settings_.canny_sobel_size);
-
-        gpu_image_edges.upload(image_edges);*/
 
         double hough_threshold = gpu_image_edges.size().height
                                * line_extractor_settings_.hough_thresh_fraction;

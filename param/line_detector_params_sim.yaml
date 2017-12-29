@@ -2,8 +2,8 @@
 line_extractor:
     # Pixels per meter to scale image to
     pixels_per_meter: 250
-    canny_high_threshold: 20000.0
-    canny_threshold_ratio: 3.5
+    canny_high_threshold: 35000.0
+    canny_threshold_ratio: 2.0
     canny_sobel_size: 7
     hough_rho_resolution: 0.4
     hough_theta_resolution: 0.0087 # 1 degree
