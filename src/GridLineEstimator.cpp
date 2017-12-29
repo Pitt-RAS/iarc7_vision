@@ -229,7 +229,6 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                      / image_edges.size().height;
         }
     } else {
-        //cv::cuda::HoughLinesBuf gpu_hough_buf;
         cv::cuda::GpuMat gpu_image;
         cv::cuda::GpuMat gpu_image_sized;
         cv::cuda::GpuMat gpu_image_hsv;
