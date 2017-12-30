@@ -288,19 +288,23 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
-    // Create settings objects
-    iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
+    // Create GridlineEstimator settings objects
     iarc7_vision::LineExtractorSettings line_extractor_settings;
-
-    // Create and load grid estimator settings
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
     getGridEstimatorSettings(private_nh, grid_estimator_settings);
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
     getGridDebugSettings(private_nh, grid_line_debug_settings);
 
-    // Create and load optical flow debug settings
+    iarc7_vision::GridLineEstimator gridline_estimator(
+            line_extractor_settings,
+            grid_estimator_settings,
+            grid_line_debug_settings);
+
+    // Create OpticalFlowEstimator settings objects
+    iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
     getFlowDebugSettings(private_nh, optical_flow_debug_settings);
+
     iarc7_vision::OpticalFlowEstimator optical_flow_estimator(
             optical_flow_estimator_settings,
             optical_flow_debug_settings);
@@ -316,14 +320,10 @@ int main(int argc, char **argv)
                                line_extractor_settings,
                                optical_flow_estimator_settings,
                                dynamic_reconfigure_called);
+            ROS_ASSERT(gridline_estimator.onSettingsChanged());
             ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
         };
     dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
-
-    iarc7_vision::GridLineEstimator gridline_estimator(
-            line_extractor_settings,
-            grid_estimator_settings,
-            grid_line_debug_settings);
 
     // Check for images at 100 Hz
     ros::Rate rate (100);

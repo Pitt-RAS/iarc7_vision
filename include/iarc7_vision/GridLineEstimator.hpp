@@ -62,6 +62,10 @@ class GridLineEstimator {
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& timeout);
 
+    /// MUST be called when either of the settings objects passed into the
+    /// constructor have their variables changed
+    bool __attribute__((warn_unused_result)) onSettingsChanged();
+
   private:
 
     /// Returns the current angle of the quad from +x (with positive towards +y)
@@ -240,6 +244,9 @@ class GridLineEstimator {
     ros::Publisher debug_edges_pub_;
     ros::Publisher debug_lines_pub_;
     ros::Publisher debug_line_markers_pub_;
+
+    cv::Ptr<cv::cuda::CannyEdgeDetector> gpu_canny_edge_detector_;
+    cv::Ptr<cv::cuda::HoughLinesDetector> gpu_hough_lines_detector_;
 
     /// Position of bottom_camera_optical in the map frame
     /// when we received the last frame

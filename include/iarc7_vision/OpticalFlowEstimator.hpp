@@ -198,6 +198,9 @@ class OpticalFlowEstimator {
     const OpticalFlowEstimatorSettings& flow_estimator_settings_;
     const OpticalFlowDebugSettings& debug_settings_;
 
+    cv::Ptr<cv::cuda::CornersDetector> gpu_features_detector_;
+    cv::Ptr<cv::cuda::SparsePyrLKOpticalFlow> gpu_d_pyrLK_;
+
     bool have_valid_last_image_;
     size_t images_skipped_;
 

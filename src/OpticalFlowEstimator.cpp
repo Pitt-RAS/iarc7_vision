@@ -33,6 +33,8 @@ OpticalFlowEstimator::OpticalFlowEstimator(
         const OpticalFlowDebugSettings& debug_settings)
     : flow_estimator_settings_(flow_estimator_settings),
       debug_settings_(debug_settings),
+      gpu_features_detector_(),
+      gpu_d_pyrLK_(),
       have_valid_last_image_(false),
       images_skipped_(0),
       last_scaled_image_(),
@@ -74,6 +76,14 @@ OpticalFlowEstimator::OpticalFlowEstimator(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist", 10))
 {
+    // Create the feature detector with default settings that will be replaced
+    // on the first called to onSettingsChanged
+    gpu_features_detector_ = cv::cuda::createGoodFeaturesToTrackDetector(
+                                                                      CV_8UC1);
+
+    // Create optical flow object with default settings that will be replaced
+    // on the first called to onSettingsChanged
+    gpu_d_pyrLK_ = cv::cuda::SparsePyrLKOpticalFlow::create();
 }
 
 bool __attribute__((warn_unused_result))
@@ -104,6 +114,22 @@ bool __attribute__((warn_unused_result))
                                last_scaled_grayscale_image_);
         last_scaled_image_ = scaled_image;
     }
+
+
+    // Update the settings in the feature detector
+    // Currently this requres recreating the entire object, individual
+    // parameters can't be set.
+    gpu_features_detector_ = cv::cuda::createGoodFeaturesToTrackDetector(
+                                CV_8UC1,
+                                flow_estimator_settings_.points,
+                                flow_estimator_settings_.quality_level,
+                                flow_estimator_settings_.min_dist);
+
+    // Set the optical flow detector settings
+    gpu_d_pyrLK_->setWinSize(cv::Size(flow_estimator_settings_.win_size,
+                                        flow_estimator_settings_.win_size));
+    gpu_d_pyrLK_->setMaxLevel(flow_estimator_settings_.max_level);
+    gpu_d_pyrLK_->setNumIters(flow_estimator_settings_.iters);
 
     return true;
 }
@@ -478,33 +504,19 @@ void OpticalFlowEstimator::findFeatureVectors(
 {
     const ros::WallTime start = ros::WallTime::now();
 
-    // Create the feature detector and perform feature detection
-    cv::Ptr<cv::cuda::CornersDetector> detector
-                             = cv::cuda::createGoodFeaturesToTrackDetector(
-                               last_gray_frame.type(),
-                               flow_estimator_settings_.points,
-                               flow_estimator_settings_.quality_level,
-                               flow_estimator_settings_.min_dist);
-
+    // Perform feature detection
     cv::cuda::GpuMat d_prev_pts;
-    detector->detect(last_gray_frame, d_prev_pts);
+    gpu_features_detector_->detect(last_gray_frame, d_prev_pts);
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("post detector: " << ros::WallTime::now() - start);
     }
 
-    // Create optical flow object
-    cv::Ptr<cv::cuda::SparsePyrLKOpticalFlow> d_pyrLK
-                                    = cv::cuda::SparsePyrLKOpticalFlow::create(
-                                    cv::Size(flow_estimator_settings_.win_size,
-                                            flow_estimator_settings_.win_size),
-                                    flow_estimator_settings_.max_level,
-                                    flow_estimator_settings_.iters);
-
     cv::cuda::GpuMat d_next_pts;
     cv::cuda::GpuMat d_status;
 
-    d_pyrLK->calc(last_scaled_image_,
+    // Perform optical flow
+    gpu_d_pyrLK_->calc(last_scaled_image_,
                   curr_frame,
                   d_prev_pts,
                   d_next_pts,
