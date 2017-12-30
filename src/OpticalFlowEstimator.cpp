@@ -79,11 +79,18 @@ OpticalFlowEstimator::OpticalFlowEstimator(
     // Create the feature detector with default settings that will be replaced
     // on the first called to onSettingsChanged
     gpu_features_detector_ = cv::cuda::createGoodFeaturesToTrackDetector(
-                                                                      CV_8UC1);
+                                        CV_8UC1,
+                                        flow_estimator_settings_.points,
+                                        flow_estimator_settings_.quality_level,
+                                        flow_estimator_settings_.min_dist);
 
     // Create optical flow object with default settings that will be replaced
     // on the first called to onSettingsChanged
-    gpu_d_pyrLK_ = cv::cuda::SparsePyrLKOpticalFlow::create();
+    gpu_d_pyrLK_ = cv::cuda::SparsePyrLKOpticalFlow::create(
+                                  cv::Size(flow_estimator_settings_.win_size,
+                                           flow_estimator_settings_.win_size),
+                                  flow_estimator_settings_.max_level,
+                                  flow_estimator_settings_.iters);
 }
 
 bool __attribute__((warn_unused_result))
@@ -120,10 +127,10 @@ bool __attribute__((warn_unused_result))
     // Currently this requres recreating the entire object, individual
     // parameters can't be set.
     gpu_features_detector_ = cv::cuda::createGoodFeaturesToTrackDetector(
-                                CV_8UC1,
-                                flow_estimator_settings_.points,
-                                flow_estimator_settings_.quality_level,
-                                flow_estimator_settings_.min_dist);
+                                        CV_8UC1,
+                                        flow_estimator_settings_.points,
+                                        flow_estimator_settings_.quality_level,
+                                        flow_estimator_settings_.min_dist);
 
     // Set the optical flow detector settings
     gpu_d_pyrLK_->setWinSize(cv::Size(flow_estimator_settings_.win_size,

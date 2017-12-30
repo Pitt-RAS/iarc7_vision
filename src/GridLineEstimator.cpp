@@ -105,18 +105,19 @@ GridLineEstimator::GridLineEstimator(
 
     yaw_pub_ = local_nh.advertise<iarc7_msgs::Float64Stamped>("line_yaw", 10);
 
-    // Create the canny edge detector with dummy settings that will be replaced
-    // on the first called to onSettingsChanged
+    // Create the canny edge detector object
     gpu_canny_edge_detector_ = cv::cuda::createCannyEdgeDetector(
-                        0.0,
-                        0.0);
+                                line_extractor_settings_.canny_low_threshold,
+                                line_extractor_settings_.canny_high_threshold,
+                                line_extractor_settings_.canny_sobel_size);
 
-    // Create the hough line detector with dummy settings that will be replaced
-    // on the first called to onSettingsChanged
+    // Create the hough line detector object
+    // Threshold does not need to be set here because it is recalculated
+    // for every image based on the current height
     gpu_hough_lines_detector_ = cv::cuda::createHoughLinesDetector(
-                        0.0,
-                        0.0,
-                        0.0);
+                            line_extractor_settings_.hough_rho_resolution,
+                            line_extractor_settings_.hough_theta_resolution,
+                            0.0);
 }
 
 bool __attribute__((warn_unused_result))
