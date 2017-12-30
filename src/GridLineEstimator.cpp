@@ -176,9 +176,10 @@ void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
                           << ex.what());
         }
     } else {
-        ROS_WARN("Height (%f) is below min processing height (%f)",
-                 last_filtered_position_(2),
-                 grid_estimator_settings_.min_extraction_altitude);
+        ROS_INFO_THROTTLE(1.0,
+                         "Height (%f) is below min processing height (%f)",
+                         last_filtered_position_(2),
+                         grid_estimator_settings_.min_extraction_altitude);
     }
 
     updateFilteredPosition(time);
@@ -744,7 +745,7 @@ void GridLineEstimator::processImage(const cv::Mat& image,
     // Extract lines from image
     std::vector<cv::Vec2f> lines;
     getLines(lines, image, height);
-    ROS_INFO("Number of lines extracted: %lu", lines.size());
+    ROS_DEBUG("Number of lines extracted: %lu", lines.size());
 
     // Don't process further if we don't have any lines
     if (lines.size() == 0) return;
