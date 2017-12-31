@@ -2,8 +2,8 @@
 #define IARC7_VISION_CV_UTILS_HPP_
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/gpu/gpu.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/cudaarithm.hpp>
 #include <vector>
 
 namespace iarc7_vision {
@@ -11,11 +11,11 @@ namespace iarc7_vision {
 namespace cv_utils {
 
 /// Download a vector from the GPU
-void downloadVector(const cv::gpu::GpuMat& mat,
+void downloadVector(const cv::cuda::GpuMat& mat,
                     std::vector<cv::Point2f>& vector);
 
 /// Download a vector from the GPU
-void downloadVector(const cv::gpu::GpuMat& mat,
+void downloadVector(const cv::cuda::GpuMat& mat,
                     std::vector<uchar>& vector);
 
 /// Draw arrows on top of an image

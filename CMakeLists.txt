@@ -29,7 +29,7 @@ generate_dynamic_reconfigure_options(
 ## System dependencies are found with CMake's conventions
 
 ## Find OpenCV
-find_package(OpenCV 2.4.13 EXACT REQUIRED)
+find_package(OpenCV 3.3.1 EXACT REQUIRED)
 
 ## Find Eigen
 find_package(Eigen3)

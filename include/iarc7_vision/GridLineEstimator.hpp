@@ -11,10 +11,10 @@
 // END BAD HEADERS
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>
-#include <opencv2/gpu/gpu.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc.hpp>
 #include <ros/ros.h>
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>
@@ -61,6 +61,10 @@ class GridLineEstimator {
     void update(const cv::Mat& image, const ros::Time& time);
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& timeout);
+
+    /// MUST be called when either of the settings objects passed into the
+    /// constructor have their variables changed
+    bool __attribute__((warn_unused_result)) onSettingsChanged();
 
   private:
 
@@ -240,6 +244,9 @@ class GridLineEstimator {
     ros::Publisher debug_edges_pub_;
     ros::Publisher debug_lines_pub_;
     ros::Publisher debug_line_markers_pub_;
+
+    cv::Ptr<cv::cuda::CannyEdgeDetector> gpu_canny_edge_detector_;
+    cv::Ptr<cv::cuda::HoughLinesDetector> gpu_hough_lines_detector_;
 
     /// Position of bottom_camera_optical in the map frame
     /// when we received the last frame
