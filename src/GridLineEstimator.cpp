@@ -348,7 +348,7 @@ void GridLineEstimator::getPlanesForImageLines(
     geometry_msgs::TransformStamped camera_to_lq_transform;
     if (!transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
                                                "level_quad",
-                                               "bottom_camera_optical",
+                                               "bottom_camera_rgb_optical",
                                                time,
                                                ros::Duration(1.0))) {
         throw ros::Exception("Failed to fetch transform");
@@ -853,14 +853,14 @@ void GridLineEstimator::processLines(
     geometry_msgs::TransformStamped camera_to_lq_transform;
     if (!transform_wrapper_.getTransformAtTime(camera_to_lq_transform,
                                                      "level_quad",
-                                                     "bottom_camera_optical",
+                                                     "bottom_camera_rgb_optical",
                                                      time,
                                                      ros::Duration(1.0))) {
         throw ros::Exception(
-            "Failed to get transform from level_quad to bottom_camera_optical");
+            "Failed to get transform from level_quad to bottom_camera_rgb_optical");
     }
     geometry_msgs::PointStamped camera_position;
-    camera_position.header.frame_id = "bottom_camera_optical";
+    camera_position.header.frame_id = "bottom_camera_rgb_optical";
     camera_position.point.x = 0;
     camera_position.point.y = 0;
     camera_position.point.z = 0;
@@ -1021,10 +1021,10 @@ void GridLineEstimator::updateFilteredPosition(const ros::Time& time)
     if (!transform_wrapper_.getTransformAtTime(
             filtered_position_transform_stamped,
             "map",
-            "bottom_camera_optical",
+            "bottom_camera_rgb_optical",
             time,
             ros::Duration(1.0))) {
-        ROS_ERROR("Failed to fetch transform to bottom_camera_optical");
+        ROS_ERROR("Failed to fetch transform to bottom_camera_rgb_optical");
     } else {
         geometry_msgs::PointStamped camera_position;
         tf2::doTransform(camera_position,
@@ -1045,7 +1045,7 @@ bool GridLineEstimator::waitUntilReady(const ros::Duration& timeout)
     geometry_msgs::TransformStamped transform;
     bool success = transform_wrapper_.getTransformAtTime(transform,
                                                     "map",
-                                                    "bottom_camera_optical",
+                                                    "bottom_camera_rgb_optical",
                                                     ros::Time(0),
                                                     timeout);
     if (!success)
