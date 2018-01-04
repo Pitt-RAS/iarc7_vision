@@ -8,6 +8,6 @@
         <rosparam command="load" file="$(find iarc7_vision)/param/optical_flow_params_$(arg platform).yaml" />
 
         <remap from="grid_line_estimator/pose" to="/camera_localized_pose" />
-        <remap from="bottom_image_raw/image_raw" to="/bottom_camera/camera/image_raw" />
+        <remap from="bottom_image_raw/image_raw" to="/bottom_camera/rgb/image_raw" />
     </node>
 </launch>

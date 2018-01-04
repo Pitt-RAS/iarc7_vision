@@ -248,11 +248,11 @@ class CameraProcessor(ImageRoombaFinder):
         self.tf_buffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tf_buffer)
         # Make sure at least one transform exists before starting
-        self.tf_buffer.lookup_transform('map', 'bottom_camera_optical',
+        self.tf_buffer.lookup_transform('map', 'bottom_camera_rgb_optical',
                                         rospy.Time(0), rospy.Duration(3.0))
 
-        rospy.Subscriber("/{}/camera/image_raw".format(base_topic), Image, self.callback)
-        rospy.Subscriber("/{}/camera/camera_info".format(base_topic), CameraInfo,
+        rospy.Subscriber("/{}/rgb/image_raw".format(base_topic), Image, self.callback)
+        rospy.Subscriber("/{}/rgb/camera_info".format(base_topic), CameraInfo,
                          self.camera.fromCameraInfo)
         rospy.Subscriber("/roombas", OdometryArray, self.roombas_callback)
         self.publisher = rospy.Publisher("/roombas", OdometryArray,
