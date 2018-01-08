@@ -248,7 +248,7 @@ class GridLineEstimator {
     cv::Ptr<cv::cuda::CannyEdgeDetector> gpu_canny_edge_detector_;
     cv::Ptr<cv::cuda::HoughLinesDetector> gpu_hough_lines_detector_;
 
-    /// Position of bottom_camera_rgb_optical in the map frame
+    /// Position of bottom_camera_rgb_optical_frame in the map frame
     /// when we received the last frame
     Eigen::Vector3d last_filtered_position_;
 
