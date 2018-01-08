@@ -688,7 +688,7 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
     bool success = transform_wrapper_.getTransformAtTime(
             filtered_position_transform_stamped,
             "map",
-            "bottom_camera_rgb_optical",
+            "bottom_camera_rgb_optical_frame",
             time,
             timeout);
 
@@ -699,7 +699,7 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
     success = transform_wrapper_.getTransformAtTime(
             camera_to_level_quad_tf_stamped,
             "level_quad",
-            "bottom_camera_rgb_optical",
+            "bottom_camera_rgb_optical_frame",
             time,
             timeout);
 

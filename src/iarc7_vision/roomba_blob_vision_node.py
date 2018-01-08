@@ -248,7 +248,7 @@ class CameraProcessor(ImageRoombaFinder):
         self.tf_buffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tf_buffer)
         # Make sure at least one transform exists before starting
-        self.tf_buffer.lookup_transform('map', 'bottom_camera_rgb_optical',
+        self.tf_buffer.lookup_transform('map', 'bottom_camera_rgb_optical_frame',
                                         rospy.Time(0), rospy.Duration(3.0))
 
         rospy.Subscriber("/{}/rgb/image_raw".format(base_topic), Image, self.callback)
