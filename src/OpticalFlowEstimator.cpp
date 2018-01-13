@@ -246,7 +246,7 @@ bool OpticalFlowEstimator::canEstimateFlow() const
 {
     if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
         ROS_WARN_THROTTLE(2.0,
-                          "Height (%f) is below min processing height (%f)",
+                          "Optical flow: height (%f) is below min processing height (%f)",
                           current_altitude_,
                           flow_estimator_settings_.min_estimation_altitude);
         return false;
@@ -550,7 +550,7 @@ void OpticalFlowEstimator::findFeatureVectors(
 
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
-            sensor_msgs::image_encodings::RGBA8,
+            sensor_msgs::image_encodings::RGB8,
             arrow_image
         };
 
@@ -630,7 +630,7 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
 
         const cv_bridge::CvImage cv_image {
             std_msgs::Header(),
-            sensor_msgs::image_encodings::RGBA8,
+            sensor_msgs::image_encodings::RGB8,
             arrow_image
         };
 
@@ -672,7 +672,7 @@ void OpticalFlowEstimator::resizeAndConvertImages(const cv::cuda::GpuMat& image,
 
     cv::cuda::cvtColor(scaled,
                       gray,
-                      CV_RGBA2GRAY);
+                      CV_RGB2GRAY);
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("post cvtColor: " << ros::WallTime::now() - start);
