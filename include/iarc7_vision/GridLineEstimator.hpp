@@ -57,7 +57,9 @@ class GridLineEstimator {
   public:
     GridLineEstimator(const LineExtractorSettings& line_estimator_settings,
                       const GridEstimatorSettings& grid_estimator_settings,
-                      const GridLineDebugSettings& debug_settings);
+                      const GridLineDebugSettings& debug_settings,
+                      const std::string& expected_image_format);
+
     void update(const cv::Mat& image, const ros::Time& time);
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& timeout);
@@ -232,6 +234,9 @@ class GridLineEstimator {
         std::vector<Eigen::Vector3d>& perp_line_normals) const;
 
     void updateFilteredPosition(const ros::Time& time);
+
+    uint32_t hsv_conversion_constant_;
+    std::string image_encoding_;
 
     ros::Publisher pose_pub_;
     ros::Publisher yaw_pub_;

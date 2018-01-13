@@ -53,7 +53,8 @@ class OpticalFlowEstimator {
 
     OpticalFlowEstimator(
             const OpticalFlowEstimatorSettings& flow_estimator_settings,
-            const OpticalFlowDebugSettings& debug_settings);
+            const OpticalFlowDebugSettings& debug_settings,
+            const std::string& expected_image_format);
 
     ////////////////////
     // PUBLIC METHODS //
@@ -194,6 +195,9 @@ class OpticalFlowEstimator {
     ////////////////////////
     // INSTANCE VARIABLES //
     ////////////////////////
+
+    uint32_t grayscale_conversion_constant_;
+    std::string image_encoding_;
 
     const OpticalFlowEstimatorSettings& flow_estimator_settings_;
     const OpticalFlowDebugSettings& debug_settings_;

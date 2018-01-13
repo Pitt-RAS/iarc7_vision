@@ -313,6 +313,9 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
+    std::string expected_image_format = ros_utils::ParamUtils::getParam<std::string>(
+            private_nh, "image_format");
+
     // Create GridlineEstimator settings objects
     iarc7_vision::LineExtractorSettings line_extractor_settings;
     getLineExtractorSettings(private_nh, line_extractor_settings);
@@ -324,7 +327,8 @@ int main(int argc, char **argv)
     iarc7_vision::GridLineEstimator gridline_estimator(
             line_extractor_settings,
             grid_estimator_settings,
-            grid_line_debug_settings);
+            grid_line_debug_settings,
+            expected_image_format);
 
     // Create OpticalFlowEstimator settings objects
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
@@ -334,7 +338,8 @@ int main(int argc, char **argv)
 
     iarc7_vision::OpticalFlowEstimator optical_flow_estimator(
             optical_flow_estimator_settings,
-            optical_flow_debug_settings);
+            optical_flow_debug_settings,
+            expected_image_format);
 
     // Set up dynamic reconfigure
     dynamic_reconfigure::Server<iarc7_vision::VisionNodeConfig> dynamic_reconfigure_server;

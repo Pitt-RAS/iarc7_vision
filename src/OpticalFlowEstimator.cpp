@@ -30,7 +30,8 @@ namespace iarc7_vision {
 
 OpticalFlowEstimator::OpticalFlowEstimator(
         const OpticalFlowEstimatorSettings& flow_estimator_settings,
-        const OpticalFlowDebugSettings& debug_settings)
+        const OpticalFlowDebugSettings& debug_settings,
+        const std::string& expected_image_format)
     : flow_estimator_settings_(flow_estimator_settings),
       debug_settings_(debug_settings),
       gpu_features_detector_(),
@@ -91,6 +92,18 @@ OpticalFlowEstimator::OpticalFlowEstimator(
                                            flow_estimator_settings_.win_size),
                                   flow_estimator_settings_.max_level,
                                   flow_estimator_settings_.iters);
+
+    if (expected_image_format == "RGB") {
+        grayscale_conversion_constant_ = CV_RGB2GRAY;
+        image_encoding_ = sensor_msgs::image_encodings::RGB8;
+    }
+    else if (expected_image_format == "RGBA") {
+        grayscale_conversion_constant_ = CV_RGBA2GRAY;
+        image_encoding_ = sensor_msgs::image_encodings::RGBA8;
+    }
+    else {
+        ROS_ASSERT("Unkown image format requested of Grid Line Estimator");
+    }
 }
 
 bool __attribute__((warn_unused_result))
@@ -550,7 +563,7 @@ void OpticalFlowEstimator::findFeatureVectors(
 
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
-            sensor_msgs::image_encodings::RGB8,
+            image_encoding_,
             arrow_image
         };
 
@@ -630,7 +643,7 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
 
         const cv_bridge::CvImage cv_image {
             std_msgs::Header(),
-            sensor_msgs::image_encodings::RGB8,
+            image_encoding_,
             arrow_image
         };
 
@@ -672,7 +685,7 @@ void OpticalFlowEstimator::resizeAndConvertImages(const cv::cuda::GpuMat& image,
 
     cv::cuda::cvtColor(scaled,
                       gray,
-                      CV_RGB2GRAY);
+                      grayscale_conversion_constant_);
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("post cvtColor: " << ros::WallTime::now() - start);
