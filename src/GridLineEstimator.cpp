@@ -71,7 +71,8 @@ namespace iarc7_vision {
 GridLineEstimator::GridLineEstimator(
         const LineExtractorSettings& line_extractor_settings,
         const GridEstimatorSettings& grid_estimator_settings,
-        const GridLineDebugSettings& debug_settings)
+        const GridLineDebugSettings& debug_settings,
+        const std::string& expected_image_format)
     : line_extractor_settings_(line_extractor_settings),
       grid_estimator_settings_(grid_estimator_settings),
       debug_settings_(debug_settings),
@@ -118,6 +119,19 @@ GridLineEstimator::GridLineEstimator(
                             line_extractor_settings_.hough_rho_resolution,
                             line_extractor_settings_.hough_theta_resolution,
                             0.0);
+
+    if (expected_image_format == "RGB") {
+        hsv_conversion_constant_ = CV_RGB2HSV;
+        image_encoding_ = sensor_msgs::image_encodings::RGB8;
+    }
+    else if (expected_image_format == "RGBA") {
+        // HSV does not have a CV_RGBA2HSV constant defined
+        hsv_conversion_constant_ = CV_RGB2HSV;
+        image_encoding_ = sensor_msgs::image_encodings::RGBA8;
+    }
+    else {
+        ROS_ASSERT("Unkown image format requested of Grid Line Estimator");
+    }
 }
 
 bool __attribute__((warn_unused_result))
@@ -245,7 +259,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         cv::Mat image_hsv;
         cv::Mat image_hsv_channels[3];
         cv::resize(image, image_sized, cv::Size(), scale_factor, scale_factor);
-        cv::cvtColor(image_sized, image_hsv, CV_RGB2HSV);
+        cv::cvtColor(image_sized, image_hsv, hsv_conversion_constant_);
         cv::split(image_hsv, image_hsv_channels);
 
         cv::Canny(image_hsv_channels[2],
@@ -283,7 +297,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                         cv::Size(),
                         scale_factor,
                         scale_factor);
-        cv::cuda::cvtColor(gpu_image_sized, gpu_image_hsv, CV_RGB2HSV);
+        cv::cuda::cvtColor(gpu_image_sized, gpu_image_hsv, hsv_conversion_constant_);
 
         cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
 
@@ -332,7 +346,7 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
         drawLines(lines, image_lines);
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
-            sensor_msgs::image_encodings::RGBA8,
+            image_encoding_,
             image_lines
         };
         debug_lines_pub_.publish(cv_image.toImageMsg());
