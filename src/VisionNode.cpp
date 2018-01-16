@@ -22,7 +22,7 @@
 #include "iarc7_vision/RoombaEstimator.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
-                            iarc7_vision::LineExtractorSettings& line_settings)
+                              iarc7_vision::LineExtractorSettings& line_settings)
 {
     // Begin line extractor settings
     ROS_ASSERT(private_nh.getParam(
@@ -415,13 +415,14 @@ int main(int argc, char **argv)
                 message_queue = std::queue<sensor_msgs::Image::ConstPtr>();
             }
 
-            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                                      message->header.stamp);
+            auto cv_shared_ptr = cv_bridge::toCvShare(message);
+            cv::cuda::GpuMat image(cv_shared_ptr->image);
 
-            optical_flow_estimator.update(message);
+            gridline_estimator.update(image, message->header.stamp);
 
-            roomba_estimator.update(cv_bridge::toCvShare(message)->image,
-                                    message->header.stamp);
+            optical_flow_estimator.update(image, message->header.stamp);
+
+            roomba_estimator.update(image, message->header.stamp);
         }
 
         ros::spinOnce();

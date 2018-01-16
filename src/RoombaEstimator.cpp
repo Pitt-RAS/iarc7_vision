@@ -133,14 +133,16 @@ void RoombaEstimator::ReportOdometry(nav_msgs::Odometry& odom){
 }
 
 // Publish the most recent array of Roombas
-void RoombaEstimator::PublishOdometry(){
+void RoombaEstimator::PublishOdometry()
+{
     iarc7_msgs::OdometryArray msg;
     msg.data = odom_vector;
     roomba_pub.publish(msg);
 }
 
-void RoombaEstimator::update(const cv::Mat& image, const ros::Time& time){
-    
+void RoombaEstimator::update(const cv::cuda::GpuMat& image,
+                             const ros::Time& time)
+{
     // Validation
     if(image.empty())
         return;

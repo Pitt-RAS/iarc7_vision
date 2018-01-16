@@ -65,7 +65,7 @@ class OpticalFlowEstimator {
     bool __attribute__((warn_unused_result)) onSettingsChanged();
 
     /// Process a new image message
-    void update(const sensor_msgs::Image::ConstPtr& message);
+    void update(const cv::cuda::GpuMat& curr_image, const ros::Time& time);
 
     /// MUST be called successfully before `update` is called
     bool __attribute__((warn_unused_result)) waitUntilReady(

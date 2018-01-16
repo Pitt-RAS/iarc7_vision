@@ -60,7 +60,7 @@ class GridLineEstimator {
                       const GridLineDebugSettings& debug_settings,
                       const std::string& expected_image_format);
 
-    void update(const cv::Mat& image, const ros::Time& time);
+    void update(const cv::cuda::GpuMat& image, const ros::Time& time);
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& timeout);
 
@@ -89,7 +89,7 @@ class GridLineEstimator {
     ///
     /// TODO: change units of height parameter to pixels
     void getLines(std::vector<cv::Vec2f>& lines,
-                  const cv::Mat& image,
+                  const cv::cuda::GpuMat& image,
                   double height) const;
 
     /// Computes the normal vectors of the planes defined by the given lines
@@ -189,7 +189,7 @@ class GridLineEstimator {
                     double dist) const;
 
     /// Extract grid position from the image and publish if possible
-    void processImage(const cv::Mat& image, const ros::Time& time) const;
+    void processImage(const cv::cuda::GpuMat& image, const ros::Time& time) const;
 
     /// Process lines extracted from the image
     void processLines(double height,

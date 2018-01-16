@@ -156,7 +156,8 @@ bool __attribute__((warn_unused_result))
     return true;
 }
 
-void GridLineEstimator::update(const cv::Mat& image, const ros::Time& time)
+void GridLineEstimator::update(const cv::cuda::GpuMat& image,
+                               const ros::Time& time)
 {
     if (time <= last_update_time_) {
         ROS_ERROR("Tried to process message with stamp before previous update");
@@ -237,9 +238,14 @@ double GridLineEstimator::getFocalLength(const cv::Size& img_size, double fov)
 }
 
 void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
-                                 const cv::Mat& image,
+                                 const cv::cuda::GpuMat& image,
                                  double height) const
 {
+    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
+        ROS_ERROR_ONCE("Doing OpenCV operations on CPU");
+        return;
+    }
+
     // m/px = camera_height / focal_length;
     double current_meters_per_px = height
                          / getFocalLength(image.size(),
@@ -251,76 +257,38 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
     double scale_factor = current_meters_per_px / desired_meters_per_px;
 
-    cv::Mat image_edges;
-    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
-        ROS_WARN_ONCE("Doing OpenCV operations on CPU");
+    cv::cuda::GpuMat gpu_image_sized;
+    cv::cuda::GpuMat gpu_image_hsv;
+    cv::cuda::GpuMat gpu_image_edges;
+    cv::cuda::GpuMat gpu_lines;
+    cv::cuda::GpuMat gpu_image_hsv_channels[3];
 
-        cv::Mat image_sized;
-        cv::Mat image_hsv;
-        cv::Mat image_hsv_channels[3];
-        cv::resize(image, image_sized, cv::Size(), scale_factor, scale_factor);
-        cv::cvtColor(image_sized, image_hsv, hsv_conversion_constant_);
-        cv::split(image_hsv, image_hsv_channels);
+    ROS_DEBUG("Scale factor %f", scale_factor);
 
-        cv::Canny(image_hsv_channels[2],
-                  image_edges,
-                  line_extractor_settings_.canny_low_threshold,
-                  line_extractor_settings_.canny_high_threshold,
-                  line_extractor_settings_.canny_sobel_size);
+    cv::cuda::resize(image,
+                     gpu_image_sized,
+                     cv::Size(),
+                     scale_factor,
+                     scale_factor);
+    cv::cuda::cvtColor(gpu_image_sized, gpu_image_hsv, hsv_conversion_constant_);
 
-        double hough_threshold = image_edges.size().height
-                               * line_extractor_settings_.hough_thresh_fraction;
-        cv::HoughLines(image_edges,
-                       lines,
-                       line_extractor_settings_.hough_rho_resolution,
-                       line_extractor_settings_.hough_theta_resolution,
-                       hough_threshold);
+    cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
 
-        // rescale lines back to original image size
-        for (cv::Vec2f& line : lines) {
-            line[0] *= static_cast<float>(image.size().height)
-                     / image_edges.size().height;
-        }
-    } else {
-        cv::cuda::GpuMat gpu_image;
-        cv::cuda::GpuMat gpu_image_sized;
-        cv::cuda::GpuMat gpu_image_hsv;
-        cv::cuda::GpuMat gpu_image_edges;
-        cv::cuda::GpuMat gpu_lines;
-        cv::cuda::GpuMat gpu_image_hsv_channels[3];
+    gpu_canny_edge_detector_->detect(gpu_image_hsv_channels[2], gpu_image_edges);
 
-        gpu_image.upload(image);
-        ROS_DEBUG("Scale factor %f", scale_factor);
+    double hough_threshold = gpu_image_edges.size().height
+                           * line_extractor_settings_.hough_thresh_fraction;
 
-        cv::cuda::resize(gpu_image,
-                        gpu_image_sized,
-                        cv::Size(),
-                        scale_factor,
-                        scale_factor);
-        cv::cuda::cvtColor(gpu_image_sized, gpu_image_hsv, hsv_conversion_constant_);
+    gpu_hough_lines_detector_->setThreshold(hough_threshold);
 
-        cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
+    gpu_hough_lines_detector_->detect(gpu_image_edges, gpu_lines);
 
-        gpu_canny_edge_detector_->detect(gpu_image_hsv_channels[2], gpu_image_edges);
+    gpu_hough_lines_detector_->downloadResults(gpu_lines, lines);
 
-        double hough_threshold = gpu_image_edges.size().height
-                               * line_extractor_settings_.hough_thresh_fraction;
-
-        gpu_hough_lines_detector_->setThreshold(hough_threshold);
-
-        gpu_hough_lines_detector_->detect(gpu_image_edges, gpu_lines);
-
-        gpu_hough_lines_detector_->downloadResults(gpu_lines, lines);
-
-        // rescale lines back to original image size
-        for (cv::Vec2f& line : lines) {
-            line[0] *= static_cast<float>(image.size().height)
-                     / gpu_image_edges.size().height;
-        }
-
-        if (debug_settings_.debug_edges) {
-            gpu_image_edges.download(image_edges);
-        }
+    // rescale lines back to original image size
+    for (cv::Vec2f& line : lines) {
+        line[0] *= static_cast<float>(image.size().height)
+                 / gpu_image_edges.size().height;
     }
 
     // shift rho to measure distance from center instead of distance from
@@ -332,6 +300,9 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
     }
 
     if (debug_settings_.debug_edges) {
+        cv::Mat image_edges;
+        gpu_image_edges.download(image_edges);
+
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
             sensor_msgs::image_encodings::MONO8,
@@ -342,7 +313,9 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
     }
 
     if (debug_settings_.debug_lines) {
-        cv::Mat image_lines = image.clone();
+        cv::Mat image_lines;
+        image.download(image_lines);
+
         drawLines(lines, image_lines);
         cv_bridge::CvImage cv_image {
             std_msgs::Header(),
@@ -751,7 +724,7 @@ double GridLineEstimator::gridLoss(const std::vector<double>& wrapped_dists,
     return result;
 }
 
-void GridLineEstimator::processImage(const cv::Mat& image,
+void GridLineEstimator::processImage(const cv::cuda::GpuMat& image,
                                      const ros::Time& time) const
 {
     const double height = last_filtered_position_(2);
