@@ -6,7 +6,12 @@
 namespace iarc7_vision
 {
 
-void RoombaEstimator::pixelToRay(double px, double py, double pw, double ph, geometry_msgs::Vector3Stamped& ray){
+void RoombaEstimator::pixelToRay(double px,
+                                 double py,
+                                 double pw,
+                                 double ph,
+                                 geometry_msgs::Vector3Stamped& ray)
+{
     px -= pw * 0.5;
     py -= ph * 0.5;
 
@@ -26,7 +31,8 @@ void RoombaEstimator::pixelToRay(double px, double py, double pw, double ph, geo
 }
 
 RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
-                  const ros::NodeHandle& private_nh) : transform_wrapper_()
+                                 const ros::NodeHandle& private_nh)
+    : transform_wrapper_()
 {
     roomba_pub = nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100);
     getSettings(private_nh);
@@ -35,7 +41,8 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
     //          settings.ght_votes_threshold, settings.template_canny_threshold);
 }
 
-void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh){
+void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh)
+{
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/pixels_per_meter",
             settings.pixels_per_meter));
@@ -62,14 +69,16 @@ void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh){
             bottom_camera_aov));
 }
 
-void RoombaEstimator::OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg){
+void RoombaEstimator::OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg)
+{
     mtx.lock();
     odom_vector = msg.data;
     mtx.unlock();
     ROS_ERROR_STREAM( "Odom Array Updated.");
 }
 
-float RoombaEstimator::getHeight(const ros::Time& time){
+float RoombaEstimator::getHeight(const ros::Time& time)
+{
     if (!transform_wrapper_.getTransformAtTime(cam_tf,
                                                "map",
                                                "bottom_camera_optical",
@@ -80,7 +89,13 @@ float RoombaEstimator::getHeight(const ros::Time& time){
     return cam_tf.transform.translation.z;
 }
 
-void RoombaEstimator::CalcOdometry(cv::Point2f& pos, double pw, double ph, float angle, nav_msgs::Odometry& out, const ros::Time& time){
+void RoombaEstimator::CalcOdometry(cv::Point2f& pos,
+                                   double pw,
+                                   double ph,
+                                   float angle,
+                                   nav_msgs::Odometry& out,
+                                   const ros::Time& time)
+{
     float rads = angle * 3.141592653589 / 90.0;
     geometry_msgs::Vector3 cam_pos = cam_tf.transform.translation;
 
@@ -110,7 +125,8 @@ void RoombaEstimator::CalcOdometry(cv::Point2f& pos, double pw, double ph, float
 }
 
 // This will get totally screwed when it finds all 10 Roombas
-void RoombaEstimator::ReportOdometry(nav_msgs::Odometry& odom){
+void RoombaEstimator::ReportOdometry(nav_msgs::Odometry& odom)
+{
     int index = -1;
     float sq_tolerance = 0.1; // Roomba diameter is 0.254 meters
     if(odom_vector.size()==10)
