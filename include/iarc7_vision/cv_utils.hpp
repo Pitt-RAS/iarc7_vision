@@ -31,6 +31,26 @@ void drawArrows(cv::Mat& image,
                 const std::vector<uchar>& status,
                 cv::Scalar line_color);
 
+struct InRangeBuf {
+    cv::cuda::GpuMat channels[3];
+    cv::cuda::GpuMat buf;
+};
+
+void inRange(const cv::cuda::GpuMat& src,
+             cv::Scalar lowerb,
+             cv::Scalar upperb,
+             cv::cuda::GpuMat& dst,
+             InRangeBuf& buf);
+
+inline void inRange(const cv::cuda::GpuMat& src,
+             cv::Scalar lowerb,
+             cv::Scalar upperb,
+             cv::cuda::GpuMat& dst)
+{
+    InRangeBuf buf;
+    inRange(src, lowerb, upperb, dst, buf);
+}
+
 } // end namespace cv_utils
 
 } // end namespace iarc7_vision

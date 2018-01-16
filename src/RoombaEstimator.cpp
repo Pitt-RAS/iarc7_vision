@@ -30,9 +30,9 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
 {
     roomba_pub = nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100);
     getSettings(private_nh);
-    ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
-              settings.ght_levels, settings.ght_dp,
-              settings.ght_votes_threshold, settings.template_canny_threshold);
+    //ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
+    //          settings.ght_levels, settings.ght_dp,
+    //          settings.ght_votes_threshold, settings.template_canny_threshold);
 }
 
 void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh){
@@ -153,9 +153,9 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
         return;
 
     // Declare variables
-    cv::vector<cv::Rect> boundRect;
-    cv::Point2f pos = cv::Point2f();
-    float angle = 0;
+    std::vector<cv::Rect> boundRect;
+    //cv::Point2f pos = cv::Point2f();
+    //float angle = 0;
 
     // Calculate the world field of view in meters and use to resize the image
     geometry_msgs::Vector3Stamped a;
@@ -170,51 +170,49 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     float desired_width = settings.pixels_per_meter * distance;
     float factor = desired_width / image.cols;
 
-    cv::Mat frame = image.clone();
-    cv::resize(frame, frame, cv::Size(), factor, factor);
+    cv::cuda::resize(image, image, cv::Size(), factor, factor);
 
     // Run blob detection
-    bounder.detect(frame, boundRect);
-    bounder.DilateBounds(frame, boundRect);
+    blob_detector.detect(image, boundRect);
 
     mtx.lock();
     // Run the GHT on each blob
-    for(unsigned int i=0;i<boundRect.size();i++){
-        angle = ght.detect(frame, boundRect[i], pos,
-                           settings.camera_canny_threshold);
+    //for(unsigned int i=0;i<boundRect.size();i++){
+    //    angle = ght.detect(image, boundRect[i], pos,
+    //                       settings.camera_canny_threshold);
 
-        cv::Point2f P2;
-        P2.x =  (int)round(pos.x + 100 * cos(angle * CV_PI / 180.0));
-        P2.y =  (int)round(pos.y + 100 * sin(angle * CV_PI / 180.0));
-        line(frame, pos, P2, cv::Scalar(255, 0, 0), 3);
-        
-        cv::RotatedRect rect;
-        rect.center = pos;
-        rect.size = cv::Size2f(50, 85);
-        rect.angle = angle;
+    //    cv::Point2f P2;
+    //    P2.x =  (int)round(pos.x + 100 * cos(angle * CV_PI / 180.0));
+    //    P2.y =  (int)round(pos.y + 100 * sin(angle * CV_PI / 180.0));
+    //    line(image, pos, P2, cv::Scalar(255, 0, 0), 3);
 
-        cv::Point2f pts[4];
-        rect.points(pts);
+    //    cv::RotatedRect rect;
+    //    rect.center = pos;
+    //    rect.size = cv::Size2f(50, 85);
+    //    rect.angle = angle;
 
-        cv::line(frame, pts[0], pts[1], cv::Scalar(0, 0, 255), 3);
-        cv::line(frame, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
-        cv::line(frame, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
-        cv::line(frame, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
+    //    cv::Point2f pts[4];
+    //    rect.points(pts);
 
-        if(angle == -1) continue;
-        // divide by factor to convert coordinates back to original scaling
+    //    cv::line(image, pts[0], pts[1], cv::Scalar(0, 0, 255), 3);
+    //    cv::line(image, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
+    //    cv::line(image, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
+    //    cv::line(image, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
 
-        nav_msgs::Odometry odom;
-        CalcOdometry(pos, frame.cols, frame.rows, angle, odom, time);
-        ReportOdometry(odom);
-        
-    }
+    //    if(angle == -1) continue;
+    //    // divide by factor to convert coordinates back to original scaling
+
+    //    nav_msgs::Odometry odom;
+    //    CalcOdometry(pos, image.cols, image.rows, angle, odom, time);
+    //    ReportOdometry(odom);
+
+    //}
 
   // publish
   PublishOdometry();
   mtx.unlock();
 
-  cv::imshow("Frame", frame);
+  cv::imshow("Frame", image);
   cv::waitKey(2);
 }
 

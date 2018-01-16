@@ -1,5 +1,7 @@
 #include "iarc7_vision/cv_utils.hpp"
 
+#include <opencv2/cudaarithm.hpp>
+
 namespace iarc7_vision {
 
 namespace cv_utils {
@@ -54,6 +56,27 @@ void drawArrows(cv::Mat& image,
             p.y = q.y + 9 * sin(angle - CV_PI / 4);
             cv::line(image, p, q, line_color, line_thickness);
         }
+    }
+}
+
+void inRange(const cv::cuda::GpuMat& src,
+             cv::Scalar lowerb,
+             cv::Scalar upperb,
+             cv::cuda::GpuMat& dst,
+             InRangeBuf& buf)
+{
+    cv::cuda::split(src, buf.channels);
+
+    cv::cuda::threshold(buf.channels[0], buf.buf, lowerb[0], 255, cv::THRESH_BINARY);
+    cv::cuda::bitwise_and(buf.buf, buf.buf, dst);
+    for (int i = 1; i < 3; i++) {
+        cv::cuda::threshold(buf.channels[i], buf.buf, lowerb[i], 255, cv::THRESH_BINARY);
+        cv::cuda::bitwise_and(buf.buf, dst, dst);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        cv::cuda::threshold(buf.channels[i], buf.buf, upperb[i], 255, cv::THRESH_BINARY_INV);
+        cv::cuda::bitwise_and(buf.buf, dst, dst);
     }
 }
 

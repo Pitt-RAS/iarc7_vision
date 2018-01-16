@@ -10,7 +10,7 @@
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>
 
-#include "iarc7_vision/RoombaBlob.hpp"
+#include "iarc7_vision/RoombaBlobDetector.hpp"
 #include "iarc7_vision/RoombaGHT.hpp"
 
 #include <sensor_msgs/CameraInfo.h>
@@ -42,7 +42,7 @@ class RoombaEstimator{
     public:
         RoombaEstimator(ros::NodeHandle nh, const ros::NodeHandle& private_nh);
         void OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg);
-        void update(const cv::Mat& image, const ros::Time& time);
+        void update(const cv::cuda::GpuMat& image, const ros::Time& time);
     private:
         void pixelToRay(double px, double py, double pw, double ph,
                         geometry_msgs::Vector3Stamped& ray);
@@ -57,8 +57,8 @@ class RoombaEstimator{
         ros::Publisher roomba_pub;
         std::vector<nav_msgs::Odometry> odom_vector;
         RoombaEstimatorSettings settings;
-        RoombaBlob bounder;
-        RoombaGHT ght;
+        RoombaBlobDetector blob_detector;
+        //RoombaGHT ght;
         double bottom_camera_aov;
         std::mutex mtx;
 };
