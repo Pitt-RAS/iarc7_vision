@@ -72,6 +72,21 @@ roomba_estimator_settings:
     ght_votes_threshold: 15
     camera_canny_threshold: 160
     template_canny_threshold: 100
+
+    hsv_slice_h_green_min: 47
+    hsv_slice_h_green_max: 67
+    hsv_slice_h_red1_min: 0
+    hsv_slice_h_red1_max: 8
+    hsv_slice_h_red2_min: 170
+    hsv_slice_h_red2_max: 180
+    hsv_slice_s_min: 20
+    hsv_slice_s_max: 255
+    hsv_slice_v_min: 15
+    hsv_slice_v_max: 200
+
+    morphology_size: 3
+    morphology_iterations: 3
+
     # Camera settings
     # https://en.wikipedia.org/wiki/LifeCam#HD-6000
 

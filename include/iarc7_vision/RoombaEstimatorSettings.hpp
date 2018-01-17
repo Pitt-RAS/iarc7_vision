@@ -14,6 +14,21 @@ struct RoombaEstimatorSettings {
     int ght_votes_threshold;
     int camera_canny_threshold;
     int template_canny_threshold;
+
+    int hsv_slice_h_green_min;
+    int hsv_slice_h_green_max;
+    int hsv_slice_h_red1_min;
+    int hsv_slice_h_red1_max;
+    int hsv_slice_h_red2_min;
+    int hsv_slice_h_red2_max;
+    int hsv_slice_s_min;
+    int hsv_slice_s_max;
+    int hsv_slice_v_min;
+    int hsv_slice_v_max;
+
+    int morphology_size;
+    int morphology_iterations;
+
     double bottom_camera_aov;
     bool debug_hsv_slice;
     bool debug_contours;

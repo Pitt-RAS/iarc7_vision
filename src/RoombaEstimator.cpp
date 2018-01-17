@@ -1,7 +1,11 @@
 #include "iarc7_vision/RoombaEstimator.hpp"
+
 #include <cmath>
+#include <dynamic_reconfigure/server.h>
 #include <string>
 #include <tf/transform_datatypes.h>
+
+#include "iarc7_vision/RoombaEstimatorConfig.h"
 
 namespace iarc7_vision
 {
@@ -32,7 +36,13 @@ void RoombaEstimator::pixelToRay(double px,
 
 RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
                                  ros::NodeHandle& private_nh)
-    : transform_wrapper_(),
+    : dynamic_reconfigure_server_(ros::NodeHandle("~/roomba_estimator")),
+      dynamic_reconfigure_settings_callback_(
+              [this](iarc7_vision::RoombaEstimatorConfig& config, uint32_t) {
+                  getDynamicSettings(config);
+              }),
+      dynamic_reconfigure_called_(false),
+      transform_wrapper_(),
       cam_tf_(),
       roomba_pub_(nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
       odom_vector_(),
@@ -43,6 +53,58 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
     //ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
     //          settings.ght_levels, settings.ght_dp,
     //          settings.ght_votes_threshold, settings.template_canny_threshold);
+    dynamic_reconfigure_server_.setCallback(
+            dynamic_reconfigure_settings_callback_);
+}
+
+void RoombaEstimator::getDynamicSettings(
+        iarc7_vision::RoombaEstimatorConfig& config)
+{
+    if (!dynamic_reconfigure_called_) {
+        config.pixels_per_meter = settings_.pixels_per_meter;
+        config.ght_levels = settings_.ght_levels;
+        config.ght_dp = settings_.ght_dp;
+        config.ght_votes_threshold = settings_.ght_votes_threshold;
+        config.camera_canny_threshold = settings_.camera_canny_threshold;
+        config.template_canny_threshold = settings_.template_canny_threshold;
+
+        config.hsv_slice_h_green_min = settings_.hsv_slice_h_green_min;
+        config.hsv_slice_h_green_max = settings_.hsv_slice_h_green_max;
+        config.hsv_slice_h_red1_min = settings_.hsv_slice_h_red1_min;
+        config.hsv_slice_h_red1_max = settings_.hsv_slice_h_red1_max;
+        config.hsv_slice_h_red2_min = settings_.hsv_slice_h_red2_min;
+        config.hsv_slice_h_red2_max = settings_.hsv_slice_h_red2_max;
+        config.hsv_slice_s_min = settings_.hsv_slice_s_min;
+        config.hsv_slice_s_max = settings_.hsv_slice_s_max;
+        config.hsv_slice_v_min = settings_.hsv_slice_v_min;
+        config.hsv_slice_v_max = settings_.hsv_slice_v_max;
+
+        config.morphology_size = settings_.morphology_size;
+        config.morphology_iterations = settings_.morphology_iterations;
+
+        dynamic_reconfigure_called_ = true;
+    } else {
+        settings_.pixels_per_meter = config.pixels_per_meter;
+        settings_.ght_levels = config.ght_levels;
+        settings_.ght_dp = config.ght_dp;
+        settings_.ght_votes_threshold = config.ght_votes_threshold;
+        settings_.camera_canny_threshold = config.camera_canny_threshold;
+        settings_.template_canny_threshold = config.template_canny_threshold;
+
+        settings_.hsv_slice_h_green_min = config.hsv_slice_h_green_min;
+        settings_.hsv_slice_h_green_max = config.hsv_slice_h_green_max;
+        settings_.hsv_slice_h_red1_min = config.hsv_slice_h_red1_min;
+        settings_.hsv_slice_h_red1_max = config.hsv_slice_h_red1_max;
+        settings_.hsv_slice_h_red2_min = config.hsv_slice_h_red2_min;
+        settings_.hsv_slice_h_red2_max = config.hsv_slice_h_red2_max;
+        settings_.hsv_slice_s_min = config.hsv_slice_s_min;
+        settings_.hsv_slice_s_max = config.hsv_slice_s_max;
+        settings_.hsv_slice_v_min = config.hsv_slice_v_min;
+        settings_.hsv_slice_v_max = config.hsv_slice_v_max;
+
+        settings_.morphology_size = config.morphology_size;
+        settings_.morphology_iterations = config.morphology_iterations;
+    }
 }
 
 RoombaEstimatorSettings RoombaEstimator::getSettings(
@@ -70,6 +132,45 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/template_canny_threshold",
             settings.template_canny_threshold));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_h_green_min",
+            settings.hsv_slice_h_green_min));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_h_green_max",
+            settings.hsv_slice_h_green_max));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_h_red1_min",
+            settings.hsv_slice_h_red1_min));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_h_red1_max",
+            settings.hsv_slice_h_red1_max));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_h_red2_min",
+            settings.hsv_slice_h_red2_min));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_h_red2_max",
+            settings.hsv_slice_h_red2_max));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_s_min",
+            settings.hsv_slice_s_min));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_s_max",
+            settings.hsv_slice_s_max));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_v_min",
+            settings.hsv_slice_v_min));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/hsv_slice_v_max",
+            settings.hsv_slice_v_max));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/morphology_size",
+            settings.morphology_size));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/morphology_iterations",
+            settings.morphology_iterations));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/morphology_size",
+            settings.morphology_size));
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/bottom_camera_aov",
             settings.bottom_camera_aov));

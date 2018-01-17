@@ -25,6 +25,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 generate_dynamic_reconfigure_options(
   cfg/VisionNode.cfg
+  cfg/RoombaEstimator.cfg
 )
 
 ## System dependencies are found with CMake's conventions

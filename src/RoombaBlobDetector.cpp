@@ -40,15 +40,47 @@ void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
 
     cv::cuda::GpuMat range_mask;
 
-    // Green slice (Hue should be 57.43 out of 180)
-    cv_utils::inRange(hsv_image, cv::Scalar(47, 20, 15), cv::Scalar(67,255,200), range_mask);
+    // Green slice
+    cv_utils::inRange(hsv_image,
+                      cv::Scalar(settings_.hsv_slice_h_green_min,
+                                 settings_.hsv_slice_s_min,
+                                 settings_.hsv_slice_v_min),
+                      cv::Scalar(settings_.hsv_slice_h_green_max,
+                                 settings_.hsv_slice_s_max,
+                                 settings_.hsv_slice_v_max),
+                      range_mask);
     cv::cuda::bitwise_or(dst, range_mask, dst);
-    // Upper red slice (Hue should be 3.14 out of 180)
-    cv_utils::inRange(hsv_image, cv::Scalar(0, 20, 15), cv::Scalar(8,255,200), range_mask);
+    // Upper red slice
+    cv_utils::inRange(hsv_image,
+                      cv::Scalar(settings_.hsv_slice_h_red1_min,
+                                 settings_.hsv_slice_s_min,
+                                 settings_.hsv_slice_v_min),
+                      cv::Scalar(settings_.hsv_slice_h_red1_max,
+                                 settings_.hsv_slice_s_max,
+                                 settings_.hsv_slice_v_max),
+                      range_mask);
     cv::cuda::bitwise_or(dst, range_mask, dst);
-    // Lower red slice (Hue should be 3.14 out of 180)
-    cv_utils::inRange(hsv_image, cv::Scalar(170, 20, 15), cv::Scalar(180,255,200), range_mask);
+    // Lower red slice
+    cv_utils::inRange(hsv_image,
+                      cv::Scalar(settings_.hsv_slice_h_red2_min,
+                                 settings_.hsv_slice_s_min,
+                                 settings_.hsv_slice_v_min),
+                      cv::Scalar(settings_.hsv_slice_h_red2_max,
+                                 settings_.hsv_slice_s_max,
+                                 settings_.hsv_slice_v_max),
+                      range_mask);
     cv::cuda::bitwise_or(dst, range_mask, dst);
+
+    cv::Mat structuring_element = cv::getStructuringElement(
+            cv::MORPH_RECT,
+            cv::Size(settings_.morphology_size, settings_.morphology_size));
+    cv::Ptr<cv::cuda::Filter> morphology = cv::cuda::createMorphologyFilter(
+            cv::MORPH_OPEN,
+            CV_8UC1,
+            structuring_element,
+            cv::Point(-1, -1),
+            settings_.morphology_iterations);
+    morphology->apply(dst, dst);
 
     ROS_ASSERT(dst.channels() == 1);
 }
