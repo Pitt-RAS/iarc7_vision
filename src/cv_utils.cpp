@@ -59,6 +59,37 @@ void drawArrows(cv::Mat& image,
     }
 }
 
+void drawContour(cv::Mat& image,
+                 const std::vector<cv::Point>& contour,
+                 cv::Scalar color)
+{
+    for (size_t i = 0; i < contour.size() - 1; i++) {
+        cv::line(image, contour[i], contour[i + 1], color);
+    }
+    cv::line(image, contour[0], contour.back(), color);
+}
+
+void drawRect(cv::Mat& image,
+              const cv::Rect& rect,
+              cv::Scalar color)
+{
+    cv::Point p1 = rect.tl();
+    cv::Point p2 = rect.tl();
+
+    p2.x += rect.width;
+    cv::line(image, p1, p2, color);
+
+    p1 = rect.br();
+    cv::line(image, p1, p2, color);
+
+    p2 = rect.tl();
+    p2.y += rect.height;
+    cv::line(image, p1, p2, color);
+
+    p1 = rect.tl();
+    cv::line(image, p1, p2, color);
+}
+
 void inRange(const cv::cuda::GpuMat& src,
              cv::Scalar lowerb,
              cv::Scalar upperb,

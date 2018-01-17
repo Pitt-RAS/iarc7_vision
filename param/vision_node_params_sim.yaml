@@ -85,3 +85,7 @@ roomba_estimator_settings:
     left_camera_aov: 93.5
     right_camera_aov: 93.5
     back_camera_aov: 93.5
+
+    debug_hsv_slice: true
+    debug_contours: true
+    debug_rects: true

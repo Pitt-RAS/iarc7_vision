@@ -29,7 +29,7 @@ namespace iarc7_vision
 
 class RoombaEstimator{
     public:
-        RoombaEstimator(ros::NodeHandle nh, const ros::NodeHandle& private_nh);
+        RoombaEstimator(ros::NodeHandle nh, ros::NodeHandle& private_nh);
 
         void odometryArrayCallback(const iarc7_msgs::OdometryArray& msg);
         void update(const cv::cuda::GpuMat& image, const ros::Time& time);

@@ -31,6 +31,14 @@ void drawArrows(cv::Mat& image,
                 const std::vector<uchar>& status,
                 cv::Scalar line_color);
 
+void drawContour(cv::Mat& image,
+                 const std::vector<cv::Point>& contour,
+                 cv::Scalar color);
+
+void drawRect(cv::Mat& image,
+              const cv::Rect& rect,
+              cv::Scalar color);
+
 struct InRangeBuf {
     cv::cuda::GpuMat channels[3];
     cv::cuda::GpuMat buf;

@@ -31,13 +31,13 @@ void RoombaEstimator::pixelToRay(double px,
 }
 
 RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
-                                 const ros::NodeHandle& private_nh)
+                                 ros::NodeHandle& private_nh)
     : transform_wrapper_(),
       cam_tf_(),
       roomba_pub_(nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
       odom_vector_(),
       settings_(getSettings(private_nh)),
-      blob_detector_(settings_),
+      blob_detector_(settings_, private_nh),
       mtx_()
 {
     //ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
@@ -73,6 +73,15 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/bottom_camera_aov",
             settings.bottom_camera_aov));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/debug_hsv_slice",
+            settings.debug_hsv_slice));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/debug_contours",
+            settings.debug_contours));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/debug_rects",
+            settings.debug_rects));
     return settings;
 }
 
