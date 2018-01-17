@@ -74,16 +74,16 @@ void RoombaEstimator::OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg
     mtx.lock();
     odom_vector = msg.data;
     mtx.unlock();
-    ROS_ERROR_STREAM( "Odom Array Updated.");
 }
 
 float RoombaEstimator::getHeight(const ros::Time& time)
 {
-    if (!transform_wrapper_.getTransformAtTime(cam_tf,
-                                               "map",
-                                               "bottom_camera_optical",
-                                               time,
-                                               ros::Duration(1.0))) {
+    if (!transform_wrapper_.getTransformAtTime(
+                cam_tf,
+                "map",
+                "bottom_camera_rgb_optical_frame",
+                time,
+                ros::Duration(1.0))) {
         throw ros::Exception("Failed to fetch transform");
     }
     return cam_tf.transform.translation.z;
@@ -186,10 +186,11 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     float desired_width = settings.pixels_per_meter * distance;
     float factor = desired_width / image.cols;
 
-    cv::cuda::resize(image, image, cv::Size(), factor, factor);
+    cv::cuda::GpuMat image_scaled;
+    cv::cuda::resize(image, image_scaled, cv::Size(), factor, factor);
 
     // Run blob detection
-    blob_detector.detect(image, boundRect);
+    blob_detector.detect(image_scaled, boundRect);
 
     mtx.lock();
     // Run the GHT on each blob
@@ -228,8 +229,8 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
   PublishOdometry();
   mtx.unlock();
 
-  cv::imshow("Frame", image);
-  cv::waitKey(2);
+  //cv::imshow("Frame", image);
+  //cv::waitKey(2);
 }
 
 }

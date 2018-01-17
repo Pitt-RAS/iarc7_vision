@@ -31,9 +31,6 @@ void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
     cv::cuda::bitwise_or(dst, range_mask, dst);
 
     ROS_ASSERT(dst.channels() == 1);
-
-    cv::Ptr<cv::cuda::Filter> median_filter = cv::cuda::createMedianFilter(dst.type(), 5);
-    median_filter->apply(dst, dst);
 }
 
 // findContours does not exist for the gpu
@@ -44,7 +41,7 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
     mask.download(mask_cpu);
 
     std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(mask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+    cv::findContours(mask_cpu, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
     boundRect.resize(0); // Clear the vector
     cv::Rect rect;
     for(unsigned int i=0;i<contours.size();i++){
