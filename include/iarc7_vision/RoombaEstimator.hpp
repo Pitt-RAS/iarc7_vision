@@ -11,6 +11,7 @@
 #include <tf2_ros/transform_listener.h>
 
 #include "iarc7_vision/RoombaBlobDetector.hpp"
+#include "iarc7_vision/RoombaEstimatorSettings.hpp"
 #include "iarc7_vision/RoombaGHT.hpp"
 
 #include <sensor_msgs/CameraInfo.h>
@@ -26,41 +27,32 @@
 namespace iarc7_vision
 {
 
-// See vision_node_params.yaml for descriptions
-struct RoombaEstimatorSettings {
-    double pixels_per_meter;
-    double roomba_plate_width;
-    double roomba_height;
-    int ght_levels;
-    int ght_dp;
-    int ght_votes_threshold;
-    int camera_canny_threshold;
-    int template_canny_threshold;
-};
-
 class RoombaEstimator{
     public:
         RoombaEstimator(ros::NodeHandle nh, const ros::NodeHandle& private_nh);
-        void OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg);
+
+        void odometryArrayCallback(const iarc7_msgs::OdometryArray& msg);
         void update(const cv::cuda::GpuMat& image, const ros::Time& time);
     private:
         void pixelToRay(double px, double py, double pw, double ph,
                         geometry_msgs::Vector3Stamped& ray);
-        void getSettings(const ros::NodeHandle& private_nh);
+        static RoombaEstimatorSettings getSettings(
+                const ros::NodeHandle& private_nh);
         float getHeight(const ros::Time& time);
-        void CalcOdometry(cv::Point2f& pos, double pw, double ph, float angle,
+        void calcOdometry(cv::Point2f& pos, double pw, double ph, float angle,
                           nav_msgs::Odometry& out, const ros::Time& time);
-        void ReportOdometry(nav_msgs::Odometry& odom);
-        void PublishOdometry();
+        void reportOdometry(nav_msgs::Odometry& odom);
+        void publishOdometry();
+
         ros_utils::SafeTransformWrapper transform_wrapper_;
-        geometry_msgs::TransformStamped cam_tf;
-        ros::Publisher roomba_pub;
-        std::vector<nav_msgs::Odometry> odom_vector;
-        RoombaEstimatorSettings settings;
-        RoombaBlobDetector blob_detector;
+        geometry_msgs::TransformStamped cam_tf_;
+        ros::Publisher roomba_pub_;
+        std::vector<nav_msgs::Odometry> odom_vector_;
+
+        RoombaEstimatorSettings settings_;
+        RoombaBlobDetector blob_detector_;
         //RoombaGHT ght;
-        double bottom_camera_aov;
-        std::mutex mtx;
+        std::mutex mtx_;
 };
 
 }

@@ -18,7 +18,7 @@ void RoombaEstimator::pixelToRay(double px,
     double pix_r = std::sqrt( px*px + py*py );
     double pix_R = std::sqrt( ph*ph + pw*pw ) * 0.5;
 
-    double max_phi = bottom_camera_aov * 3.141592653589 / 360;
+    double max_phi = settings_.bottom_camera_aov * 3.141592653589 / 360;
     double pix_focal = pix_R / tan( max_phi );
     double theta = atan2( py, px );
 
@@ -32,17 +32,23 @@ void RoombaEstimator::pixelToRay(double px,
 
 RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
                                  const ros::NodeHandle& private_nh)
-    : transform_wrapper_()
+    : transform_wrapper_(),
+      cam_tf_(),
+      roomba_pub_(nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
+      odom_vector_(),
+      settings_(getSettings(private_nh)),
+      blob_detector_(settings_),
+      mtx_()
 {
-    roomba_pub = nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100);
-    getSettings(private_nh);
     //ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
     //          settings.ght_levels, settings.ght_dp,
     //          settings.ght_votes_threshold, settings.template_canny_threshold);
 }
 
-void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh)
+RoombaEstimatorSettings RoombaEstimator::getSettings(
+        const ros::NodeHandle& private_nh)
 {
+    RoombaEstimatorSettings settings;
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/pixels_per_meter",
             settings.pixels_per_meter));
@@ -66,46 +72,48 @@ void RoombaEstimator::getSettings(const ros::NodeHandle& private_nh)
             settings.template_canny_threshold));
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/bottom_camera_aov",
-            bottom_camera_aov));
+            settings.bottom_camera_aov));
+    return settings;
 }
 
-void RoombaEstimator::OdometryArrayCallback(const iarc7_msgs::OdometryArray& msg)
+void RoombaEstimator::odometryArrayCallback(
+        const iarc7_msgs::OdometryArray& msg)
 {
-    mtx.lock();
-    odom_vector = msg.data;
-    mtx.unlock();
+    mtx_.lock();
+    odom_vector_ = msg.data;
+    mtx_.unlock();
 }
 
 float RoombaEstimator::getHeight(const ros::Time& time)
 {
     if (!transform_wrapper_.getTransformAtTime(
-                cam_tf,
+                cam_tf_,
                 "map",
                 "bottom_camera_rgb_optical_frame",
                 time,
                 ros::Duration(1.0))) {
         throw ros::Exception("Failed to fetch transform");
     }
-    return cam_tf.transform.translation.z;
+    return cam_tf_.transform.translation.z;
 }
 
-void RoombaEstimator::CalcOdometry(cv::Point2f& pos,
+void RoombaEstimator::calcOdometry(cv::Point2f& pos,
                                    double pw,
                                    double ph,
                                    float angle,
                                    nav_msgs::Odometry& out,
                                    const ros::Time& time)
 {
-    float rads = angle * 3.141592653589 / 90.0;
-    geometry_msgs::Vector3 cam_pos = cam_tf.transform.translation;
+    float rads = angle * M_PI / 90.0;
+    geometry_msgs::Vector3 cam_pos = cam_tf_.transform.translation;
 
     geometry_msgs::Vector3Stamped camera_ray;
     pixelToRay(pos.x, pos.y, pw, ph, camera_ray);
 
     geometry_msgs::Vector3Stamped map_ray;
-    tf2::doTransform(camera_ray, map_ray, cam_tf);
+    tf2::doTransform(camera_ray, map_ray, cam_tf_);
 
-    float ray_scale = -(cam_pos.z - settings.roomba_height) / map_ray.vector.z;
+    float ray_scale = -(cam_pos.z - settings_.roomba_height) / map_ray.vector.z;
 
     geometry_msgs::Point position;
     position.x = cam_pos.x + map_ray.vector.x * ray_scale;
@@ -125,35 +133,35 @@ void RoombaEstimator::CalcOdometry(cv::Point2f& pos,
 }
 
 // This will get totally screwed when it finds all 10 Roombas
-void RoombaEstimator::ReportOdometry(nav_msgs::Odometry& odom)
+void RoombaEstimator::reportOdometry(nav_msgs::Odometry& odom)
 {
     int index = -1;
     float sq_tolerance = 0.1; // Roomba diameter is 0.254 meters
-    if(odom_vector.size()==10)
+    if(odom_vector_.size()==10)
         sq_tolerance = 1000; // Impossible to attain, like my my love life
-    for(unsigned int i=0;i<odom_vector.size();i++){
-        float xdiff = odom.pose.pose.position.x - odom_vector[i].pose.pose.position.x;
-        float ydiff = odom.pose.pose.position.y - odom_vector[i].pose.pose.position.y;
+    for(unsigned int i=0;i<odom_vector_.size();i++){
+        float xdiff = odom.pose.pose.position.x - odom_vector_[i].pose.pose.position.x;
+        float ydiff = odom.pose.pose.position.y - odom_vector_[i].pose.pose.position.y;
         if(xdiff*xdiff + ydiff*ydiff < sq_tolerance){
             index = i;
             odom.child_frame_id = "roomba" + std::to_string(index);
-            odom_vector[i] = odom;
+            odom_vector_[i] = odom;
             continue;
         }
     }
     if(index==-1){
-        index = odom_vector.size();
+        index = odom_vector_.size();
         odom.child_frame_id = "roomba" + std::to_string(index);
-        odom_vector.push_back(odom);
+        odom_vector_.push_back(odom);
     }
 }
 
 // Publish the most recent array of Roombas
-void RoombaEstimator::PublishOdometry()
+void RoombaEstimator::publishOdometry()
 {
     iarc7_msgs::OdometryArray msg;
-    msg.data = odom_vector;
-    roomba_pub.publish(msg);
+    msg.data = odom_vector_;
+    roomba_pub_.publish(msg);
 }
 
 void RoombaEstimator::update(const cv::cuda::GpuMat& image,
@@ -183,16 +191,16 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
                             + (a.vector.x-b.vector.x)*(a.vector.x-b.vector.x));
 
     distance *= height;
-    float desired_width = settings.pixels_per_meter * distance;
+    float desired_width = settings_.pixels_per_meter * distance;
     float factor = desired_width / image.cols;
 
     cv::cuda::GpuMat image_scaled;
     cv::cuda::resize(image, image_scaled, cv::Size(), factor, factor);
 
     // Run blob detection
-    blob_detector.detect(image_scaled, boundRect);
+    blob_detector_.detect(image_scaled, boundRect);
 
-    mtx.lock();
+    mtx_.lock();
     // Run the GHT on each blob
     //for(unsigned int i=0;i<boundRect.size();i++){
     //    angle = ght.detect(image, boundRect[i], pos,
@@ -226,11 +234,8 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     //}
 
   // publish
-  PublishOdometry();
-  mtx.unlock();
-
-  //cv::imshow("Frame", image);
-  //cv::waitKey(2);
+  publishOdometry();
+  mtx_.unlock();
 }
 
 }

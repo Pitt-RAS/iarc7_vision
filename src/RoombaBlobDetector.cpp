@@ -2,10 +2,13 @@
 
 #include "iarc7_vision/cv_utils.hpp"
 
-#include <opencv2/cudafilters.hpp>
-
 namespace iarc7_vision
 {
+
+RoombaBlobDetector::RoombaBlobDetector(const RoombaEstimatorSettings& settings)
+    : settings_(settings)
+{
+}
 
 void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
                                         cv::cuda::GpuMat& dst)

@@ -398,7 +398,7 @@ int main(int argc, char **argv)
     ros::Subscriber sub2 = nh.subscribe(
         "/roombas",
         10,
-        &iarc7_vision::RoombaEstimator::OdometryArrayCallback,
+        &iarc7_vision::RoombaEstimator::odometryArrayCallback,
         &roomba_estimator);
 
     // Main loop
