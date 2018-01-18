@@ -20,16 +20,14 @@ class RoombaGHT {
                int ght_dp,
                int votes_threshold,
                int template_canny_threshold);
-    float detect(const cv::Mat& image, cv::Rect& boundRect, cv::Point2f& pos, 
-                 int camera_canny_threshold);
-    float detect(const cv::gpu::GpuMat& image, cv::Rect& boundRect,
-                 cv::Point2f& pos, int camera_canny_threshold);
+    void detect(const cv::cuda::GpuMat& image,
+                const cv::Rect& boundRect,
+                cv::Point2f& pos,
+                double& angle,
+                int camera_canny_threshold);
   private:
-    bool useGpu = false;
-    cv::Ptr<cv::GeneralizedHough> ght;
-    cv::Mat templ;
-    cv::Ptr<cv::gpu::GeneralizedHough_GPU> gpu_ght;
-    cv::gpu::GpuMat gpu_templ;
+    cv::Ptr<cv::GeneralizedHoughGuil> ght_;
+    cv::Mat templ_;
 };
 
 }

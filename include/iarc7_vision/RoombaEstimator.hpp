@@ -57,7 +57,9 @@ class RoombaEstimator {
 
         RoombaEstimatorSettings settings_;
         RoombaBlobDetector blob_detector_;
-        //RoombaGHT ght;
+        RoombaGHT ght_detector_;
+
+        ros::Publisher debug_ght_rects_pub_;
 };
 
 } // namespace iarc7_vision

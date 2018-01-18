@@ -1,9 +1,13 @@
 #include "iarc7_vision/RoombaEstimator.hpp"
 
 #include <cmath>
+#include <cv_bridge/cv_bridge.h>
 #include <dynamic_reconfigure/server.h>
 #include <string>
 #include <tf/transform_datatypes.h>
+
+#include <sensor_msgs/Image.h>
+#include <std_msgs/Header.h>
 
 #include "iarc7_vision/RoombaEstimatorConfig.h"
 
@@ -49,11 +53,18 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
       settings_(getSettings(private_nh)),
       blob_detector_(settings_, private_nh)
 {
-    //ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
-    //          settings.ght_levels, settings.ght_dp,
-    //          settings.ght_votes_threshold, settings.template_canny_threshold);
+    ght_detector_.setup(settings_.pixels_per_meter,
+                        settings_.roomba_plate_width,
+                        settings_.ght_levels,
+                        settings_.ght_dp,
+                        settings_.ght_votes_threshold,
+                        settings_.template_canny_threshold);
     dynamic_reconfigure_server_.setCallback(
             dynamic_reconfigure_settings_callback_);
+
+    if (settings_.debug_ght_rects) {
+        debug_ght_rects_pub_ = nh.advertise<sensor_msgs::Image>("ght_rects", 10);
+    }
 }
 
 void RoombaEstimator::getDynamicSettings(
@@ -182,6 +193,9 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/debug_rects",
             settings.debug_rects));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/debug_ght_rects",
+            settings.debug_ght_rects));
     return settings;
 }
 
@@ -284,9 +298,7 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
         return;
 
     // Declare variables
-    std::vector<cv::Rect> boundRect;
-    //cv::Point2f pos = cv::Point2f();
-    //float angle = 0;
+    std::vector<cv::Rect> bounding_rects;
 
     // Calculate the world field of view in meters and use to resize the image
     geometry_msgs::Vector3Stamped a;
@@ -305,44 +317,65 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     cv::cuda::resize(image, image_scaled, cv::Size(), factor, factor);
 
     // Run blob detection
-    blob_detector_.detect(image_scaled, boundRect);
+    blob_detector_.detect(image_scaled, bounding_rects);
 
     // Run the GHT on each blob
-    //for(unsigned int i=0;i<boundRect.size();i++){
-    //    angle = ght.detect(image, boundRect[i], pos,
-    //                       settings.camera_canny_threshold);
+    cv::Mat ght_rect_image;
+    if (settings_.debug_ght_rects) {
+        image.download(ght_rect_image);
+    }
 
-    //    cv::Point2f P2;
-    //    P2.x =  (int)round(pos.x + 100 * cos(angle * CV_PI / 180.0));
-    //    P2.y =  (int)round(pos.y + 100 * sin(angle * CV_PI / 180.0));
-    //    line(image, pos, P2, cv::Scalar(255, 0, 0), 3);
+    for(unsigned int i=0;i<bounding_rects.size();i++){
+        cv::Point2f pos;
+        double angle;
 
-    //    cv::RotatedRect rect;
-    //    rect.center = pos;
-    //    rect.size = cv::Size2f(50, 85);
-    //    rect.angle = angle;
+        ght_detector_.detect(image,
+                             bounding_rects[i],
+                             pos,
+                             angle,
+                             settings_.camera_canny_threshold);
 
-    //    cv::Point2f pts[4];
-    //    rect.points(pts);
+        if(angle == -1) continue;
 
-    //    cv::line(image, pts[0], pts[1], cv::Scalar(0, 0, 255), 3);
-    //    cv::line(image, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
-    //    cv::line(image, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
-    //    cv::line(image, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
+        if (settings_.debug_ght_rects) {
+            cv::Point2f p2;
+            p2.x = pos.x + 100 * std::cos(angle * M_PI / 180.0);
+            p2.y = pos.y + 100 * std::sin(angle * M_PI / 180.0);
+            cv::line(ght_rect_image, pos, p2, cv::Scalar(255, 0, 0), 3);
 
-    //    if(angle == -1) continue;
-    //    // divide by factor to convert coordinates back to original scaling
+            cv::RotatedRect rect;
+            rect.center = pos;
+            rect.size = cv::Size2f(50, 85);
+            rect.angle = angle;
 
-    //    nav_msgs::Odometry odom;
-    //    CalcOdometry(pos, image.cols, image.rows, angle, odom, time);
-    //    ReportOdometry(odom);
+            cv::Point2f pts[4];
+            rect.points(pts);
 
-    //}
+            cv::line(ght_rect_image, pts[0], pts[1], cv::Scalar(0, 0, 255), 3);
+            cv::line(ght_rect_image, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
+            cv::line(ght_rect_image, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
+            cv::line(ght_rect_image, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
+        }
 
-  // publish
-  publishOdometry();
-}
+        // divide by factor to convert coordinates back to original scaling
 
+        nav_msgs::Odometry odom;
+        calcOdometry(pos, image.cols, image.rows, angle, odom, time);
+        reportOdometry(odom);
+    }
+
+    if (settings_.debug_ght_rects) {
+        const cv_bridge::CvImage cv_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::RGB8,
+            ght_rect_image
+        };
+
+        debug_ght_rects_pub_.publish(cv_image.toImageMsg());
+    }
+
+    // publish
+    publishOdometry();
 }
 
 } // namespace iarc7_vision
