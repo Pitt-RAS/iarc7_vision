@@ -23,13 +23,10 @@
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Vector3Stamped.h>
 
-#include <mutex>
-
-
 namespace iarc7_vision
 {
 
-class RoombaEstimator{
+class RoombaEstimator {
     public:
         RoombaEstimator(ros::NodeHandle nh, ros::NodeHandle& private_nh);
 
@@ -61,9 +58,8 @@ class RoombaEstimator{
         RoombaEstimatorSettings settings_;
         RoombaBlobDetector blob_detector_;
         //RoombaGHT ght;
-        std::mutex mtx_;
 };
 
-}
+} // namespace iarc7_vision
 
 #endif

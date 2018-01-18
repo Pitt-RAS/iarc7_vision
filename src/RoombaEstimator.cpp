@@ -47,8 +47,7 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
       roomba_pub_(nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
       odom_vector_(),
       settings_(getSettings(private_nh)),
-      blob_detector_(settings_, private_nh),
-      mtx_()
+      blob_detector_(settings_, private_nh)
 {
     //ght.setup(settings.pixels_per_meter, settings.roomba_plate_width,
     //          settings.ght_levels, settings.ght_dp,
@@ -189,9 +188,7 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
 void RoombaEstimator::odometryArrayCallback(
         const iarc7_msgs::OdometryArray& msg)
 {
-    mtx_.lock();
     odom_vector_ = msg.data;
-    mtx_.unlock();
 }
 
 float RoombaEstimator::getHeight(const ros::Time& time)
@@ -310,7 +307,6 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     // Run blob detection
     blob_detector_.detect(image_scaled, boundRect);
 
-    mtx_.lock();
     // Run the GHT on each blob
     //for(unsigned int i=0;i<boundRect.size();i++){
     //    angle = ght.detect(image, boundRect[i], pos,
@@ -345,7 +341,8 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
 
   // publish
   publishOdometry();
-  mtx_.unlock();
 }
 
 }
+
+} // namespace iarc7_vision

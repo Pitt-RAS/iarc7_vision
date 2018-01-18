@@ -110,7 +110,7 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
             contour_image
         };
 
-        debug_contours_pub_.publish(cv_image);
+        debug_contours_pub_.publish(cv_image.toImageMsg());
     }
 
     boundRect.resize(0); // Clear the vector
@@ -158,7 +158,7 @@ void RoombaBlobDetector::dilateBounds(const cv::cuda::GpuMat& image,
             rect_image
         };
 
-        debug_rects_pub_.publish(cv_image);
+        debug_rects_pub_.publish(cv_image.toImageMsg());
     }
 }
 

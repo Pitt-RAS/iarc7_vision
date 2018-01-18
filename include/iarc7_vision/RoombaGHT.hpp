@@ -14,8 +14,11 @@ namespace iarc7_vision
 
 class RoombaGHT {
   public:
-    void setup(float pixels_per_meter, float roomba_plate_width, 
-               int ght_levels, int ght_dp, int votes_threshold,
+    void setup(float pixels_per_meter,
+               float roomba_plate_width,
+               int ght_levels,
+               int ght_dp,
+               int votes_threshold,
                int template_canny_threshold);
     float detect(const cv::Mat& image, cv::Rect& boundRect, cv::Point2f& pos, 
                  int camera_canny_threshold);
