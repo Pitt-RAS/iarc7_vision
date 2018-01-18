@@ -38,8 +38,8 @@ class RoombaEstimator {
         void getDynamicSettings(iarc7_vision::RoombaEstimatorConfig& config);
         static RoombaEstimatorSettings getSettings(
                 const ros::NodeHandle& private_nh);
-        float getHeight(const ros::Time& time);
-        void calcOdometry(cv::Point2f& pos, double pw, double ph, float angle,
+        double getHeight(const ros::Time& time);
+        void calcOdometry(cv::Point2f& pos, double pw, double ph, double angle,
                           nav_msgs::Odometry& out, const ros::Time& time);
         void reportOdometry(nav_msgs::Odometry& odom);
         void publishOdometry();

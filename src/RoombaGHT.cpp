@@ -7,8 +7,8 @@ RoombaGHT::RoombaGHT(const RoombaEstimatorSettings& settings)
     : ght_(cv::cuda::createGeneralizedHoughGuil()),
       settings_(settings)
 {
-    float min_dist = settings_.template_pixels_per_meter
-                   * settings_.roomba_plate_width;
+    double min_dist = settings_.template_pixels_per_meter
+                    * settings_.roomba_plate_width;
     ght_->setMinDist(min_dist);
 
     cv::Mat templ = cv::imread("roomba_template.png", cv::IMREAD_GRAYSCALE);
@@ -23,12 +23,12 @@ RoombaGHT::RoombaGHT(const RoombaEstimatorSettings& settings)
 }
 
 bool RoombaGHT::detect(const cv::cuda::GpuMat& image,
-                       const cv::Rect& boundRect,
+                       const cv::Rect& bounding_rect,
                        cv::Point2f& pos,
                        double& angle)
 {
     // First grab the important area of the image
-    cv::cuda::GpuMat image_crop(image, boundRect);
+    cv::cuda::GpuMat image_crop(image, bounding_rect);
 
     // TRY HSV
     cv::cuda::GpuMat hsv;
@@ -38,16 +38,16 @@ bool RoombaGHT::detect(const cv::cuda::GpuMat& image,
 
     // Run the GHT, there should only be one found
     cv::cuda::GpuMat gpu_position;
-    std::vector<cv::Vec4f> position;
-    std::vector<cv::Vec3i> votes;
     ght_->detect(hsv_channels[1], gpu_position);
+
+    std::vector<cv::Vec4f> position;
     gpu_position.download(position);
 
     if (!position.size()) return false;
 
-    pos.x = boundRect.x + position[0][0];
-    pos.y = boundRect.y + position[0][1];
-    angle = position[0][3];
+    pos.x = bounding_rect.x + position[0][0];
+    pos.y = bounding_rect.y + position[0][1];
+    angle = position[0][3] * M_PI / 180.0;
     return true;
 }
 

@@ -19,7 +19,7 @@ class RoombaGHT {
     RoombaGHT(const RoombaEstimatorSettings& settings);
 
     bool detect(const cv::cuda::GpuMat& image,
-                const cv::Rect& boundRect,
+                const cv::Rect& bounding_rect,
                 cv::Point2f& pos,
                 double& angle);
     void onSettingsChanged();
