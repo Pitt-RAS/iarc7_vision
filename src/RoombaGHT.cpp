@@ -7,7 +7,8 @@ RoombaGHT::RoombaGHT(const RoombaEstimatorSettings& settings)
     : ght_(cv::cuda::createGeneralizedHoughGuil()),
       settings_(settings)
 {
-    float min_dist = settings_.pixels_per_meter * settings_.roomba_plate_width;
+    float min_dist = settings_.template_pixels_per_meter
+                   * settings_.roomba_plate_width;
     ght_->setMinDist(min_dist);
 
     cv::Mat templ = cv::imread("roomba_template.png", cv::IMREAD_GRAYSCALE);

@@ -67,8 +67,6 @@ void RoombaEstimator::getDynamicSettings(
         iarc7_vision::RoombaEstimatorConfig& config)
 {
     if (!dynamic_reconfigure_called_) {
-        config.pixels_per_meter = settings_.pixels_per_meter;
-
         config.ght_pos_thresh        = settings_.ght_pos_thresh;
         config.ght_angle_thresh      = settings_.ght_angle_thresh;
         config.ght_scale_thresh      = settings_.ght_scale_thresh;
@@ -95,8 +93,6 @@ void RoombaEstimator::getDynamicSettings(
 
         dynamic_reconfigure_called_ = true;
     } else {
-        settings_.pixels_per_meter = config.pixels_per_meter;
-
         settings_.ght_pos_thresh = config.ght_pos_thresh;
         settings_.ght_angle_thresh = config.ght_angle_thresh;
         settings_.ght_scale_thresh = config.ght_scale_thresh;
@@ -128,8 +124,8 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
 {
     RoombaEstimatorSettings settings;
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/pixels_per_meter",
-            settings.pixels_per_meter));
+            "roomba_estimator_settings/template_pixels_per_meter",
+            settings.template_pixels_per_meter));
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/roomba_plate_width",
             settings.roomba_plate_width));
@@ -328,7 +324,7 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
                             + (a.vector.x-b.vector.x)*(a.vector.x-b.vector.x));
 
     distance *= height;
-    float desired_width = settings_.pixels_per_meter * distance;
+    float desired_width = settings_.template_pixels_per_meter * distance;
     float factor = desired_width / image.cols;
 
     cv::cuda::GpuMat image_scaled;

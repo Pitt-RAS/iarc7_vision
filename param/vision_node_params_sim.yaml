@@ -62,7 +62,7 @@ grid_line_estimator:
 roomba_estimator_settings:
     # In the template, roombas are 85 pixels wide and 0.254 meters wide
     # Calculation: Roomba template pixel width / Roomba meter width
-    pixels_per_meter: 335
+    template_pixels_per_meter: 335
     # Measured in meters
     roomba_plate_width: 0.254
     # Measued in meters
