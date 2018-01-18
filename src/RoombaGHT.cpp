@@ -3,41 +3,29 @@
 namespace iarc7_vision
 {
 
-void RoombaGHT::setup(float pixels_per_meter,
-                      float roomba_plate_width,
-                      int ght_levels,
-                      int ght_dp,
-                      int votes_threshold,
-                      int template_canny_threshold)
+RoombaGHT::RoombaGHT(const RoombaEstimatorSettings& settings)
+    : ght_(cv::cuda::createGeneralizedHoughGuil()),
+      settings_(settings)
 {
-    (void)template_canny_threshold;
-
-    float min_dist = pixels_per_meter * roomba_plate_width;
-
-    templ_ = cv::imread("roomba_template.png", cv::IMREAD_GRAYSCALE);
-
-    ght_ = cv::cuda::createGeneralizedHoughGuil();
+    float min_dist = settings_.pixels_per_meter * settings_.roomba_plate_width;
     ght_->setMinDist(min_dist);
-    ght_->setLevels(ght_levels);
-    ght_->setDp(ght_dp);
+
+    cv::Mat templ = cv::imread("roomba_template.png", cv::IMREAD_GRAYSCALE);
+    cv::cuda::GpuMat gpu_templ(templ);
+    ght_->setTemplate(gpu_templ);
+
     ght_->setMaxBufferSize(1000); // maximal size of inner buffers
-    ght_->setScaleThresh(votes_threshold);
-    ght_->setPosThresh(votes_threshold);
     ght_->setMinAngle(0);
     ght_->setMaxAngle(360);
-    ght_->setAngleStep(1);
 
-    cv::cuda::GpuMat gpu_templ(templ_);
-    ght_->setTemplate(gpu_templ);
+    onSettingsChanged();
 }
 
-void RoombaGHT::detect(const cv::cuda::GpuMat& image,
+bool RoombaGHT::detect(const cv::cuda::GpuMat& image,
                        const cv::Rect& boundRect,
                        cv::Point2f& pos,
-                       double& angle,
-                       int camera_canny_threshold)
+                       double& angle)
 {
-    (void)camera_canny_threshold;
     // First grab the important area of the image
     cv::cuda::GpuMat image_crop(image, boundRect);
 
@@ -53,11 +41,26 @@ void RoombaGHT::detect(const cv::cuda::GpuMat& image,
     std::vector<cv::Vec3i> votes;
     ght_->detect(hsv_channels[1], gpu_position);
     gpu_position.download(position);
-    if(!position.size())
-        angle = -1;
+
+    if (!position.size()) return false;
+
     pos.x = boundRect.x + position[0][0];
     pos.y = boundRect.y + position[0][1];
     angle = position[0][3];
+    return true;
+}
+
+void RoombaGHT::onSettingsChanged()
+{
+    ght_->setPosThresh(settings_.ght_pos_thresh);
+    ght_->setAngleThresh(settings_.ght_angle_thresh);
+    ght_->setScaleThresh(settings_.ght_scale_thresh);
+    ght_->setCannyLowThresh(settings_.ght_canny_low_thresh);
+    ght_->setCannyHighThresh(settings_.ght_canny_high_thresh);
+    ght_->setDp(settings_.ght_dp);
+    ght_->setLevels(settings_.ght_levels);
+    ght_->setAngleStep(settings_.ght_angle_step);
+    ght_->setScaleStep(settings_.ght_scale_step);
 }
 
 } // namespace iarc7_vision

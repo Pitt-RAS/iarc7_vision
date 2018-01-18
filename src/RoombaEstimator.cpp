@@ -44,6 +44,7 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
       dynamic_reconfigure_settings_callback_(
               [this](iarc7_vision::RoombaEstimatorConfig& config, uint32_t) {
                   getDynamicSettings(config);
+                  ght_detector_.onSettingsChanged();
               }),
       dynamic_reconfigure_called_(false),
       transform_wrapper_(),
@@ -51,14 +52,9 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
       roomba_pub_(nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
       odom_vector_(),
       settings_(getSettings(private_nh)),
-      blob_detector_(settings_, private_nh)
+      blob_detector_(settings_, private_nh),
+      ght_detector_(settings_)
 {
-    ght_detector_.setup(settings_.pixels_per_meter,
-                        settings_.roomba_plate_width,
-                        settings_.ght_levels,
-                        settings_.ght_dp,
-                        settings_.ght_votes_threshold,
-                        settings_.template_canny_threshold);
     dynamic_reconfigure_server_.setCallback(
             dynamic_reconfigure_settings_callback_);
 
@@ -72,22 +68,27 @@ void RoombaEstimator::getDynamicSettings(
 {
     if (!dynamic_reconfigure_called_) {
         config.pixels_per_meter = settings_.pixels_per_meter;
-        config.ght_levels = settings_.ght_levels;
-        config.ght_dp = settings_.ght_dp;
-        config.ght_votes_threshold = settings_.ght_votes_threshold;
-        config.camera_canny_threshold = settings_.camera_canny_threshold;
-        config.template_canny_threshold = settings_.template_canny_threshold;
+
+        config.ght_pos_thresh        = settings_.ght_pos_thresh;
+        config.ght_angle_thresh      = settings_.ght_angle_thresh;
+        config.ght_scale_thresh      = settings_.ght_scale_thresh;
+        config.ght_canny_low_thresh  = settings_.ght_canny_low_thresh;
+        config.ght_canny_high_thresh = settings_.ght_canny_high_thresh;
+        config.ght_dp                = settings_.ght_dp;
+        config.ght_levels            = settings_.ght_levels;
+        config.ght_angle_step        = settings_.ght_angle_step;
+        config.ght_scale_step        = settings_.ght_scale_step;
 
         config.hsv_slice_h_green_min = settings_.hsv_slice_h_green_min;
         config.hsv_slice_h_green_max = settings_.hsv_slice_h_green_max;
-        config.hsv_slice_h_red1_min = settings_.hsv_slice_h_red1_min;
-        config.hsv_slice_h_red1_max = settings_.hsv_slice_h_red1_max;
-        config.hsv_slice_h_red2_min = settings_.hsv_slice_h_red2_min;
-        config.hsv_slice_h_red2_max = settings_.hsv_slice_h_red2_max;
-        config.hsv_slice_s_min = settings_.hsv_slice_s_min;
-        config.hsv_slice_s_max = settings_.hsv_slice_s_max;
-        config.hsv_slice_v_min = settings_.hsv_slice_v_min;
-        config.hsv_slice_v_max = settings_.hsv_slice_v_max;
+        config.hsv_slice_h_red1_min  = settings_.hsv_slice_h_red1_min;
+        config.hsv_slice_h_red1_max  = settings_.hsv_slice_h_red1_max;
+        config.hsv_slice_h_red2_min  = settings_.hsv_slice_h_red2_min;
+        config.hsv_slice_h_red2_max  = settings_.hsv_slice_h_red2_max;
+        config.hsv_slice_s_min       = settings_.hsv_slice_s_min;
+        config.hsv_slice_s_max       = settings_.hsv_slice_s_max;
+        config.hsv_slice_v_min       = settings_.hsv_slice_v_min;
+        config.hsv_slice_v_max       = settings_.hsv_slice_v_max;
 
         config.morphology_size = settings_.morphology_size;
         config.morphology_iterations = settings_.morphology_iterations;
@@ -95,11 +96,16 @@ void RoombaEstimator::getDynamicSettings(
         dynamic_reconfigure_called_ = true;
     } else {
         settings_.pixels_per_meter = config.pixels_per_meter;
-        settings_.ght_levels = config.ght_levels;
+
+        settings_.ght_pos_thresh = config.ght_pos_thresh;
+        settings_.ght_angle_thresh = config.ght_angle_thresh;
+        settings_.ght_scale_thresh = config.ght_scale_thresh;
+        settings_.ght_canny_low_thresh = config.ght_canny_low_thresh;
+        settings_.ght_canny_high_thresh = config.ght_canny_high_thresh;
         settings_.ght_dp = config.ght_dp;
-        settings_.ght_votes_threshold = config.ght_votes_threshold;
-        settings_.camera_canny_threshold = config.camera_canny_threshold;
-        settings_.template_canny_threshold = config.template_canny_threshold;
+        settings_.ght_levels = config.ght_levels;
+        settings_.ght_angle_step = config.ght_angle_step;
+        settings_.ght_scale_step = config.ght_scale_step;
 
         settings_.hsv_slice_h_green_min = config.hsv_slice_h_green_min;
         settings_.hsv_slice_h_green_max = config.hsv_slice_h_green_max;
@@ -128,20 +134,32 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
             "roomba_estimator_settings/roomba_plate_width",
             settings.roomba_plate_width));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_levels",
-            settings.ght_levels));
+            "roomba_estimator_settings/ght_pos_thresh",
+            settings.ght_pos_thresh));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/ght_angle_thresh",
+            settings.ght_angle_thresh));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/ght_scale_thresh",
+            settings.ght_scale_thresh));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/ght_canny_low_thresh",
+            settings.ght_canny_low_thresh));
+    ROS_ASSERT(private_nh.getParam(
+            "roomba_estimator_settings/ght_canny_high_thresh",
+            settings.ght_canny_high_thresh));
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/ght_dp",
             settings.ght_dp));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_votes_threshold",
-            settings.ght_votes_threshold));
+            "roomba_estimator_settings/ght_levels",
+            settings.ght_levels));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/camera_canny_threshold",
-            settings.camera_canny_threshold));
+            "roomba_estimator_settings/ght_angle_step",
+            settings.ght_angle_step));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/template_canny_threshold",
-            settings.template_canny_threshold));
+            "roomba_estimator_settings/ght_scale_step",
+            settings.ght_scale_step));
     ROS_ASSERT(private_nh.getParam(
             "roomba_estimator_settings/hsv_slice_h_green_min",
             settings.hsv_slice_h_green_min));
@@ -329,13 +347,12 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
         cv::Point2f pos;
         double angle;
 
-        ght_detector_.detect(image,
-                             bounding_rects[i],
-                             pos,
-                             angle,
-                             settings_.camera_canny_threshold);
+        bool detected = ght_detector_.detect(image,
+                                             bounding_rects[i],
+                                             pos,
+                                             angle);
 
-        if(angle == -1) continue;
+        if (!detected) continue;
 
         if (settings_.debug_ght_rects) {
             cv::Point2f p2;

@@ -9,27 +9,25 @@
 
 #include <ros/ros.h>
 
+#include "iarc7_vision/RoombaEstimatorSettings.hpp"
+
 namespace iarc7_vision
 {
 
 class RoombaGHT {
   public:
-    void setup(float pixels_per_meter,
-               float roomba_plate_width,
-               int ght_levels,
-               int ght_dp,
-               int votes_threshold,
-               int template_canny_threshold);
-    void detect(const cv::cuda::GpuMat& image,
+    RoombaGHT(const RoombaEstimatorSettings& settings);
+
+    bool detect(const cv::cuda::GpuMat& image,
                 const cv::Rect& boundRect,
                 cv::Point2f& pos,
-                double& angle,
-                int camera_canny_threshold);
+                double& angle);
+    void onSettingsChanged();
   private:
     cv::Ptr<cv::GeneralizedHoughGuil> ght_;
-    cv::Mat templ_;
+    const RoombaEstimatorSettings& settings_;
 };
 
-}
+} // namespace iarc7_vision
 
 #endif // include guard
