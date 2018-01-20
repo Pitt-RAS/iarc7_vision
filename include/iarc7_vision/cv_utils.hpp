@@ -41,6 +41,7 @@ void drawRect(cv::Mat& image,
 
 struct InRangeBuf {
     cv::cuda::GpuMat channels[3];
+    cv::cuda::GpuMat inverse;
     cv::cuda::GpuMat buf;
 };
 

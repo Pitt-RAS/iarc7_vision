@@ -1,6 +1,7 @@
 #include "iarc7_vision/cv_utils.hpp"
 
 #include <opencv2/cudaarithm.hpp>
+#include <ros/ros.h>
 
 namespace iarc7_vision {
 
@@ -96,17 +97,33 @@ void inRange(const cv::cuda::GpuMat& src,
              cv::cuda::GpuMat& dst,
              InRangeBuf& buf)
 {
+    ROS_ASSERT(src.type() == CV_8UC3 || src.type() == CV_8UC4);
+
     cv::cuda::split(src, buf.channels);
 
-    cv::cuda::threshold(buf.channels[0], buf.buf, lowerb[0], 255, cv::THRESH_BINARY);
+    cv::cuda::subtract(cv::Scalar(255), buf.channels[0], buf.inverse);
+    cv::cuda::threshold(buf.inverse,
+                        buf.buf,
+                        255 - lowerb[0],
+                        255,
+                        cv::THRESH_BINARY_INV);
     cv::cuda::bitwise_and(buf.buf, buf.buf, dst);
     for (int i = 1; i < 3; i++) {
-        cv::cuda::threshold(buf.channels[i], buf.buf, lowerb[i], 255, cv::THRESH_BINARY);
+        cv::cuda::subtract(cv::Scalar(255), buf.channels[i], buf.inverse);
+        cv::cuda::threshold(buf.inverse,
+                            buf.buf,
+                            255 - lowerb[i],
+                            255,
+                            cv::THRESH_BINARY_INV);
         cv::cuda::bitwise_and(buf.buf, dst, dst);
     }
 
     for (int i = 0; i < 3; i++) {
-        cv::cuda::threshold(buf.channels[i], buf.buf, upperb[i], 255, cv::THRESH_BINARY_INV);
+        cv::cuda::threshold(buf.channels[i],
+                            buf.buf,
+                            upperb[i],
+                            255,
+                            cv::THRESH_BINARY_INV);
         cv::cuda::bitwise_and(buf.buf, dst, dst);
     }
 }
