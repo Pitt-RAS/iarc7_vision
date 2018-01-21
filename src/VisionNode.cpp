@@ -357,7 +357,7 @@ int main(int argc, char **argv)
             ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
         };
     dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
-    iarc7_vision::RoombaEstimator roomba_estimator(nh, private_nh);
+    iarc7_vision::RoombaEstimator roomba_estimator;
 
     // Check for images at 100 Hz
     ros::Rate rate (100);

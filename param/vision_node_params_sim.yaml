@@ -47,7 +47,7 @@ grid_line_estimator:
     debug_direction: false
 
     # Should we spit out an edge image for each frame on the `edges` topic?
-    debug_edges: true
+    debug_edges: false
 
     # Should we spit out a copy of the input with lines drawn on top on the
     # `lines` topic?
@@ -59,7 +59,7 @@ grid_line_estimator:
     # Uncomment this to override the height from robot_localization
     # debug_height: 0.22
 
-roomba_estimator_settings:
+roomba_estimator:
     # In the template, roombas are 85 pixels wide and 0.254 meters wide
     # Calculation: Roomba template pixel width / Roomba meter width
     template_pixels_per_meter: 335
@@ -72,10 +72,10 @@ roomba_estimator_settings:
     ght_angle_thresh: 15
     ght_scale_thresh: 15
     ght_canny_low_thresh: 160
-    ght_canny_high_thresh: 160
-    ght_dp: 2
+    ght_canny_high_thresh: 200
+    ght_dp: 1
     ght_levels: 360
-    ght_angle_step: 1 # in degrees
+    ght_angle_step: 10 # in degrees
     ght_scale_step: 0.05
 
     hsv_slice_h_green_min: 47
@@ -87,7 +87,7 @@ roomba_estimator_settings:
     hsv_slice_s_min: 20
     hsv_slice_s_max: 255
     hsv_slice_v_min: 15
-    hsv_slice_v_max: 200
+    hsv_slice_v_max: 255
 
     morphology_size: 3
     morphology_iterations: 3

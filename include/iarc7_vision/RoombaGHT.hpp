@@ -16,7 +16,8 @@ namespace iarc7_vision
 
 class RoombaGHT {
   public:
-    RoombaGHT(const RoombaEstimatorSettings& settings);
+    RoombaGHT(const RoombaEstimatorSettings& settings,
+              ros::NodeHandle& private_nh);
 
     bool detect(const cv::cuda::GpuMat& image,
                 const cv::Rect& bounding_rect,
@@ -24,8 +25,10 @@ class RoombaGHT {
                 double& angle);
     void onSettingsChanged();
   private:
-    cv::Ptr<cv::GeneralizedHoughGuil> ght_;
+    ros::NodeHandle& private_nh_;
+    cv::Ptr<cv::GeneralizedHoughBallard> ght_;
     const RoombaEstimatorSettings& settings_;
+    ros::Publisher debug_edges_pub_;
 };
 
 } // namespace iarc7_vision

@@ -47,9 +47,10 @@ void RoombaEstimator::pixelToRay(double px,
     ray.vector.z = camera_focal;
 }
 
-RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
-                                 ros::NodeHandle& private_nh)
-    : dynamic_reconfigure_server_(ros::NodeHandle("~/roomba_estimator")),
+RoombaEstimator::RoombaEstimator()
+    : nh_(),
+      private_nh_("~/roomba_estimator"),
+      dynamic_reconfigure_server_(private_nh_),
       dynamic_reconfigure_settings_callback_(
               [this](iarc7_vision::RoombaEstimatorConfig& config, uint32_t) {
                   getDynamicSettings(config);
@@ -58,17 +59,17 @@ RoombaEstimator::RoombaEstimator(ros::NodeHandle nh,
       dynamic_reconfigure_called_(false),
       transform_wrapper_(),
       cam_tf_(),
-      roomba_pub_(nh.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
+      roomba_pub_(nh_.advertise<iarc7_msgs::OdometryArray>("roombas", 100)),
       odom_vector_(),
-      settings_(getSettings(private_nh)),
-      blob_detector_(settings_, private_nh),
-      ght_detector_(settings_)
+      settings_(getSettings(private_nh_)),
+      blob_detector_(settings_, private_nh_),
+      ght_detector_(settings_, private_nh_)
 {
     dynamic_reconfigure_server_.setCallback(
             dynamic_reconfigure_settings_callback_);
 
     if (settings_.debug_ght_rects) {
-        debug_ght_rects_pub_ = nh.advertise<sensor_msgs::Image>("ght_rects", 10);
+        debug_ght_rects_pub_ = private_nh_.advertise<sensor_msgs::Image>("ght_rects", 10);
     }
 }
 
@@ -133,91 +134,91 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
 {
     RoombaEstimatorSettings settings;
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/template_pixels_per_meter",
+            "template_pixels_per_meter",
             settings.template_pixels_per_meter));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/roomba_plate_width",
+            "roomba_plate_width",
             settings.roomba_plate_width));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_pos_thresh",
+            "ght_pos_thresh",
             settings.ght_pos_thresh));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_angle_thresh",
+            "ght_angle_thresh",
             settings.ght_angle_thresh));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_scale_thresh",
+            "ght_scale_thresh",
             settings.ght_scale_thresh));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_canny_low_thresh",
+            "ght_canny_low_thresh",
             settings.ght_canny_low_thresh));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_canny_high_thresh",
+            "ght_canny_high_thresh",
             settings.ght_canny_high_thresh));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_dp",
+            "ght_dp",
             settings.ght_dp));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_levels",
+            "ght_levels",
             settings.ght_levels));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_angle_step",
+            "ght_angle_step",
             settings.ght_angle_step));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/ght_scale_step",
+            "ght_scale_step",
             settings.ght_scale_step));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_h_green_min",
+            "hsv_slice_h_green_min",
             settings.hsv_slice_h_green_min));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_h_green_max",
+            "hsv_slice_h_green_max",
             settings.hsv_slice_h_green_max));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_h_red1_min",
+            "hsv_slice_h_red1_min",
             settings.hsv_slice_h_red1_min));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_h_red1_max",
+            "hsv_slice_h_red1_max",
             settings.hsv_slice_h_red1_max));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_h_red2_min",
+            "hsv_slice_h_red2_min",
             settings.hsv_slice_h_red2_min));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_h_red2_max",
+            "hsv_slice_h_red2_max",
             settings.hsv_slice_h_red2_max));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_s_min",
+            "hsv_slice_s_min",
             settings.hsv_slice_s_min));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_s_max",
+            "hsv_slice_s_max",
             settings.hsv_slice_s_max));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_v_min",
+            "hsv_slice_v_min",
             settings.hsv_slice_v_min));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/hsv_slice_v_max",
+            "hsv_slice_v_max",
             settings.hsv_slice_v_max));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/morphology_size",
+            "morphology_size",
             settings.morphology_size));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/morphology_iterations",
+            "morphology_iterations",
             settings.morphology_iterations));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/morphology_size",
+            "morphology_size",
             settings.morphology_size));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/bottom_camera_aov",
+            "bottom_camera_aov",
             settings.bottom_camera_aov));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/debug_hsv_slice",
+            "debug_hsv_slice",
             settings.debug_hsv_slice));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/debug_contours",
+            "debug_contours",
             settings.debug_contours));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/debug_rects",
+            "debug_rects",
             settings.debug_rects));
     ROS_ASSERT(private_nh.getParam(
-            "roomba_estimator_settings/debug_ght_rects",
+            "debug_ght_rects",
             settings.debug_ght_rects));
     return settings;
 }
@@ -345,58 +346,63 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     blob_detector_.detect(image_scaled, bounding_rects);
 
     // Run the GHT on each blob
-    cv::Mat ght_rect_image;
-    if (settings_.debug_ght_rects) {
-        image.download(ght_rect_image);
-    }
+    //cv::Mat ght_rect_image;
+    //if (settings_.debug_ght_rects) {
+    //    image_scaled.download(ght_rect_image);
+    //}
 
-    for(unsigned int i=0;i<bounding_rects.size();i++){
-        cv::Point2f pos;
-        double angle;
+    //for(unsigned int i=0;i<bounding_rects.size();i++){
+    //    cv::Point2f pos;
+    //    double angle;
 
-        bool detected = ght_detector_.detect(image_scaled,
-                                             bounding_rects[i],
-                                             pos,
-                                             angle);
+    //    bool detected = ght_detector_.detect(image_scaled,
+    //                                         bounding_rects[i],
+    //                                         pos,
+    //                                         angle);
 
-        if (!detected) continue;
+    //    if (!detected) continue;
 
-        if (settings_.debug_ght_rects) {
-            cv::Point2f p2;
-            p2.x = pos.x + 100 * std::cos(angle);
-            p2.y = pos.y + 100 * std::sin(angle);
-            cv::line(ght_rect_image, pos, p2, cv::Scalar(255, 0, 0), 3);
+    //    ROS_ERROR("Detected at position (%f %f), angle %f", pos.x, pos.y, angle);
 
-            cv::RotatedRect rect;
-            rect.center = pos;
-            rect.size = cv::Size2f(50, 85);
-            rect.angle = angle * 180.0 / M_PI;
+    //    if (settings_.debug_ght_rects) {
+    //        cv::Point2f p2;
+    //        p2.x = pos.x + 100 * std::cos(angle);
+    //        p2.y = pos.y + 100 * std::sin(angle);
+    //        cv::line(ght_rect_image, pos, p2, cv::Scalar(255, 0, 0), 3);
 
-            cv::Point2f pts[4];
-            rect.points(pts);
+    //        cv::RotatedRect rect;
+    //        rect.center = pos;
+    //        rect.size = cv::Size2f(50, 85);
+    //        rect.angle = angle * 180.0 / M_PI;
 
-            cv::line(ght_rect_image, pts[0], pts[1], cv::Scalar(0, 0, 255), 3);
-            cv::line(ght_rect_image, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
-            cv::line(ght_rect_image, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
-            cv::line(ght_rect_image, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
-        }
+    //        cv::Point2f pts[4];
+    //        rect.points(pts);
 
-        // divide by factor to convert coordinates back to original scaling
+    //        cv::line(ght_rect_image, pts[0], pts[1], cv::Scalar(0, 0, 255), 3);
+    //        cv::line(ght_rect_image, pts[1], pts[2], cv::Scalar(0, 0, 255), 3);
+    //        cv::line(ght_rect_image, pts[2], pts[3], cv::Scalar(0, 0, 255), 3);
+    //        cv::line(ght_rect_image, pts[3], pts[0], cv::Scalar(0, 0, 255), 3);
+    //    }
 
-        nav_msgs::Odometry odom;
-        calcOdometry(pos, angle, image.cols, image.rows, odom, time);
-        reportOdometry(odom);
-    }
+    //    nav_msgs::Odometry odom;
+    //    calcOdometry(pos,
+    //                 angle,
+    //                 image_scaled.cols,
+    //                 image_scaled.rows,
+    //                 odom,
+    //                 time);
+    //    reportOdometry(odom);
+    //}
 
-    if (settings_.debug_ght_rects) {
-        const cv_bridge::CvImage cv_image {
-            std_msgs::Header(),
-            sensor_msgs::image_encodings::RGB8,
-            ght_rect_image
-        };
+    //if (settings_.debug_ght_rects) {
+    //    const cv_bridge::CvImage cv_image {
+    //        std_msgs::Header(),
+    //        sensor_msgs::image_encodings::RGBA8,
+    //        ght_rect_image
+    //    };
 
-        debug_ght_rects_pub_.publish(cv_image.toImageMsg());
-    }
+    //    debug_ght_rects_pub_.publish(cv_image.toImageMsg());
+    //}
 
     // publish
     publishOdometry();
