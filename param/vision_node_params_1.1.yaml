@@ -60,23 +60,10 @@ grid_line_estimator:
     # debug_height: 0.22
 
 roomba_estimator:
-    # In the template, roombas are 85 pixels wide and 0.254 meters wide
-    # Calculation: Roomba template pixel width / Roomba meter width
-    template_pixels_per_meter: 335
     # Measured in meters
     roomba_plate_width: 0.254
     # Measued in meters
     roomba_height: 0.065
-
-    ght_pos_thresh: 15
-    ght_angle_thresh: 15
-    ght_scale_thresh: 15
-    ght_canny_low_thresh: 160
-    ght_canny_high_thresh: 200
-    ght_dp: 1
-    ght_levels: 360
-    ght_angle_step: 10 # in degrees
-    ght_scale_step: 0.05
 
     hsv_slice_h_green_min: 47
     hsv_slice_h_green_max: 67

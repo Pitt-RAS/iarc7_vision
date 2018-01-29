@@ -6,19 +6,8 @@ namespace iarc7_vision
 
 // See vision_node_params.yaml for descriptions
 struct RoombaEstimatorSettings {
-    double template_pixels_per_meter;
     double roomba_plate_width;
     double roomba_height;
-
-    int ght_pos_thresh;
-    int ght_angle_thresh;
-    int ght_scale_thresh;
-    int ght_canny_low_thresh;
-    int ght_canny_high_thresh;
-    double ght_dp;
-    int ght_levels;
-    double ght_angle_step;
-    double ght_scale_step;
 
     int hsv_slice_h_green_min;
     int hsv_slice_h_green_max;

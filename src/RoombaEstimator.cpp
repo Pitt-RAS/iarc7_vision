@@ -56,7 +56,6 @@ RoombaEstimator::RoombaEstimator()
       dynamic_reconfigure_settings_callback_(
               [this](iarc7_vision::RoombaEstimatorConfig& config, uint32_t) {
                   getDynamicSettings(config);
-                  //ght_detector_.onSettingsChanged();
               }),
       dynamic_reconfigure_called_(false),
       transform_wrapper_(),
@@ -65,7 +64,6 @@ RoombaEstimator::RoombaEstimator()
       odom_vector_(),
       settings_(getSettings(private_nh_)),
       blob_detector_(settings_, private_nh_)
-    //  ght_detector_(settings_, private_nh_)
 {
     dynamic_reconfigure_server_.setCallback(
             dynamic_reconfigure_settings_callback_);
@@ -80,16 +78,6 @@ void RoombaEstimator::getDynamicSettings(
         iarc7_vision::RoombaEstimatorConfig& config)
 {
     if (!dynamic_reconfigure_called_) {
-        config.ght_pos_thresh        = settings_.ght_pos_thresh;
-        config.ght_angle_thresh      = settings_.ght_angle_thresh;
-        config.ght_scale_thresh      = settings_.ght_scale_thresh;
-        config.ght_canny_low_thresh  = settings_.ght_canny_low_thresh;
-        config.ght_canny_high_thresh = settings_.ght_canny_high_thresh;
-        config.ght_dp                = settings_.ght_dp;
-        config.ght_levels            = settings_.ght_levels;
-        config.ght_angle_step        = settings_.ght_angle_step;
-        config.ght_scale_step        = settings_.ght_scale_step;
-
         config.hsv_slice_h_green_min = settings_.hsv_slice_h_green_min;
         config.hsv_slice_h_green_max = settings_.hsv_slice_h_green_max;
         config.hsv_slice_h_red1_min  = settings_.hsv_slice_h_red1_min;
@@ -106,16 +94,6 @@ void RoombaEstimator::getDynamicSettings(
 
         dynamic_reconfigure_called_ = true;
     } else {
-        settings_.ght_pos_thresh = config.ght_pos_thresh;
-        settings_.ght_angle_thresh = config.ght_angle_thresh;
-        settings_.ght_scale_thresh = config.ght_scale_thresh;
-        settings_.ght_canny_low_thresh = config.ght_canny_low_thresh;
-        settings_.ght_canny_high_thresh = config.ght_canny_high_thresh;
-        settings_.ght_dp = config.ght_dp;
-        settings_.ght_levels = config.ght_levels;
-        settings_.ght_angle_step = config.ght_angle_step;
-        settings_.ght_scale_step = config.ght_scale_step;
-
         settings_.hsv_slice_h_green_min = config.hsv_slice_h_green_min;
         settings_.hsv_slice_h_green_max = config.hsv_slice_h_green_max;
         settings_.hsv_slice_h_red1_min = config.hsv_slice_h_red1_min;
@@ -137,38 +115,11 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
 {
     RoombaEstimatorSettings settings;
     ROS_ASSERT(private_nh.getParam(
-            "template_pixels_per_meter",
-            settings.template_pixels_per_meter));
-    ROS_ASSERT(private_nh.getParam(
             "roomba_plate_width",
             settings.roomba_plate_width));
     ROS_ASSERT(private_nh.getParam(
-            "ght_pos_thresh",
-            settings.ght_pos_thresh));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_angle_thresh",
-            settings.ght_angle_thresh));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_scale_thresh",
-            settings.ght_scale_thresh));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_canny_low_thresh",
-            settings.ght_canny_low_thresh));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_canny_high_thresh",
-            settings.ght_canny_high_thresh));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_dp",
-            settings.ght_dp));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_levels",
-            settings.ght_levels));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_angle_step",
-            settings.ght_angle_step));
-    ROS_ASSERT(private_nh.getParam(
-            "ght_scale_step",
-            settings.ght_scale_step));
+            "roomba_height",
+            settings.roomba_height));
     ROS_ASSERT(private_nh.getParam(
             "hsv_slice_h_green_min",
             settings.hsv_slice_h_green_min));
