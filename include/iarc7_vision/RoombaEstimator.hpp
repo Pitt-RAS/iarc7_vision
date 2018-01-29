@@ -14,7 +14,6 @@
 #include "iarc7_vision/RoombaBlobDetector.hpp"
 #include "iarc7_vision/RoombaEstimatorConfig.h"
 #include "iarc7_vision/RoombaEstimatorSettings.hpp"
-#include "iarc7_vision/RoombaGHT.hpp"
 
 #include <sensor_msgs/CameraInfo.h>
 #include <nav_msgs/Odometry.h>
@@ -60,9 +59,8 @@ class RoombaEstimator {
 
         RoombaEstimatorSettings settings_;
         RoombaBlobDetector blob_detector_;
-        RoombaGHT ght_detector_;
 
-        ros::Publisher debug_ght_rects_pub_;
+        ros::Publisher debug_detected_rects_pub_;
 };
 
 } // namespace iarc7_vision

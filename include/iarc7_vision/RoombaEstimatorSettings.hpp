@@ -38,7 +38,7 @@ struct RoombaEstimatorSettings {
     bool debug_hsv_slice;
     bool debug_contours;
     bool debug_rects;
-    bool debug_ght_rects;
+    bool debug_detected_rects;
 };
 
 } // namespace iarc7_vision

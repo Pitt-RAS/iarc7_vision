@@ -109,4 +109,4 @@ roomba_estimator:
     debug_hsv_slice: true
     debug_contours: true
     debug_rects: true
-    debug_ght_rects: true
+    debug_detected_rects: true

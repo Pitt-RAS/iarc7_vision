@@ -39,6 +39,16 @@ void drawRect(cv::Mat& image,
               const cv::Rect& rect,
               cv::Scalar color);
 
+void drawRotatedRect(cv::Mat& image,
+                     const cv::RotatedRect& rect,
+                     cv::Scalar color);
+
+/// Return true if the pixel (x, y) is inside the image, false otherwise
+bool insideImage(const cv::Size& image_size, int x, int y);
+
+/// Return true if the pixel (x, y) inside the rect, false otherwise
+bool insideRotatedRect(const cv::RotatedRect& rect, int x, int y);
+
 struct InRangeBuf {
     cv::cuda::GpuMat channels[3];
     cv::cuda::GpuMat inverse;
@@ -59,6 +69,8 @@ inline void inRange(const cv::cuda::GpuMat& src,
     InRangeBuf buf;
     inRange(src, lowerb, upperb, dst, buf);
 }
+
+cv::Vec3d sumPatch(const cv::Mat& image, const cv::RotatedRect& rect);
 
 } // end namespace cv_utils
 

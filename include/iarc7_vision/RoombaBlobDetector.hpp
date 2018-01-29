@@ -18,12 +18,12 @@ class RoombaBlobDetector {
                        ros::NodeHandle& ph);
 
     void detect(const cv::cuda::GpuMat& image,
-                std::vector<cv::Rect>& boundRect);
+                std::vector<cv::RotatedRect>& bounding_rects);
   private:
     void boundMask(const cv::cuda::GpuMat& mask,
-                   std::vector<cv::Rect>& boundRect);
-    void dilateBounds(const cv::cuda::GpuMat& image,
-                      std::vector<cv::Rect>& boundRect);
+                   std::vector<cv::RotatedRect>& boundRect);
+    void checkCorners(const cv::cuda::GpuMat& image,
+                      std::vector<cv::RotatedRect>& rects);
     void thresholdFrame(const cv::cuda::GpuMat& image, cv::cuda::GpuMat& dst);
 
     const RoombaEstimatorSettings& settings_;

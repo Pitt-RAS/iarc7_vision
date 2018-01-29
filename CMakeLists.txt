@@ -168,7 +168,7 @@ add_executable(iarc7_vision_node
     src/OpticalFlowEstimator.cpp
     src/RoombaBlobDetector.cpp
     src/RoombaEstimator.cpp
-    src/RoombaGHT.cpp
+    # src/RoombaBottomDetector.cpp
     src/cv_utils.cpp)
 
 ## Add cmake target dependencies of the executable
