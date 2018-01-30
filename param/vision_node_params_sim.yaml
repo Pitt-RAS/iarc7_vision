@@ -5,7 +5,7 @@ message_queue_item_limit: 3
 
 # Incoming image format
 # Can be RGB or RGBA
-image_format: RGBA
+image_format: RGB
 
 # Settings for the grid position estimation portion of the GridLineEstimator
 grid_estimator:
