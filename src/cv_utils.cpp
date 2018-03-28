@@ -166,20 +166,22 @@ void inRange(const cv::cuda::GpuMat& src,
 
 cv::Vec3d sumPatch(const cv::Mat& image, const cv::RotatedRect& rect)
 {
+    ROS_ASSERT(image.type() == CV_8UC3);
+
     cv::Rect bounding_rect = rect.boundingRect2f();
     size_t count = 0;
-    cv::Vec4d total (0, 0, 0);
+    cv::Vec3d total (0, 0, 0);
     for (int y = bounding_rect.y; y <= bounding_rect.y + bounding_rect.width; y++) {
         for (int x = bounding_rect.x; x <= bounding_rect.x + bounding_rect.width; x++) {
             if (cv_utils::insideImage(image.size(), x, y)
              && cv_utils::insideRotatedRect(rect, x, y)) {
                 count++;
-                total += image.at<cv::Vec4b>(y, x);
+                total += image.at<cv::Vec3b>(y, x);
             }
         }
     }
 
-    return cv::Vec3d(total[0], total[1], total[2]) / double(count);
+    return total / double(count);
 }
 
 } // end namespace cv_utils
