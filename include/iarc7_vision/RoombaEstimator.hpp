@@ -16,9 +16,9 @@
 #include "iarc7_vision/RoombaEstimatorSettings.hpp"
 
 #include <sensor_msgs/CameraInfo.h>
-#include <nav_msgs/Odometry.h>
-#include <iarc7_msgs/OdometryArray.h>
+#include <iarc7_msgs/RoombaDetection.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/Polygon.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Vector3Stamped.h>
 
@@ -29,19 +29,28 @@ class RoombaEstimator {
     public:
         RoombaEstimator();
 
-        void odometryArrayCallback(const iarc7_msgs::OdometryArray& msg);
         void update(const cv::cuda::GpuMat& image, const ros::Time& time);
     private:
-        void pixelToRay(double px, double py, double pw, double ph,
+        void pixelToRay(double px,
+                        double py,
+                        double pw,
+                        double ph,
                         geometry_msgs::Vector3Stamped& ray);
+
         void getDynamicSettings(iarc7_vision::RoombaEstimatorConfig& config);
+
         static RoombaEstimatorSettings getSettings(
                 const ros::NodeHandle& private_nh);
+
         double getHeight(const ros::Time& time);
-        void calcOdometry(cv::Point2f& pos, double pw, double ph, double angle,
-                          nav_msgs::Odometry& out, const ros::Time& time);
-        void reportOdometry(nav_msgs::Odometry& odom);
-        void publishOdometry();
+
+        void calcFloorPoly(geometry_msgs::Polygon& poly);
+
+        void calcPose(const cv::Point2f& pos,
+                      double angle,
+                      double pw,
+                      double ph,
+                      iarc7_msgs::RoombaDetection& roomba);
 
         ros::NodeHandle nh_;
         ros::NodeHandle private_nh_;
@@ -55,7 +64,6 @@ class RoombaEstimator {
         ros_utils::SafeTransformWrapper transform_wrapper_;
         geometry_msgs::TransformStamped cam_tf_;
         ros::Publisher roomba_pub_;
-        std::vector<nav_msgs::Odometry> odom_vector_;
 
         RoombaEstimatorSettings settings_;
         RoombaBlobDetector blob_detector_;

@@ -396,11 +396,6 @@ int main(int argc, char **argv)
         "/bottom_image_raw/image_raw",
         100,
         image_msg_handler);
-    ros::Subscriber sub2 = nh.subscribe(
-        "/roombas",
-        10,
-        &iarc7_vision::RoombaEstimator::odometryArrayCallback,
-        &roomba_estimator);
 
     // Main loop
     while (ros::ok())
