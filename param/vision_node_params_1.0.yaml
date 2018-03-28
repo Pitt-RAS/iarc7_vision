@@ -56,21 +56,13 @@ grid_line_estimator:
     # debug_height: 0.22
 
 roomba_estimator_settings:
+    # In the template, roombas are 85 pixels wide and 0.254 meters wide
+    # Calculation: Roomba template pixel width / Roomba meter width
+    template_pixels_per_meter: 335
     # Measured in meters
     roomba_plate_width: 0.254
     # Measued in meters
     roomba_height: 0.065
-
-    hsv_slice_h_green_min: 47
-    hsv_slice_h_green_max: 67
-    hsv_slice_h_red1_min: 0
-    hsv_slice_h_red1_max: 8
-    hsv_slice_h_red2_min: 170
-    hsv_slice_h_red2_max: 180
-    hsv_slice_s_min: 20
-    hsv_slice_s_max: 255
-    hsv_slice_v_min: 15
-    hsv_slice_v_max: 255
 
     # Camera settings
     # https://en.wikipedia.org/wiki/LifeCam#HD-6000

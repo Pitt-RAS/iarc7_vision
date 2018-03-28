@@ -6,6 +6,7 @@ namespace iarc7_vision
 
 // See vision_node_params.yaml for descriptions
 struct RoombaEstimatorSettings {
+    double template_pixels_per_meter;
     double roomba_plate_width;
     double roomba_height;
 
@@ -26,7 +27,6 @@ struct RoombaEstimatorSettings {
     double bottom_camera_aov;
     bool debug_hsv_slice;
     bool debug_contours;
-    bool debug_rects;
     bool debug_detected_rects;
 };
 

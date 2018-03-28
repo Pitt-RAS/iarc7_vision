@@ -115,6 +115,9 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
 {
     RoombaEstimatorSettings settings;
     ROS_ASSERT(private_nh.getParam(
+            "template_pixels_per_meter",
+            settings.template_pixels_per_meter));
+    ROS_ASSERT(private_nh.getParam(
             "roomba_plate_width",
             settings.roomba_plate_width));
     ROS_ASSERT(private_nh.getParam(
@@ -168,9 +171,6 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     ROS_ASSERT(private_nh.getParam(
             "debug_contours",
             settings.debug_contours));
-    ROS_ASSERT(private_nh.getParam(
-            "debug_rects",
-            settings.debug_rects));
     ROS_ASSERT(private_nh.getParam(
             "debug_detected_rects",
             settings.debug_detected_rects));

@@ -30,11 +30,6 @@ RoombaBlobDetector::RoombaBlobDetector(const RoombaEstimatorSettings& settings,
         debug_contours_pub_ = ph.advertise<sensor_msgs::Image>("contours",
                                                                10);
     }
-
-    if (settings_.debug_rects) {
-        debug_rects_pub_ = ph.advertise<sensor_msgs::Image>("rects",
-                                                            10);
-    }
 }
 
 void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,

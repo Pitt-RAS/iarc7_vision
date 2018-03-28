@@ -230,7 +230,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         // with the ones from the param server
         config.pixels_per_meter       = line_settings.pixels_per_meter;
         config.canny_high_threshold   = line_settings.canny_high_threshold;
-        config.canny_threshold_ratio  = line_settings.canny_high_threshold 
+        config.canny_threshold_ratio  = line_settings.canny_high_threshold
                                             / line_settings.canny_low_threshold;
         config.canny_sobel_size       = line_settings.canny_sobel_size;
         config.hough_rho_resolution   = line_settings.hough_rho_resolution;
@@ -242,7 +242,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         // with the ones from the param server
         config.flow_fov             = flow_settings.fov;
 
-        config.flow_min_estimation_altitude 
+        config.flow_min_estimation_altitude
             = flow_settings.min_estimation_altitude;
 
         config.flow_camera_vertical_threshold
