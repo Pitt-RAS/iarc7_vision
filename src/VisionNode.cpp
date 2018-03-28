@@ -5,6 +5,7 @@
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
+#include <chrono>
 #include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <limits>
@@ -418,11 +419,26 @@ int main(int argc, char **argv)
             auto cv_shared_ptr = cv_bridge::toCvShare(message);
             cv::cuda::GpuMat image(cv_shared_ptr->image);
 
+            const auto start = std::chrono::high_resolution_clock::now();
             gridline_estimator.update(image, message->header.stamp);
+            const auto grid_time = std::chrono::high_resolution_clock::now();
 
             optical_flow_estimator.update(image, message->header.stamp);
+            const auto flow_time = std::chrono::high_resolution_clock::now();
 
             roomba_estimator.update(image, message->header.stamp);
+            const auto roomba_time = std::chrono::high_resolution_clock::now();
+
+            ROS_DEBUG_STREAM(
+                    "Grid: "
+                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                        grid_time - start).count()
+                    << " Flow: "
+                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                        flow_time - grid_time).count()
+                    << " Roomba: "
+                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                        roomba_time - flow_time).count());
         }
 
         ros::spinOnce();
