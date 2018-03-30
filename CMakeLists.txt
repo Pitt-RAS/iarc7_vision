@@ -168,7 +168,6 @@ add_executable(iarc7_vision_node
     src/OpticalFlowEstimator.cpp
     src/RoombaBlobDetector.cpp
     src/RoombaEstimator.cpp
-    # src/RoombaBottomDetector.cpp
     src/cv_utils.cpp)
 
 ## Add cmake target dependencies of the executable
@@ -183,18 +182,6 @@ target_link_libraries(iarc7_vision_node
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
   ${EIGEN3_LIBRARIES}
-)
-
-######################################
-## Move template to build directory ##
-######################################
-
-# `~/.ros` is the default working directory for ROS. If you set the variable
-# ROS_HOME, you will need to change the following.
-add_custom_command(TARGET iarc7_vision_node POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/roomba_template.png
-  $ENV{HOME}/.ros/
 )
 
 #############
