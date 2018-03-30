@@ -91,7 +91,8 @@ roomba_estimator:
     #  Genius DFOV:  120 deg
     #    C920 DFOV:   78 deg
     # Lifecam DFOV:   66 deg
-    bottom_camera_aov: 78.0
+    #     Sim DFOV:   60 deg
+    bottom_camera_aov: 60.0
     front_camera_aov: 93.5
     left_camera_aov: 93.5
     right_camera_aov: 93.5
