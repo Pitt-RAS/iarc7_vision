@@ -151,23 +151,27 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
             double dx = evector0.dot(p);
             double dy = evector1.dot(p);
 
-            if (dx < rect_min_x || !have_point) {
+            if (!have_point || dx < rect_min_x) {
                 rect_min_x = dx;
             }
 
-            if (dx > rect_max_x || !have_point) {
+            if (!have_point || dx > rect_max_x) {
                 rect_max_x = dx;
             }
 
-            if (dy < rect_min_y || !have_point) {
+            if (!have_point || dy < rect_min_y) {
                 rect_min_y = dy;
             }
 
-            if (dy > rect_max_y || !have_point) {
+            if (!have_point || dy > rect_max_y) {
                 rect_max_y = dy;
             }
 
             have_point = true;
+        }
+
+        if (!have_point) {
+            throw ros::Exception("Empty contour");
         }
 
         Eigen::Vector2d center = evector0 * ((rect_max_x + rect_min_x) / 2)
