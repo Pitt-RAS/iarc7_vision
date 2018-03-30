@@ -6,6 +6,7 @@
 #include <dynamic_reconfigure/server.h>
 #include <string>
 #include <tf/transform_datatypes.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PointStamped.h>
