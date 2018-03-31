@@ -139,10 +139,10 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
         Eigen::Vector2d evector1 = eigensolver.eigenvectors().col(1);
 
         bool have_point = false;
-        double rect_max_x;
-        double rect_min_x;
-        double rect_max_y;
-        double rect_min_y;
+        double rect_max_x = 0;
+        double rect_min_x = 0;
+        double rect_max_y = 0;
+        double rect_min_y = 0;
         for (const cv::Point& point : contours[i]) {
             Eigen::Vector2d p;
             p(0) = point.x;
