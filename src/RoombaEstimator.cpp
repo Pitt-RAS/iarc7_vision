@@ -53,15 +53,6 @@ RoombaEstimator::RoombaEstimator()
     }
 }
 
-/**
- * Converts a pixel in an image to a ray from the camera center
- *
- * @param[in]  px   X location of the pixel
- * @param[in]  py   Y location of the pixel
- * @param[in]  pw   Width of the image
- * @param[in]  ph   Height of the image
- * @param[out] ray  Unit vector pointing from the camera center to the pixel
- */
 void RoombaEstimator::pixelToRay(double px,
                                  double py,
                                  double pw,
@@ -264,16 +255,23 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     if(image.empty())
         return;
 
+    //////////////////////////////////////////////////////////////////////////
+    /// Fetch height
+    //////////////////////////////////////////////////////////////////////////
     double height = getHeight(time);
 
     if (height < settings_.roomba_height + 0.01) {
         return;
     }
 
-    // Declare variables
+    //////////////////////////////////////////////////////////////////////////
+    /// Declare variables
+    //////////////////////////////////////////////////////////////////////////
     std::vector<cv::RotatedRect> bounding_rects;
 
-    // Calculate the world field of view in meters and use to resize the image
+    //////////////////////////////////////////////////////////////////////////
+    /// Calculate the world field of view in meters and use to resize the image
+    //////////////////////////////////////////////////////////////////////////
     geometry_msgs::Vector3Stamped a;
     geometry_msgs::Vector3Stamped b;
     pixelToRay(0, 0,          image.cols, image.rows, a);
@@ -299,7 +297,9 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     cv::cuda::GpuMat image_scaled;
     cv::cuda::resize(image, image_scaled, cv::Size(), factor, factor);
 
-    // Run blob detection
+    //////////////////////////////////////////////////////////////////////////
+    /// Run blob detection
+    //////////////////////////////////////////////////////////////////////////
     blob_detector_.detect(image_scaled, bounding_rects);
 
     cv::Mat detected_rect_image;
@@ -307,6 +307,9 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
         image_scaled.download(detected_rect_image);
     }
 
+    //////////////////////////////////////////////////////////////////////////
+    /// Fill out detection message
+    //////////////////////////////////////////////////////////////////////////
     iarc7_msgs::RoombaDetectionFrame roomba_frame;
     roomba_frame.header.stamp = time;
     roomba_frame.header.frame_id = "map";

@@ -25,27 +25,58 @@
 namespace iarc7_vision
 {
 
+/// Gets roomba positions from bottom camera images, converts to global
+/// positions using tf, and publishes to /detected_roombas
 class RoombaEstimator {
     public:
         RoombaEstimator();
 
+        /// Processes current frame and publishes detections
+        ///
+        /// @param[in]  image  Current frame to process (in rgb8)
+        /// @param[in]  time   Timestamp of current frame
         void update(const cv::cuda::GpuMat& image, const ros::Time& time);
     private:
+
+        /// Converts a pixel in an image to a ray from the camera center
+        ///
+        /// @param[in]  px   X location of the pixel
+        /// @param[in]  py   Y location of the pixel
+        /// @param[in]  pw   Width of the image
+        /// @param[in]  ph   Height of the image
+        /// @param[out] ray  Unit vector pointing from the camera center to the pixel
         void pixelToRay(double px,
                         double py,
                         double pw,
                         double ph,
                         geometry_msgs::Vector3Stamped& ray);
 
+        /// Callback for dynamic_reconfigure
         void getDynamicSettings(iarc7_vision::RoombaEstimatorConfig& config);
 
+        /// Load settings from rosparam
         static RoombaEstimatorSettings getSettings(
                 const ros::NodeHandle& private_nh);
 
+        /// Fetch altitude of camera optical frame from tf
+        ///
+        /// Blocking
+        ///
+        /// @throws ros::Exception {Thrown if transform is not available at
+        ///                         requested time}
         double getHeight(const ros::Time& time);
 
+        /// Calculate bounding polygon of the area of the floor that is
+        /// currently visible to the camera
         void calcFloorPoly(geometry_msgs::Polygon& poly);
 
+        /// Calculate roomba pose based on given location in the frame
+        ///
+        /// @param[in]  pos     Roomba position in pixels
+        /// @param[in]  angle   Roomba angle
+        /// @param[in]  pw      Image width in pixels
+        /// @param[in]  ph      Image height in pixels
+        /// @param[out] roomba  Roomba detection message
         void calcPose(const cv::Point2f& pos,
                       double angle,
                       double pw,

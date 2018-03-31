@@ -90,7 +90,6 @@ void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
     ROS_ASSERT(dst.channels() == 1);
 }
 
-// findContours does not exist for the gpu
 void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
                                    std::vector<cv::RotatedRect>& boundRect)
 {
@@ -98,6 +97,12 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
     mask.download(mask_cpu);
 
     std::vector<std::vector<cv::Point>> contours;
+
+    //////////////////////////////////////////////////////////////////////////
+    /// Find bounding contours of blobs in mask
+    //////////////////////////////////////////////////////////////////////////
+
+    // findContours does not exist for the gpu
     cv::findContours(mask_cpu,
                      contours,
                      CV_RETR_EXTERNAL,
@@ -121,13 +126,19 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
         debug_contours_pub_.publish(cv_image.toImageMsg());
     }
 
+    //////////////////////////////////////////////////////////////////////////
+    /// Get orientation for each found contour
+    //////////////////////////////////////////////////////////////////////////
+
     boundRect.resize(0); // Clear the vector
     cv::RotatedRect rect;
     for (unsigned int i = 0; i < contours.size(); i++) {
         cv::Moments moments = cv::moments(contours[i]);
 
+        // throw out blobs that are too small or too large
         if (moments.m00 < 2000 || moments.m00 > 15000) continue;
 
+        // Calculate eigenvectors of covariance of blob to get orientation
         Eigen::Matrix2d covariance;
         covariance(0, 0) = moments.nu20;
         covariance(1, 0) = moments.nu11;
@@ -138,6 +149,7 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
         Eigen::Vector2d evector0 = eigensolver.eigenvectors().col(0);
         Eigen::Vector2d evector1 = eigensolver.eigenvectors().col(1);
 
+        // Calculate bounding rect for the calculated orientation
         bool have_point = false;
         double rect_max_x = 0;
         double rect_min_x = 0;
@@ -174,6 +186,7 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
             throw ros::Exception("Empty contour");
         }
 
+        // Fill out results
         Eigen::Vector2d center = evector0 * ((rect_max_x + rect_min_x) / 2)
                                + evector1 * ((rect_max_y + rect_min_y) / 2);
 
