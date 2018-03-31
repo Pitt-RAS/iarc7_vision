@@ -79,6 +79,9 @@ roomba_estimator:
     hsv_slice_v_min: 15
     hsv_slice_v_max: 255
 
+    min_roomba_blob_size: 2000
+    max_roomba_blob_size: 15000
+
     morphology_size: 3
     morphology_iterations: 3
 

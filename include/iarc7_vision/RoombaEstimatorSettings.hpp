@@ -10,6 +10,9 @@ struct RoombaEstimatorSettings {
     double roomba_plate_width;
     double roomba_height;
 
+    int min_roomba_blob_size;
+    int max_roomba_blob_size;
+
     int hsv_slice_h_green_min;
     int hsv_slice_h_green_max;
     int hsv_slice_h_red1_min;

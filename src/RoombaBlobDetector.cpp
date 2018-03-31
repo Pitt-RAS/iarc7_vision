@@ -136,7 +136,10 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
         cv::Moments moments = cv::moments(contours[i]);
 
         // throw out blobs that are too small or too large
-        if (moments.m00 < 2000 || moments.m00 > 15000) continue;
+        if (moments.m00 < settings_.min_roomba_blob_size
+         || moments.m00 > settings_.max_roomba_blob_size) {
+            continue;
+        }
 
         // Calculate eigenvectors of covariance of blob to get orientation
         Eigen::Matrix2d covariance;

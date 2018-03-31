@@ -99,6 +99,9 @@ void RoombaEstimator::getDynamicSettings(
         config.hsv_slice_v_min       = settings_.hsv_slice_v_min;
         config.hsv_slice_v_max       = settings_.hsv_slice_v_max;
 
+        config.min_roomba_blob_size  = settings_.min_roomba_blob_size;
+        config.max_roomba_blob_size  = settings_.max_roomba_blob_size;
+
         config.morphology_size = settings_.morphology_size;
         config.morphology_iterations = settings_.morphology_iterations;
 
@@ -114,6 +117,9 @@ void RoombaEstimator::getDynamicSettings(
         settings_.hsv_slice_s_max = config.hsv_slice_s_max;
         settings_.hsv_slice_v_min = config.hsv_slice_v_min;
         settings_.hsv_slice_v_max = config.hsv_slice_v_max;
+
+        settings_.min_roomba_blob_size = config.min_roomba_blob_size;
+        settings_.max_roomba_blob_size = config.max_roomba_blob_size;
 
         settings_.morphology_size = config.morphology_size;
         settings_.morphology_iterations = config.morphology_iterations;
@@ -163,6 +169,12 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     ROS_ASSERT(private_nh.getParam(
             "hsv_slice_v_max",
             settings.hsv_slice_v_max));
+    ROS_ASSERT(private_nh.getParam(
+            "min_roomba_blob_size",
+            settings.min_roomba_blob_size));
+    ROS_ASSERT(private_nh.getParam(
+            "max_roomba_blob_size",
+            settings.max_roomba_blob_size));
     ROS_ASSERT(private_nh.getParam(
             "morphology_size",
             settings.morphology_size));
