@@ -241,11 +241,6 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
                                  const cv::cuda::GpuMat& image,
                                  double height) const
 {
-    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
-        ROS_ERROR_ONCE("Doing OpenCV operations on CPU");
-        return;
-    }
-
     // m/px = camera_height / focal_length;
     double current_meters_per_px = height
                          / getFocalLength(image.size(),

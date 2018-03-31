@@ -312,6 +312,11 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "vision");
 
+    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
+        ROS_ERROR("No CUDA devices found, Vision Node cannot run");
+        return 1;
+    }
+
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
