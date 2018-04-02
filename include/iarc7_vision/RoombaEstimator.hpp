@@ -42,8 +42,8 @@ class RoombaEstimator {
         ///
         /// @param[in]  px   X location of the pixel
         /// @param[in]  py   Y location of the pixel
-        /// @param[in]  pw   Width of the image
-        /// @param[in]  ph   Height of the image
+        /// @param[in]  pw   Width of the image in pixels
+        /// @param[in]  ph   Height of the image in pixels
         /// @param[out] ray  Unit vector pointing from the camera center to the pixel
         void pixelToRay(double px,
                         double py,
