@@ -129,73 +129,38 @@ void RoombaEstimator::getDynamicSettings(
 RoombaEstimatorSettings RoombaEstimator::getSettings(
         const ros::NodeHandle& private_nh)
 {
+
+#define IARC7_VISION_RES_LOAD(x) \
+    ROS_ASSERT(private_nh.getParam( \
+               #x, \
+               settings.x));
+
     RoombaEstimatorSettings settings;
-    ROS_ASSERT(private_nh.getParam(
-            "template_pixels_per_meter",
-            settings.template_pixels_per_meter));
-    ROS_ASSERT(private_nh.getParam(
-            "roomba_plate_width",
-            settings.roomba_plate_width));
-    ROS_ASSERT(private_nh.getParam(
-            "roomba_height",
-            settings.roomba_height));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_h_green_min",
-            settings.hsv_slice_h_green_min));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_h_green_max",
-            settings.hsv_slice_h_green_max));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_h_red1_min",
-            settings.hsv_slice_h_red1_min));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_h_red1_max",
-            settings.hsv_slice_h_red1_max));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_h_red2_min",
-            settings.hsv_slice_h_red2_min));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_h_red2_max",
-            settings.hsv_slice_h_red2_max));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_s_min",
-            settings.hsv_slice_s_min));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_s_max",
-            settings.hsv_slice_s_max));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_v_min",
-            settings.hsv_slice_v_min));
-    ROS_ASSERT(private_nh.getParam(
-            "hsv_slice_v_max",
-            settings.hsv_slice_v_max));
-    ROS_ASSERT(private_nh.getParam(
-            "min_roomba_blob_size",
-            settings.min_roomba_blob_size));
-    ROS_ASSERT(private_nh.getParam(
-            "max_roomba_blob_size",
-            settings.max_roomba_blob_size));
-    ROS_ASSERT(private_nh.getParam(
-            "morphology_size",
-            settings.morphology_size));
-    ROS_ASSERT(private_nh.getParam(
-            "morphology_iterations",
-            settings.morphology_iterations));
-    ROS_ASSERT(private_nh.getParam(
-            "morphology_size",
-            settings.morphology_size));
-    ROS_ASSERT(private_nh.getParam(
-            "bottom_camera_aov",
-            settings.bottom_camera_aov));
-    ROS_ASSERT(private_nh.getParam(
-            "debug_hsv_slice",
-            settings.debug_hsv_slice));
-    ROS_ASSERT(private_nh.getParam(
-            "debug_contours",
-            settings.debug_contours));
-    ROS_ASSERT(private_nh.getParam(
-            "debug_detected_rects",
-            settings.debug_detected_rects));
+    IARC7_VISION_RES_LOAD(template_pixels_per_meter);
+    IARC7_VISION_RES_LOAD(roomba_plate_width);
+    IARC7_VISION_RES_LOAD(roomba_height);
+    IARC7_VISION_RES_LOAD(hsv_slice_h_green_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_h_green_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_h_red1_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_h_red1_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_h_red2_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_h_red2_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_max);
+    IARC7_VISION_RES_LOAD(min_roomba_blob_size);
+    IARC7_VISION_RES_LOAD(max_roomba_blob_size);
+    IARC7_VISION_RES_LOAD(morphology_size);
+    IARC7_VISION_RES_LOAD(morphology_iterations);
+    IARC7_VISION_RES_LOAD(morphology_size);
+    IARC7_VISION_RES_LOAD(bottom_camera_aov);
+    IARC7_VISION_RES_LOAD(debug_hsv_slice);
+    IARC7_VISION_RES_LOAD(debug_contours);
+    IARC7_VISION_RES_LOAD(debug_detected_rects);
+
+#undef IARC7_VISION_RES_LOAD
+
     return settings;
 }
 
