@@ -154,20 +154,15 @@ bool __attribute__((warn_unused_result))
     return true;
 }
 
-void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
+void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
+                                  const ros::Time& time)
 {
-    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
-        ROS_ERROR_ONCE("Unable to run OpticalFlow without CUDA");
-        have_valid_last_image_ = false;
-        return;
-    }
-
     // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
 
     // make sure our current position is up to date
     if (!updateFilteredPosition(
-                message->header.stamp,
+                time,
                 ros::Duration(flow_estimator_settings_.tf_timeout))) {
         ROS_ERROR("Unable to update position for optical flow");
         have_valid_last_image_ = false;
@@ -185,10 +180,6 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         return;
     }
 
-    const boost::shared_ptr<const cv_bridge::CvImage> curr_image_msg
-        = cv_bridge::toCvShare(message);
-    const cv::Mat& curr_image = curr_image_msg->image;
-
     if (have_valid_last_image_) {
         if (curr_image.size() != expected_input_size_) {
             ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
@@ -202,18 +193,17 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
 
         try {
             // Scale and convert input image
-            cv::cuda::GpuMat curr_gpu_image(curr_image);
             cv::cuda::GpuMat scaled_image;
             cv::cuda::GpuMat scaled_gray_image;
 
-            resizeAndConvertImages(curr_gpu_image,
+            resizeAndConvertImages(curr_image,
                                    scaled_image,
                                    scaled_gray_image);
 
             // Get velocity estimate from average vector
             processImage(scaled_image,
                          scaled_gray_image,
-                         message->header.stamp,
+                         time,
                          images_skipped_ == 0);
             images_skipped_ = (images_skipped_ + 1)
                            % (flow_estimator_settings_.debug_frameskip + 1);
@@ -228,11 +218,11 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
     } else {
         if (expected_input_size_ == cv::Size()) {
             expected_input_size_ = curr_image.size();
-            last_scaled_image_.upload(curr_image);
+            last_scaled_image_ = curr_image;
             ROS_ASSERT(onSettingsChanged());
             have_valid_last_image_ = true;
         } else if (expected_input_size_ == curr_image.size()) {
-            last_scaled_image_.upload(curr_image);
+            last_scaled_image_ = curr_image;
             ROS_ASSERT(onSettingsChanged());
             have_valid_last_image_ = true;
         } else {
@@ -244,7 +234,7 @@ void OpticalFlowEstimator::update(const sensor_msgs::Image::ConstPtr& message)
         }
     }
 
-    last_message_time_ = message->header.stamp;
+    last_message_time_ = time;
     last_orientation_ = current_orientation_;
     last_camera_to_level_quad_tf_ = current_camera_to_level_quad_tf_;
 }

@@ -37,7 +37,7 @@ optical_flow_estimator:
     ###############################
 
     # Publish image with average velocity vector drawn on it
-    debug_average_vector_image: true
+    debug_average_vector_image: false
 
     # Publish lots of intermediate velocity calculations
     debug_intermediate_velocities: false
@@ -50,7 +50,7 @@ optical_flow_estimator:
 
     # Debug settings for the optical flow estimator
     # Publish image with the velocity vectors drawn on it
-    debug_vectors_image: true
+    debug_vectors_image: false
 
     ################################
 

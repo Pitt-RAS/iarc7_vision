@@ -5,6 +5,7 @@
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
+#include <chrono>
 #include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <limits>
@@ -19,9 +20,10 @@
 
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
+#include "iarc7_vision/RoombaEstimator.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
-                            iarc7_vision::LineExtractorSettings& line_settings)
+                              iarc7_vision::LineExtractorSettings& line_settings)
 {
     // Begin line extractor settings
     ROS_ASSERT(private_nh.getParam(
@@ -229,7 +231,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         // with the ones from the param server
         config.pixels_per_meter       = line_settings.pixels_per_meter;
         config.canny_high_threshold   = line_settings.canny_high_threshold;
-        config.canny_threshold_ratio  = line_settings.canny_high_threshold 
+        config.canny_threshold_ratio  = line_settings.canny_high_threshold
                                             / line_settings.canny_low_threshold;
         config.canny_sobel_size       = line_settings.canny_sobel_size;
         config.hough_rho_resolution   = line_settings.hough_rho_resolution;
@@ -241,7 +243,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         // with the ones from the param server
         config.flow_fov             = flow_settings.fov;
 
-        config.flow_min_estimation_altitude 
+        config.flow_min_estimation_altitude
             = flow_settings.min_estimation_altitude;
 
         config.flow_camera_vertical_threshold
@@ -310,6 +312,11 @@ int main(int argc, char **argv)
 {
     ros::init(argc, argv, "vision");
 
+    if (cv::cuda::getCudaEnabledDeviceCount() == 0) {
+        ROS_ERROR("No CUDA devices found, Vision Node cannot run");
+        return 1;
+    }
+
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
@@ -356,6 +363,7 @@ int main(int argc, char **argv)
             ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
         };
     dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
+    iarc7_vision::RoombaEstimator roomba_estimator;
 
     // Check for images at 100 Hz
     ros::Rate rate (100);
@@ -408,10 +416,29 @@ int main(int argc, char **argv)
                 message_queue = std::queue<sensor_msgs::Image::ConstPtr>();
             }
 
-            gridline_estimator.update(cv_bridge::toCvShare(message)->image,
-                                      message->header.stamp);
+            auto cv_shared_ptr = cv_bridge::toCvShare(message);
+            cv::cuda::GpuMat image(cv_shared_ptr->image);
 
-            optical_flow_estimator.update(message);
+            const auto start = std::chrono::high_resolution_clock::now();
+            gridline_estimator.update(image, message->header.stamp);
+            const auto grid_time = std::chrono::high_resolution_clock::now();
+
+            optical_flow_estimator.update(image, message->header.stamp);
+            const auto flow_time = std::chrono::high_resolution_clock::now();
+
+            roomba_estimator.update(image, message->header.stamp);
+            const auto roomba_time = std::chrono::high_resolution_clock::now();
+
+            ROS_DEBUG_STREAM(
+                    "Grid: "
+                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                        grid_time - start).count()
+                    << " Flow: "
+                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                        flow_time - grid_time).count()
+                    << " Roomba: "
+                    << std::chrono::duration_cast<std::chrono::microseconds>(
+                        roomba_time - flow_time).count());
         }
 
         ros::spinOnce();

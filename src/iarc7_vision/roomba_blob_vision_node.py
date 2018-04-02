@@ -66,6 +66,36 @@ NODE_NAME = "roomba_blob_vision_node"
 # From: iarc7_simulator/sim/src/sim/builder/robots/Roomba.py
 ROOMBA_HEIGHT = 0.065
 
+def pixel_to_ray(image_coords, image_shape, daov):
+    """
+    Convert 2D pixel coordinates to 3D ray
+
+    :param image_coords: (x,y) coordinates of the pixel
+    :param image_shape: numpy.shape in the form (rows, cols, channels)
+    :param daov: Diagonal angle of view in degrees
+    :return: direction from image pixels
+    """
+    rows = 1.*image_shape[0]
+    cols = 1.*image_shape[1]
+    pix_x = 1.*image_coords[0] - cols * 0.5
+    pix_y = 1.*image_coords[1] - rows * 0.5
+
+    pix_r = math.sqrt( pix_x*pix_x + pix_y*pix_y )
+    PR = math.sqrt( rows*rows + cols*cols ) * 0.5
+
+    max_phi = math.radians(daov * 0.5)
+    pix_focal = PR / math.tan(max_phi)
+    theta = math.atan2(pix_y, pix_x)
+
+    camera_focal = -1
+    camera_radius = camera_focal * pix_r / pix_focal
+
+    direction = Vector3Stamped()
+    direction.vector.x = camera_radius * math.cos( theta )
+    direction.vector.y = camera_radius * math.sin( theta )
+    direction.vector.z = camera_focal
+    return direction
+
 class Debugger(object):
     
     def __init__(self, image_on=True, rviz_on=True):
@@ -219,8 +249,11 @@ class ImageRoombaFinder(object):
         frame_gray = cv2.cvtColor(roombas, cv2.COLOR_BGR2GRAY)
         # find the contours in this single channel image
         # RETR_EXTERNAL won't match boxes inside other boxes
-        contours, _ = cv2.findContours(frame_gray,cv2.RETR_EXTERNAL,
-                                       cv2.CHAIN_APPROX_SIMPLE)
+        results = cv2.findContours(frame_gray, cv2.RETR_EXTERNAL,
+                                   cv2.CHAIN_APPROX_SIMPLE)
+        if cv2.__version__[0] == 3:
+            results.pop(0)
+        contours, _ = results
         for c in contours:
             rect = cv2.boundingRect(c)
             # Skip tiny boxes
@@ -243,7 +276,8 @@ class CameraProcessor(ImageRoombaFinder):
         self.odom_lock = threading.Lock()
 
         self.bridge = CvBridge()
-        self.camera = image_geometry.PinholeCameraModel()
+
+        self.daov = rospy.get_param("~roomba_estimator_settings/%s_aov"%base_topic)
 
         self.tf_buffer = tf2_ros.Buffer()
         tf2_ros.TransformListener(self.tf_buffer)
@@ -252,8 +286,6 @@ class CameraProcessor(ImageRoombaFinder):
                                         rospy.Time(0), rospy.Duration(3.0))
 
         rospy.Subscriber("/{}/rgb/image_raw".format(base_topic), Image, self.callback)
-        rospy.Subscriber("/{}/rgb/camera_info".format(base_topic), CameraInfo,
-                         self.camera.fromCameraInfo)
         rospy.Subscriber("/roombas", OdometryArray, self.roombas_callback)
         self.publisher = rospy.Publisher("/roombas", OdometryArray,
                                          queue_size=10)
@@ -269,10 +301,14 @@ class CameraProcessor(ImageRoombaFinder):
         :return: None
         """
         try:
+            if (rospy.Time.now() - data.header.stamp).to_sec() > 0.2:
+                return # Skip image if too old
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            # This should get the transform at the time of the image, but that
+            # causes errors
             trans = self.tf_buffer.lookup_transform('map',
                                 data.header.frame_id, rospy.Time(0))
-            self.filter_frame(cv_image, trans)
+            self.filter_frame(cv_image, trans, data.header.stamp)
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, \
                 tf2_ros.ExtrapolationException, CvBridgeError) as e:
             rospy.logerr(e)
@@ -283,7 +319,7 @@ class CameraProcessor(ImageRoombaFinder):
         self.odom_lock.release()
 
 
-    def filter_frame(self, frame, trans):
+    def filter_frame(self, frame, trans, stamp):
         """
         Applies a four-step algorithm to find all the roombas in a given BGR
         image.
@@ -301,10 +337,7 @@ class CameraProcessor(ImageRoombaFinder):
         points = []
     
         for img_coords in self.bound_roombas(frame):
-            cam_ray = Vector3Stamped()
-            cam_ray.vector.x, cam_ray.vector.y, cam_ray.vector.z = \
-                                    self.camera.projectPixelTo3dRay(img_coords)
-            
+            cam_ray = pixel_to_ray(img_coords, frame.shape, self.daov)
             # Convert that camera ray to world space (map frame)
             # See note in script header about do_transform_vector3
             map_ray = tf2_geometry_msgs.do_transform_vector3(cam_ray,
@@ -325,22 +358,22 @@ class CameraProcessor(ImageRoombaFinder):
             points.append(roomba_pos)
 
             # Add the roomba to array and publish
-            # TODO This can be improved
             self.odom_lock.acquire()
             sq_tolerance = 0.1 if len(self.odom_array.data) < 10 else 1000
-            # index = -1
             for i in xrange(len(self.odom_array.data)):
                 pt = self.odom_array.data[i].pose.pose.position
                 if (roomba_pos.x - pt.x)**2 + \
                    (roomba_pos.y - pt.y)**2 < sq_tolerance:
+                    self.odom_array.data[i].header.stamp = stamp
                     self.odom_array.data[i].pose.pose.position = roomba_pos
-                    # index = i
                     break
             else:
-                # index = len(self.odom_array.data)
                 item = Odometry()
+                item.child_frame_id = "roomba%d"%len(self.odom_array.data)
                 item.header.frame_id = "map"
+                item.header.stamp = stamp
                 item.pose.pose.position = roomba_pos
+                item.pose.pose.orientation.z = 1
                 self.odom_array.data.append(item)
             self.publisher.publish(self.odom_array)
             self.odom_lock.release()
@@ -372,11 +405,6 @@ if __name__ == '__main__':
     # Run as a node
     rospy.init_node(NODE_NAME, anonymous=True)
 
-    # Verify that the correct version of OpenCV is in use
-    if cv2.__version__ != "2.4.13":
-        raise SystemExit("You are using the incorrect version of OpenCV. " +
-                         "You should be using version 2.4.13, but you are " +
-                         "using version %s."%cv2.__version__)
     # Uncomment the following line to run on a sample video, and comment out
     # the CameraProcessor line below. You must pass this initializer an
     # absolute path; do not use a tilda.
@@ -386,7 +414,8 @@ if __name__ == '__main__':
     # arguments to this node.
     # Change False to True to turn on debugging
     for i in xrange(1, len(argv)):
-        CameraProcessor(argv[i], False)
+        if "camera" in argv[i]:
+            CameraProcessor(argv[i], True)
 
     # Startup the loop
     try:

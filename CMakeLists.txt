@@ -20,10 +20,12 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs
   visualization_msgs
   dynamic_reconfigure
+  image_geometry
 )
 
 generate_dynamic_reconfigure_options(
   cfg/VisionNode.cfg
+  cfg/RoombaEstimator.cfg
 )
 
 ## System dependencies are found with CMake's conventions
@@ -164,6 +166,8 @@ add_executable(iarc7_vision_node
     src/VisionNode.cpp
     src/GridLineEstimator.cpp
     src/OpticalFlowEstimator.cpp
+    src/RoombaBlobDetector.cpp
+    src/RoombaEstimator.cpp
     src/cv_utils.cpp)
 
 ## Add cmake target dependencies of the executable
