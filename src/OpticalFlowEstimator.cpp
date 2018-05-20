@@ -474,29 +474,29 @@ bool OpticalFlowEstimator::findAverageVector(
         const cv::Size& image_size,
         cv::Point2f& average)
 {
-    double total_x = 0.0;
-    double total_y = 0.0;
     size_t num_points = 0;
 
     // TODO filter properly based on magnitude, angle and standard deviation
+    std::vector<double> dx;
+    std::vector<double> dy;
     for (size_t i = 0; i < tails.size(); ++i) {
         if (status[i]
          && tails[i].x > image_size.width  * x_cutoff
          && tails[i].x < image_size.width  * (1.0 - x_cutoff)
          && tails[i].y > image_size.height * y_cutoff
          && tails[i].y < image_size.height * (1.0 - y_cutoff)) {
-
-            cv::Point tail = tails[i];
-            cv::Point head = heads[i];
-            total_x += head.x - tail.x;
-            total_y += head.y - tail.y;
+            dx.push_back(heads[i].x - tails[i].x);
+            dy.push_back(heads[i].y - tails[i].y);
             num_points++;
         }
     }
 
+    std::sort(dx.begin(), dx.end());
+    std::sort(dy.begin(), dy.end());
+
     if (num_points != 0) {
-        average.x = total_x / static_cast<double>(num_points);
-        average.y = total_y / static_cast<double>(num_points);
+        average.x = dx[dx.size() / 2];
+        average.y = dy[dy.size() / 2];
     }
 
     return num_points != 0;
