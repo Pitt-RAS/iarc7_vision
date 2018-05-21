@@ -50,6 +50,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       expected_input_size_(),
       target_size_(),
       local_nh_("optical_flow_estimator"),
+      debug_orientation_rate_pub_(
+              local_nh_.advertise<geometry_msgs::Vector3Stamped>(
+                  "orientation_rate", 1)),
       debug_average_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("average_vector_image",
                                                      1)),
@@ -361,6 +364,12 @@ geometry_msgs::TwistWithCovarianceStamped
 
     double dpitch_dt = dp / dt;
     double droll_dt = dr / dt;
+
+    geometry_msgs::Vector3Stamped orientation_rate_msg;
+    orientation_rate_msg.header.stamp = time;
+    orientation_rate_msg.vector.x = droll_dt;
+    orientation_rate_msg.vector.y = dpitch_dt;
+    orientation_pub_.publish(orientation_rate_msg);
 
     // Observed velocity in camera frame due to rotation
     //
