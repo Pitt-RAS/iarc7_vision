@@ -369,7 +369,7 @@ geometry_msgs::TwistWithCovarianceStamped
     orientation_rate_msg.header.stamp = time;
     orientation_rate_msg.vector.x = droll_dt;
     orientation_rate_msg.vector.y = dpitch_dt;
-    orientation_pub_.publish(orientation_rate_msg);
+    debug_orientation_rate_pub_.publish(orientation_rate_msg);
 
     // Observed velocity in camera frame due to rotation
     //
