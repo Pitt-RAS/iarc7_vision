@@ -248,7 +248,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
 bool OpticalFlowEstimator::waitUntilReady(
         const ros::Duration& startup_timeout)
 {
-    return updateFilteredPosition(ros::Time(), startup_timeout);
+    return updateFilteredPosition(ros::Time::now(), startup_timeout);
 }
 
 bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
