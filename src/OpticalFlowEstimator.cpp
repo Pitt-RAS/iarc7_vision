@@ -248,7 +248,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
 bool OpticalFlowEstimator::waitUntilReady(
         const ros::Duration& startup_timeout)
 {
-    return updateFilteredPosition(ros::Time::now(), startup_timeout);
+    return updateFilteredPosition(ros::Time(), startup_timeout);
 }
 
 bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
@@ -620,13 +620,13 @@ void OpticalFlowEstimator::findFeatureVectors(
                                             CV_8UC1);
         for (size_t i = 0; i < tails.size(); i++) {
             if (status[i]) {
-                int dx = tails[i].x - heads[i].x;
-                int dy = tails[i].y - heads[i].y;
+                int dx = (int)tails[i].x - (int)heads[i].x;
+                int dy = (int)tails[i].y - (int)heads[i].y;
                 int x = dx + hist_image.size().width / 2;
                 int y = dy + hist_image.size().height / 2;
                 if (x >= 0 && x < hist_image.size().width
                  && y >= 0 && y < hist_image.size().height) {
-                    hist_image.at<int32_t>(cv::Point(x, y)) += 50;
+                    hist_image.at<uint8_t>(cv::Point(x, y)) = 255;
                 } else {
                     ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
                 }
