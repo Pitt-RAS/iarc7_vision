@@ -309,6 +309,22 @@ bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
     double dpitch_dt = dp / dt;
     double droll_dt = dr / dt;
 
+    // Publish the orientation we're using for debugging purposes
+    if (debug_settings_.debug_orientation) {
+        iarc7_msgs::OrientationAnglesStamped ori_msg;
+        ori_msg.header.stamp = time;
+        ori_msg.data.pitch = pitch;
+        ori_msg.data.roll = roll;
+        ori_msg.data.yaw = yaw;
+        orientation_pub_.publish(ori_msg);
+    }
+
+    geometry_msgs::Vector3Stamped orientation_rate_msg;
+    orientation_rate_msg.header.stamp = time;
+    orientation_rate_msg.vector.x = droll_dt;
+    orientation_rate_msg.vector.y = dpitch_dt;
+    debug_orientation_rate_pub_.publish(orientation_rate_msg);
+
     if(std::abs(dpitch_dt) > flow_estimator_settings_.max_rotational_vel 
        || std::abs(droll_dt) > flow_estimator_settings_.max_rotational_vel) {
         ROS_WARN_THROTTLE(
@@ -336,16 +352,6 @@ geometry_msgs::TwistWithCovarianceStamped
 
     // Calculate time between last and current frame
     double dt = (time - last_message_time_).toSec();
-
-    // Publish the orientation we're using for debugging purposes
-    if (debug_settings_.debug_orientation) {
-        iarc7_msgs::OrientationAnglesStamped ori_msg;
-        ori_msg.header.stamp = time;
-        ori_msg.data.pitch = pitch;
-        ori_msg.data.roll = roll;
-        ori_msg.data.yaw = yaw;
-        orientation_pub_.publish(ori_msg);
-    }
 
     // Distance from the camera to the ground plane, along the camera's +z axis
     //
@@ -408,12 +414,6 @@ geometry_msgs::TwistWithCovarianceStamped
 
     double dpitch_dt = dp / dt;
     double droll_dt = dr / dt;
-
-    geometry_msgs::Vector3Stamped orientation_rate_msg;
-    orientation_rate_msg.header.stamp = time;
-    orientation_rate_msg.vector.x = droll_dt;
-    orientation_rate_msg.vector.y = dpitch_dt;
-    debug_orientation_rate_pub_.publish(orientation_rate_msg);
 
     // Observed velocity in camera frame due to rotation
     //
