@@ -234,6 +234,7 @@ class OpticalFlowEstimator {
     const ros::Publisher debug_level_quad_raw_pub_;
     const ros::Publisher debug_camera_rel_raw_pub_;
     const ros::Publisher debug_correction_pub_;
+    const ros::Publisher debug_hist_pub_;
     const ros::Publisher debug_raw_pub_;
     const ros::Publisher debug_unrotated_vel_pub_;
     const ros::Publisher debug_velocity_vector_image_pub_;

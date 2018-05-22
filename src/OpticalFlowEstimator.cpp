@@ -65,6 +65,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       debug_correction_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist_correction", 10)),
+      debug_hist_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("hist",
+                                                     1)),
       debug_raw_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist_raw", 10)),
@@ -611,6 +614,32 @@ void OpticalFlowEstimator::findFeatureVectors(
         };
 
         debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+
+        cv::Mat hist_image = cv::Mat::zeros(arrow_image.size().height * 2,
+                                            arrow_image.size().width * 2,
+                                            CV_8UC1);
+        for (size_t i = 0; i < tails.size(); i++) {
+            if (status[i]) {
+                int dx = tails[i].x - heads[i].x;
+                int dy = tails[i].y - heads[i].y;
+                int x = dx + hist_image.size().width / 2;
+                int y = dy + hist_image.size().height / 2;
+                if (x >= 0 && x < hist_image.size().width
+                 && y >= 0 && y < hist_image.size().height) {
+                    hist_image.at<int32_t>(cv::Point(x, y)) += 50;
+                } else {
+                    ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
+                }
+            }
+        }
+
+        cv_bridge::CvImage cv_hist_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::MONO8,
+            hist_image
+        };
+
+        debug_hist_pub_.publish(cv_hist_image);
     }
 }
 
