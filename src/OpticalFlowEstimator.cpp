@@ -258,21 +258,6 @@ bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
         return false;
     }
 
-    geometry_msgs::Vector3Stamped camera_forward_vector;
-    camera_forward_vector.vector.x = 0;
-    camera_forward_vector.vector.y = 0;
-    camera_forward_vector.vector.z = 1;
-    tf2::doTransform(camera_forward_vector,
-                     camera_forward_vector,
-                     current_camera_to_level_quad_tf_);
-    if (camera_forward_vector.vector.z
-            > -std::cos(flow_estimator_settings_.camera_vertical_threshold)) {
-        ROS_WARN_THROTTLE(
-                2.0,
-                "Camera is not close enough to vertical to calculate flow");
-        return false;
-    }
-
     double yaw, pitch, roll;
     getYPR(current_orientation_, yaw, pitch, roll);
 
@@ -324,6 +309,21 @@ bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
     orientation_rate_msg.vector.x = droll_dt;
     orientation_rate_msg.vector.y = dpitch_dt;
     debug_orientation_rate_pub_.publish(orientation_rate_msg);
+
+    geometry_msgs::Vector3Stamped camera_forward_vector;
+    camera_forward_vector.vector.x = 0;
+    camera_forward_vector.vector.y = 0;
+    camera_forward_vector.vector.z = 1;
+    tf2::doTransform(camera_forward_vector,
+                     camera_forward_vector,
+                     current_camera_to_level_quad_tf_);
+    if (camera_forward_vector.vector.z
+            > -std::cos(flow_estimator_settings_.camera_vertical_threshold)) {
+        ROS_WARN_THROTTLE(
+                2.0,
+                "Camera is not close enough to vertical to calculate flow");
+        return false;
+    }
 
     if(std::abs(dpitch_dt) > flow_estimator_settings_.max_rotational_vel 
        || std::abs(droll_dt) > flow_estimator_settings_.max_rotational_vel) {
