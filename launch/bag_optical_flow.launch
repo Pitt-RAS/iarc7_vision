@@ -1,4 +1,4 @@
 <launch>
     <node pkg="rosbag" type="record" name="rosbag_optical_flow"
-           args="record -o /home/levi/iarc7/bag_optical_flow /tf /tf_static /odometry/filtered /accel/filtered /optical_flow_estimator/twist /optical_flow_estimator/twist_raw /optical_flow_estimator/twist_corrected /optical_flow_estimator/twist_camera_relative /optical_flow_estimator/twist_unrotated /optical_flow_estimator/vector_image /optical_flow_estimator/average_vector_image /optical_flow_estimator/orientation" />
+           args="record -o /tmp/bag_optical_flow /optical_flow_estimator/hist /tf /tf_static /odometry/filtered /accel/filtered /optical_flow_estimator/twist /optical_flow_estimator/twist_raw /optical_flow_estimator/twist_corrected /optical_flow_estimator/twist_camera_relative /optical_flow_estimator/twist_unrotated /optical_flow_estimator/vector_image /optical_flow_estimator/orientation" />
 </launch>
