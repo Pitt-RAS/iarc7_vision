@@ -129,6 +129,10 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/tf_timeout",
             flow_settings.tf_timeout));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/max_rotational_vel",
+            flow_settings.max_rotational_vel));
 }
 
 void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
@@ -268,6 +272,8 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         config.flow_debug_frameskip = flow_settings.debug_frameskip;
         config.flow_tf_timeout      = flow_settings.tf_timeout;
 
+        config.flow_max_rotational_vel = flow_settings.max_rotational_vel;
+
         ran = true;
     } else {
         // Begin line extractor settings
@@ -304,6 +310,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
             config.flow_y_cutoff_region_velocity_measurement;
         flow_settings.debug_frameskip = config.flow_debug_frameskip;
         flow_settings.tf_timeout = config.flow_tf_timeout;
+        flow_settings.max_rotational_vel = config.flow_max_rotational_vel;
 
     }
 }

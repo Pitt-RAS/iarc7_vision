@@ -69,3 +69,6 @@ optical_flow_estimator:
 
     # Timeout for updates from tf
     tf_timeout: 1.0
+
+    # Max rotational velocity allowed for flow to run
+    flow_max_rotational_vel: 1.0

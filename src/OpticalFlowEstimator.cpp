@@ -178,7 +178,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
     }
 
     // Make sure we're in an allowed position to calculate optical flow
-    if (!canEstimateFlow()) {
+    if (!canEstimateFlow(time)) {
         have_valid_last_image_ = false;
         return;
     }
@@ -248,7 +248,7 @@ bool OpticalFlowEstimator::waitUntilReady(
     return updateFilteredPosition(ros::Time::now(), startup_timeout);
 }
 
-bool OpticalFlowEstimator::canEstimateFlow() const
+bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
 {
     if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
         ROS_WARN_THROTTLE(2.0,
@@ -270,6 +270,50 @@ bool OpticalFlowEstimator::canEstimateFlow() const
         ROS_WARN_THROTTLE(
                 2.0,
                 "Camera is not close enough to vertical to calculate flow");
+        return false;
+    }
+
+    double yaw, pitch, roll;
+    getYPR(current_orientation_, yaw, pitch, roll);
+
+    double last_yaw, last_pitch, last_roll;
+    getYPR(last_orientation_, last_yaw, last_pitch, last_roll);
+
+    // Calculate time between last and current frame
+    double dt = (time - last_message_time_).toSec();
+
+    double dp;
+    double dr;
+
+    // These two if statements make sure that dp and dr are the shortest change
+    // in angle that would produce the new observed orientation
+    //
+    // i.e. a change from 0.1rad to (2pi-0.1)rad should result in a delta of
+    // -0.2rad, not (2pi-0.2)rad
+    if (last_pitch > CV_PI/2 && pitch < -CV_PI/2) {
+        dp = (pitch + 2*CV_PI - last_pitch);
+    } else if (last_pitch < -CV_PI/2 && pitch > CV_PI/2) {
+        dp = (pitch - last_pitch - 2*CV_PI);
+    } else {
+        dp = (pitch - last_pitch);
+    }
+
+    if (last_roll > CV_PI/2 && roll < -CV_PI/2) {
+        dr = (roll + 2*CV_PI - last_roll);
+    } else if (last_roll < -CV_PI/2 && roll > CV_PI/2) {
+        dr = (roll - last_roll - 2*CV_PI);
+    } else {
+        dr = (roll - last_roll);
+    }
+
+    double dpitch_dt = dp / dt;
+    double droll_dt = dr / dt;
+
+    if(std::abs(dpitch_dt) > flow_estimator_settings_.max_rotational_vel 
+       || std::abs(droll_dt) > flow_estimator_settings_.max_rotational_vel) {
+        ROS_WARN_THROTTLE(
+                2.0,
+                "Camera rotating too fast to estimate flow");
         return false;
     }
 

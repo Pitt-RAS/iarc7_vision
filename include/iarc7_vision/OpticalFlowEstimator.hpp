@@ -34,6 +34,7 @@ struct OpticalFlowEstimatorSettings {
     double y_cutoff_region_velocity_measurement;
     int debug_frameskip;
     double tf_timeout;
+    double max_rotational_vel;
 };
 
 struct OpticalFlowDebugSettings {
@@ -81,7 +82,7 @@ class OpticalFlowEstimator {
     /// flow estimate
     ///
     /// @returns  True if a flow estimate can be made, false otherwise
-    bool canEstimateFlow() const;
+    bool canEstimateFlow(const ros::Time& time) const;
 
     /// Calculate new velocity estimate
     ///
