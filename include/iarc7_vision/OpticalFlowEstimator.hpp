@@ -78,6 +78,12 @@ class OpticalFlowEstimator {
     // PRIVATE METHODS //
     /////////////////////
 
+    /// Calculates pitch and roll rates, averaged between last frame time and
+    /// this frame time
+    void calculateRotationRate(const ros::Time& time,
+                               double& dpitch_dt,
+                               double& droll_dt) const;
+
     /// Decides whether the drone is in a position where it can make an optical
     /// flow estimate
     ///
