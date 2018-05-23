@@ -76,6 +76,8 @@ OpticalFlowEstimator::OpticalFlowEstimator(
                   "twist_unrotated", 10)),
       debug_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
+      debug_filtered_velocity_vector_image_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("filtered_vector_image", 1)),
       orientation_pub_(
               local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
                   "orientation", 10)),
@@ -161,7 +163,9 @@ bool __attribute__((warn_unused_result))
 }
 
 void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
-                                  const ros::Time& time)
+                                  const ros::Time& time,
+                                  const std::vector<RoombaImageLocation>
+                                          roomba_image_locations)
 {
     // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
@@ -210,6 +214,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             processImage(scaled_image,
                          scaled_gray_image,
                          time,
+                         roomba_image_locations,
                          images_skipped_ == 0);
             images_skipped_ = (images_skipped_ + 1)
                            % (flow_estimator_settings_.debug_frameskip + 1);
@@ -497,25 +502,80 @@ bool OpticalFlowEstimator::findAverageVector(
         const std::vector<uchar>& status,
         const double x_cutoff,
         const double y_cutoff,
+        const auto& roomba_image_locations,
         const cv::Size& image_size,
-        cv::Point2f& average)
+        const cv::cuda::GpuMat& curr_frame,
+        cv::Point2f& average) const
 {
     size_t num_points = 0;
+
+    auto in_roomba_perimeter = [&](cv::Point2f point) {
+        for(auto& roomba : roomba_image_locations) {
+            if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
+                return true;
+            }
+        }
+        return false;
+    };
 
     // TODO filter properly based on magnitude, angle and standard deviation
     std::vector<double> dx;
     std::vector<double> dy;
+    std::vector<cv::Point2f> filtered_heads;
+    std::vector<cv::Point2f> filtered_tails;
+    std::vector<uchar> filtered_status;
     for (size_t i = 0; i < tails.size(); ++i) {
         if (status[i]
          && tails[i].x > image_size.width  * x_cutoff
          && tails[i].x < image_size.width  * (1.0 - x_cutoff)
          && tails[i].y > image_size.height * y_cutoff
-         && tails[i].y < image_size.height * (1.0 - y_cutoff)) {
+         && tails[i].y < image_size.height * (1.0 - y_cutoff)
+         && !in_roomba_perimeter(tails[i])) {
             dx.push_back(heads[i].x - tails[i].x);
             dy.push_back(heads[i].y - tails[i].y);
+            filtered_heads.push_back(heads[i]);
+            filtered_tails.push_back(tails[i]);
+            filtered_status.push_back(static_cast<uchar>(true));
             num_points++;
         }
     }
+
+    // Publish debugging image with only the vectors used drawn
+    cv::Mat arrow_image;
+    curr_frame.download(arrow_image);
+
+    for(auto roomba : roomba_image_locations) {
+        cv::Point2f p;
+        p.x = roomba.x * image_size.width;
+        p.y = roomba.y * image_size.width;
+        cv::circle(arrow_image,
+                   p,
+                   roomba.radius * image_size.width,
+                   cv::Scalar(0, 255, 0));
+    }
+
+    cv::Rect usable_image_rect(image_size.width  * x_cutoff,
+                               image_size.height * y_cutoff,
+                               image_size.width  * (1.0 - 2.0 * x_cutoff),
+                               image_size.height * (1.0 - 2.0 * y_cutoff));
+
+    cv::rectangle(arrow_image,
+                  usable_image_rect,
+                  cv::Scalar(0, 255, 255));
+
+    cv_utils::drawArrows(arrow_image,
+                         filtered_tails,
+                         filtered_heads,
+                         filtered_status,
+                         cv::Scalar(255, 0, 0));
+
+    cv_bridge::CvImage cv_image {
+        std_msgs::Header(),
+        image_encoding_,
+        arrow_image
+    };
+
+    debug_filtered_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
 
     std::sort(dx.begin(), dx.end());
     std::sort(dy.begin(), dy.end());
@@ -635,6 +695,7 @@ void OpticalFlowEstimator::getYPR(const tf2::Quaternion& orientation,
 void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
                                         const cv::cuda::GpuMat& gray_image,
                                         const ros::Time& time,
+                                        const auto& roomba_image_locations,
                                         bool debug) const
 {
     // Find vectors from image
@@ -658,7 +719,9 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
             status,
             flow_estimator_settings_.x_cutoff_region_velocity_measurement,
             flow_estimator_settings_.y_cutoff_region_velocity_measurement,
+            roomba_image_locations,
             target_size_,
+            image,
             average_vec);
 
     if (!found_average) {

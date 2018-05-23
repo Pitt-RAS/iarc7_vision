@@ -21,6 +21,7 @@
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 #include "iarc7_vision/RoombaEstimator.hpp"
+#include "iarc7_vision/RoombaImageLocation.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& line_settings)
@@ -430,11 +431,17 @@ int main(int argc, char **argv)
             gridline_estimator.update(image, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
-            optical_flow_estimator.update(image, message->header.stamp);
-            const auto flow_time = std::chrono::high_resolution_clock::now();
-
-            roomba_estimator.update(image, message->header.stamp);
+            std::vector<iarc7_vision::RoombaImageLocation>
+                                                      roomba_image_locations;
+            roomba_estimator.update(image,
+                                    message->header.stamp,
+                                    roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
+
+            optical_flow_estimator.update(image,
+                                          message->header.stamp,
+                                          roomba_image_locations);
+            const auto flow_time = std::chrono::high_resolution_clock::now();
 
             ROS_DEBUG_STREAM(
                     "Grid: "
@@ -442,10 +449,10 @@ int main(int argc, char **argv)
                         grid_time - start).count()
                     << " Flow: "
                     << std::chrono::duration_cast<std::chrono::microseconds>(
-                        flow_time - grid_time).count()
+                        flow_time - roomba_time).count()
                     << " Roomba: "
                     << std::chrono::duration_cast<std::chrono::microseconds>(
-                        roomba_time - flow_time).count());
+                        roomba_time - grid_time).count());
         }
 
         ros::spinOnce();

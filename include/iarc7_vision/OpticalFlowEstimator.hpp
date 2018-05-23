@@ -11,6 +11,8 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <ros_utils/SafeTransformWrapper.hpp>
 
+#include "iarc7_vision/RoombaImageLocation.hpp"
+
 #include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <image_transport/image_transport.h>
 #include <sensor_msgs/image_encodings.h>
@@ -66,7 +68,10 @@ class OpticalFlowEstimator {
     bool __attribute__((warn_unused_result)) onSettingsChanged();
 
     /// Process a new image message
-    void update(const cv::cuda::GpuMat& curr_image, const ros::Time& time);
+    void update(const cv::cuda::GpuMat& curr_image,
+                const ros::Time& time,
+                const std::vector<RoombaImageLocation>
+                                    roomba_image_locations);
 
     /// MUST be called successfully before `update` is called
     bool __attribute__((warn_unused_result)) waitUntilReady(
@@ -114,19 +119,24 @@ class OpticalFlowEstimator {
     ///                         percentage of the total width}
     /// @param[in]  y_cutoff   {Height of region to be discarded on each side as
     ///                         a percentage of the total height}
+    /// @param[in] roomba_image_locations {Vector of roomba image locations
+    ///                                   in resolution indpenedent units}
     /// @param[in]  image_size {Size of image that the points are from, used for
     ///                         calculating cutoffs}
+    /// @param[in]  curr_frame The current frame, in RGB8
     /// @param[out] average    Average movement of the features in the frame
     ///
     /// @return                {True if result is valid (i.e. at least one
     ///                         valid point)}
-    static bool findAverageVector(const std::vector<cv::Point2f>& tails,
+    bool findAverageVector(const std::vector<cv::Point2f>& tails,
                                          const std::vector<cv::Point2f>& heads,
                                          const std::vector<uchar>& status,
                                          const double x_cutoff,
                                          const double y_cutoff,
+                                         const auto& roomba_image_locations,
                                          const cv::Size& image_size,
-                                         cv::Point2f& average);
+                                         const cv::cuda::GpuMat& curr_frame,
+                                         cv::Point2f& average) const;
 
     /// Process the given current and last frames to find flow vectors
     ///
@@ -170,10 +180,13 @@ class OpticalFlowEstimator {
     /// @param[in] image        Current frame to process, in RGB8
     /// @param[in] gray_image   Current frame to process, in MONO8
     /// @param[in] time         Timestamp when `image` was captured
+    /// @param[in] roomba_image_locations {Vector of roomba image locations
+    ///                                   in resolution indpenedent units}
     /// @param[in] debug        Whether to spit out messages on debug topics
     void processImage(const cv::cuda::GpuMat& image,
                       const cv::cuda::GpuMat& gray_image,
                       const ros::Time& time,
+                      const auto& roomba_image_locations,
                       bool debug=false) const;
 
     /// Resize image and convert to grayscale
@@ -244,6 +257,7 @@ class OpticalFlowEstimator {
     const ros::Publisher debug_raw_pub_;
     const ros::Publisher debug_unrotated_vel_pub_;
     const ros::Publisher debug_velocity_vector_image_pub_;
+    const ros::Publisher debug_filtered_velocity_vector_image_pub_;
     const ros::Publisher orientation_pub_;
     const ros::Publisher twist_pub_;
 };

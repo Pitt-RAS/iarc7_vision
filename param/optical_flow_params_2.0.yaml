@@ -61,8 +61,8 @@ optical_flow_estimator:
     variance_scale: 0.19 # 0.3s/90deg
 
     # Cutoff area where velocity vectors aren't included in the average
-    x_cutoff_region_velocity_measurement: 0.2
-    y_cutoff_region_velocity_measurement: 0.2
+    x_cutoff_region_velocity_measurement: 0.1
+    y_cutoff_region_velocity_measurement: 0.1
 
     # Frames to skip before publishing debug images
     debug_frameskip: 0

@@ -206,7 +206,8 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
                                double angle,
                                double pw,
                                double ph,
-                               iarc7_msgs::RoombaDetection& roomba)
+                               iarc7_msgs::RoombaDetection& roomba,
+                               RoombaImageLocation& roomba_image_location)
 {
     geometry_msgs::PointStamped cam_pos;
     tf2::doTransform(cam_pos, cam_pos, cam_tf_);
@@ -223,10 +224,38 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
     roomba.pose.x = cam_pos.point.x + map_ray.vector.x * ray_scale;
     roomba.pose.y = cam_pos.point.y + map_ray.vector.y * ray_scale;
     roomba.pose.theta = angle;
+
+    roomba_image_location.x = pos.x / pw;
+    roomba_image_location.y = pos.y / pw;
+
+    // ray_scale is equivalent to the distance of the roomba
+    // from the camera center
+    // Roomba radius is hard coded to 0.2m
+    // It was adjusted to 0.3m because of errors with the below equations
+    // The radius is a value from 0-1 which maps across the diagnol of the image
+    double size_relative_diagonal = 0.3 
+                                    / (2.0 * ray_scale 
+                                       * std::tan(settings_.bottom_camera_aov
+                                                  * M_PI / 180.0
+                                                  / 2.0));
+
+    // Calculate the ratio in terms of the image width
+    double theta = std::atan2(ph, pw);
+    roomba_image_location.radius = size_relative_diagonal * std::cos(theta);
+
+    ROS_DEBUG_STREAM("x: " << roomba_image_location.x
+                     << " y: " << roomba_image_location.y
+                     << " r: " << roomba_image_location.radius
+                     << " ray scale: " << ray_scale
+                     << " size_relative_diagonal: " << size_relative_diagonal
+                     << " theta: " << theta
+                     << " cos(theta): " << std::cos(theta));
 }
 
 void RoombaEstimator::update(const cv::cuda::GpuMat& image,
-                             const ros::Time& time)
+                             const ros::Time& time,
+                             std::vector<RoombaImageLocation>&
+                                roomba_image_locations)
 {
     // Validation
     if(image.empty())
@@ -286,6 +315,7 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
 
     //////////////////////////////////////////////////////////////////////////
     /// Fill out detection message
+    /// And RoombaImageLocation vector
     //////////////////////////////////////////////////////////////////////////
     iarc7_msgs::RoombaDetectionFrame roomba_frame;
     roomba_frame.header.stamp = time;
@@ -306,12 +336,25 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
         }
 
         iarc7_msgs::RoombaDetection roomba;
+        RoombaImageLocation roomba_image_location;
         calcPose(pos,
                  angle,
                  image_scaled.cols,
                  image_scaled.rows,
-                 roomba);
+                 roomba,
+                 roomba_image_location);
         roomba_frame.roombas.push_back(roomba);
+        roomba_image_locations.push_back(roomba_image_location);
+
+        if (settings_.debug_detected_rects) {
+            cv::Point2f p;
+            p.x = roomba_image_location.x * image_scaled.cols;
+            p.y = roomba_image_location.y * image_scaled.cols;
+            cv::circle(detected_rect_image,
+                       p,
+                       roomba_image_location.radius * image_scaled.cols,
+                       cv::Scalar(0, 255, 0));
+        }
     }
 
     calcFloorPoly(roomba_frame.detection_region);
