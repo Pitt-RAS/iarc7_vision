@@ -647,8 +647,8 @@ void OpticalFlowEstimator::findFeatureVectors(
     }
 
     if (debug && debug_settings_.debug_hist) {
-        cv::Mat hist_image = cv::Mat::zeros(arrow_image.size().height * 2,
-                                            arrow_image.size().width * 2,
+        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2,
+                                            curr_frame.size().width * 2,
                                             CV_8UC1);
         for (size_t i = 0; i < tails.size(); i++) {
             if (status[i]) {
