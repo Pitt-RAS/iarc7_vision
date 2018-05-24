@@ -71,8 +71,8 @@ roomba_estimator:
     hsv_slice_h_green_min: 47
     hsv_slice_h_green_max: 67
     hsv_slice_h_red1_min: 0
-    hsv_slice_h_red1_max: 8
-    hsv_slice_h_red2_min: 170
+    hsv_slice_h_red1_max: 30
+    hsv_slice_h_red2_min: 150
     hsv_slice_h_red2_max: 180
     hsv_slice_s_min: 51
     hsv_slice_s_max: 255
@@ -94,7 +94,7 @@ roomba_estimator:
     #    C920 DFOV:   78 deg
     # Lifecam DFOV:   66 deg
     #     Sim DFOV:   60 deg
-    bottom_camera_aov: 77.0
+    bottom_camera_aov: 61.8
     front_camera_aov: 93.5
     left_camera_aov: 93.5
     right_camera_aov: 93.5
