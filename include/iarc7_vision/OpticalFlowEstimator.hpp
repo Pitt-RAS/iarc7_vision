@@ -45,6 +45,7 @@ struct OpticalFlowDebugSettings {
     bool debug_orientation;
     bool debug_times;
     bool debug_vectors_image;
+    bool debug_hist;
 };
 
 class OpticalFlowEstimator {

@@ -52,6 +52,9 @@ optical_flow_estimator:
     # Publish image with the velocity vectors drawn on it
     debug_vectors_image: false
 
+    # Debug histogram of flow vectors
+    debug_hist: true
+
     ################################
 
     # Min variance to send with velocity measurements

@@ -220,6 +220,10 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/debug_vectors_image",
             settings.debug_vectors_image));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/debug_hist",
+            settings.debug_hist));
 }
 
 void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,

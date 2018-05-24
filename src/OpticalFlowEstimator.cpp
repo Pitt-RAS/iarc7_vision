@@ -644,7 +644,9 @@ void OpticalFlowEstimator::findFeatureVectors(
         };
 
         debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+    }
 
+    if (debug && debug_settings_.debug_hist) {
         cv::Mat hist_image = cv::Mat::zeros(arrow_image.size().height * 2,
                                             arrow_image.size().width * 2,
                                             CV_8UC1);
