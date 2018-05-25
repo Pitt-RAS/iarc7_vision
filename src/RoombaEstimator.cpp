@@ -223,7 +223,17 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
 
     roomba.pose.x = cam_pos.point.x + map_ray.vector.x * ray_scale;
     roomba.pose.y = cam_pos.point.y + map_ray.vector.y * ray_scale;
-    roomba.pose.theta = angle;
+
+    geometry_msgs::Vector3Stamped roomba_yaw;
+    geometry_msgs::Vector3Stamped roomba_yaw_after;
+    roomba_yaw.vector.x = std::cos(angle);
+    roomba_yaw.vector.y = std::sin(angle);
+    tf2::doTransform(roomba_yaw, roomba_yaw_after, cam_tf_);
+    //ROS_ERROR_STREAM(roomba_yaw);
+    //ROS_ERROR_STREAM(roomba_yaw_after);
+
+    roomba.pose.theta = std::atan2(roomba_yaw_after.vector.y,
+                                   roomba_yaw_after.vector.x);
 
     roomba_image_location.x = pos.x / pw;
     roomba_image_location.y = pos.y / pw;
