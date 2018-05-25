@@ -420,14 +420,14 @@ geometry_msgs::TwistWithCovarianceStamped
     // Calculate covariance
     Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
     covariance(0, 0) = std::pow(flow_estimator_settings_.variance_scale
-                                * dpitch_dt * distance_to_plane,
+                                * dpitch_dt,
                                 2.0)
-                      + flow_estimator_settings_.variance;
+                      + flow_estimator_settings_.variance * std::pow(distance_to_plane, 2);
 
     covariance(1, 1) = std::pow(flow_estimator_settings_.variance_scale
-                                * droll_dt * distance_to_plane,
+                                * droll_dt,
                                 2.0)
-                      + flow_estimator_settings_.variance;
+                      + flow_estimator_settings_.variance * std::pow(distance_to_plane, 2);
 
     // Rotation matrix from level camera frame to level_quad
     Eigen::Matrix3d rotation_matrix;
