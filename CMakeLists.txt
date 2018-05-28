@@ -13,6 +13,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -DROS_ASSERT_ENABLED")
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   iarc7_msgs
+  iarc7_safety
   image_transport
   roscpp
   ros_utils
