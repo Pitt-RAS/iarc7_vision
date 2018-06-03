@@ -2,6 +2,9 @@
     local-name: iarc7_msgs
     uri: https://github.com/Pitt-RAS/iarc7_msgs.git
 - git:
+    local-name: iarc7_safety
+    uri: https://github.com/Pitt-RAS/iarc7_safety.git
+- git:
     local-name: ros_utils
     uri: https://github.com/Pitt-RAS/ros_utils.git
 - git:
