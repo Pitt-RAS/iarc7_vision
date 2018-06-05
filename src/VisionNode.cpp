@@ -280,7 +280,7 @@ int main(int argc, char **argv)
     // Main loop
     while (ros::ok())
     {
-        if (!message_queue.empty()) {
+        while (!message_queue.empty() && ros::ok()) {
             if (message_queue.size() > message_queue_item_limit - 1) {
                 ROS_ERROR(
                         "Image queue has too many messages, clearing: %lu images",
@@ -323,8 +323,8 @@ int main(int argc, char **argv)
                         roomba_time - grid_time).count());
         }
 
-        ros::spinOnce();
         rate.sleep();
+        ros::spinOnce();
     }
 
     // All is good.
