@@ -322,8 +322,10 @@ int main(int argc, char **argv)
                     << std::chrono::duration_cast<std::chrono::microseconds>(
                         roomba_time - grid_time).count());
         }
+        else {
+            rate.sleep();
+        }
 
-        rate.sleep();
         ros::spinOnce();
     }
 
