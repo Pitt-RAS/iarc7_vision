@@ -71,7 +71,7 @@ class OpticalFlowEstimator {
     /// Process a new image message
     void update(const cv::cuda::GpuMat& curr_image,
                 const ros::Time& time,
-                const std::vector<RoombaImageLocation>
+                const std::vector<RoombaImageLocation>&
                                     roomba_image_locations);
 
     /// MUST be called successfully before `update` is called
@@ -134,7 +134,8 @@ class OpticalFlowEstimator {
                                          const std::vector<uchar>& status,
                                          const double x_cutoff,
                                          const double y_cutoff,
-                                         const auto& roomba_image_locations,
+                                         const std::vector<RoombaImageLocation>&
+                                             roomba_image_locations,
                                          const cv::Size& image_size,
                                          const cv::cuda::GpuMat& curr_frame,
                                          cv::Point2f& average) const;
@@ -187,7 +188,8 @@ class OpticalFlowEstimator {
     void processImage(const cv::cuda::GpuMat& image,
                       const cv::cuda::GpuMat& gray_image,
                       const ros::Time& time,
-                      const auto& roomba_image_locations,
+                      const std::vector<RoombaImageLocation>&
+                          roomba_image_locations,
                       bool debug=false) const;
 
     /// Resize image and convert to grayscale

@@ -164,7 +164,7 @@ bool __attribute__((warn_unused_result))
 
 void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
                                   const ros::Time& time,
-                                  const std::vector<RoombaImageLocation>
+                                  const std::vector<RoombaImageLocation>&
                                           roomba_image_locations)
 {
     // start time for debugging time spent in updateFilteredPosition
@@ -505,7 +505,7 @@ bool OpticalFlowEstimator::findAverageVector(
         const std::vector<uchar>& status,
         const double x_cutoff,
         const double y_cutoff,
-        const auto& roomba_image_locations,
+        const std::vector<RoombaImageLocation>& roomba_image_locations,
         const cv::Size& image_size,
         const cv::cuda::GpuMat& curr_frame,
         cv::Point2f& average) const
@@ -513,7 +513,7 @@ bool OpticalFlowEstimator::findAverageVector(
     size_t num_points = 0;
 
     auto in_roomba_perimeter = [&](cv::Point2f point) {
-        for(auto& roomba : roomba_image_locations) {
+        for(const auto& roomba : roomba_image_locations) {
             if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
                 return true;
             }
@@ -547,7 +547,7 @@ bool OpticalFlowEstimator::findAverageVector(
     cv::Mat arrow_image;
     curr_frame.download(arrow_image);
 
-    for(auto roomba : roomba_image_locations) {
+    for(const auto& roomba : roomba_image_locations) {
         cv::Point2f p;
         p.x = roomba.x * image_size.width;
         p.y = roomba.y * image_size.width;
@@ -700,7 +700,8 @@ void OpticalFlowEstimator::getYPR(const tf2::Quaternion& orientation,
 void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
                                         const cv::cuda::GpuMat& gray_image,
                                         const ros::Time& time,
-                                        const auto& roomba_image_locations,
+                                        const std::vector<RoombaImageLocation>&
+                                            roomba_image_locations,
                                         bool debug) const
 {
     // Find vectors from image

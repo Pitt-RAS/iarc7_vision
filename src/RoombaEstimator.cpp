@@ -229,8 +229,6 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
     roomba_yaw.vector.x = std::cos(angle);
     roomba_yaw.vector.y = std::sin(angle);
     tf2::doTransform(roomba_yaw, roomba_yaw_after, cam_tf_);
-    //ROS_ERROR_STREAM(roomba_yaw);
-    //ROS_ERROR_STREAM(roomba_yaw_after);
 
     roomba.pose.theta = std::atan2(roomba_yaw_after.vector.y,
                                    roomba_yaw_after.vector.x);
