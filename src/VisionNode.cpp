@@ -249,7 +249,7 @@ int main(int argc, char **argv)
             private_nh, "message_queue_item_limit");
 
     // Loop rate
-    ros::Rate rate (300);
+    ros::Rate rate (100);
 
     // Initialize the vision classes
     ros::Time start_time = ros::Time::now();
