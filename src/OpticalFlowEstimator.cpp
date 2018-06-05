@@ -512,13 +512,20 @@ bool OpticalFlowEstimator::findAverageVector(
 {
     size_t num_points = 0;
 
-    auto in_roomba_perimeter = [&](cv::Point2f point) {
+    auto in_roomba_perimeter = [&](const cv::Point2f& point) {
         for(const auto& roomba : roomba_image_locations) {
             if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
                 return true;
             }
         }
         return false;
+    };
+
+    auto in_acceptance_region = [&](const cv::Point2f& point) {
+        return point.x > image_size.width * x_cutoff
+               && point.x < image_size.width  * (1.0 - x_cutoff)
+               && point.y > image_size.height * y_cutoff
+               && point.y < image_size.height * (1.0 - y_cutoff);
     };
 
     // TODO filter properly based on magnitude, angle and standard deviation
@@ -529,11 +536,10 @@ bool OpticalFlowEstimator::findAverageVector(
     std::vector<uchar> filtered_status;
     for (size_t i = 0; i < tails.size(); ++i) {
         if (status[i]
-         && tails[i].x > image_size.width  * x_cutoff
-         && tails[i].x < image_size.width  * (1.0 - x_cutoff)
-         && tails[i].y > image_size.height * y_cutoff
-         && tails[i].y < image_size.height * (1.0 - y_cutoff)
-         && !in_roomba_perimeter(tails[i])) {
+         && in_acceptance_region(tails[i])
+         && in_acceptance_region(heads[i])
+         && !in_roomba_perimeter(tails[i])
+         && !in_roomba_perimeter(heads[i])) {
             dx.push_back(heads[i].x - tails[i].x);
             dy.push_back(heads[i].y - tails[i].y);
             filtered_heads.push_back(heads[i]);
