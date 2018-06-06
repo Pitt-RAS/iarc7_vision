@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
 
-IMAGE_WIDTH = 1720
-IMAGE_HEIGHT = 920
+IMAGE_WIDTH = 640
+IMAGE_HEIGHT = 480
 MAX_WIDTH = IMAGE_WIDTH * 4
 
 def im_show_m(imgs):

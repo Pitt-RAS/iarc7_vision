@@ -50,6 +50,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       expected_input_size_(),
       target_size_(),
       local_nh_("optical_flow_estimator"),
+      debug_orientation_rate_pub_(
+              local_nh_.advertise<geometry_msgs::Vector3Stamped>(
+                  "orientation_rate", 1)),
       debug_average_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("average_vector_image",
                                                      1)),
@@ -62,6 +65,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       debug_correction_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist_correction", 10)),
+      debug_hist_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("hist",
+                                                     1)),
       debug_raw_pub_(
               local_nh_.advertise<geometry_msgs::TwistWithCovarianceStamped>(
                   "twist_raw", 10)),
@@ -70,6 +76,8 @@ OpticalFlowEstimator::OpticalFlowEstimator(
                   "twist_unrotated", 10)),
       debug_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
+      debug_filtered_velocity_vector_image_pub_(
+              local_nh_.advertise<sensor_msgs::Image>("filtered_vector_image", 1)),
       orientation_pub_(
               local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
                   "orientation", 10)),
@@ -155,7 +163,9 @@ bool __attribute__((warn_unused_result))
 }
 
 void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
-                                  const ros::Time& time)
+                                  const ros::Time& time,
+                                  const std::vector<RoombaImageLocation>&
+                                          roomba_image_locations)
 {
     // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
@@ -175,7 +185,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
     }
 
     // Make sure we're in an allowed position to calculate optical flow
-    if (!canEstimateFlow()) {
+    if (!canEstimateFlow(time)) {
         have_valid_last_image_ = false;
         return;
     }
@@ -204,6 +214,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             processImage(scaled_image,
                          scaled_gray_image,
                          time,
+                         roomba_image_locations,
                          images_skipped_ == 0);
             images_skipped_ = (images_skipped_ + 1)
                            % (flow_estimator_settings_.debug_frameskip + 1);
@@ -242,10 +253,54 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
 bool OpticalFlowEstimator::waitUntilReady(
         const ros::Duration& startup_timeout)
 {
-    return updateFilteredPosition(ros::Time::now(), startup_timeout);
+    return updateFilteredPosition(ros::Time(), startup_timeout);
 }
 
-bool OpticalFlowEstimator::canEstimateFlow() const
+void OpticalFlowEstimator::calculateRotationRate(const ros::Time& time,
+                                                 double& dpitch_dt,
+                                                 double& droll_dt) const
+{
+    // Get the pitch and roll of the camera in euler angles
+    // NOTE: CAMERA FRAME CONVENTIONS ARE DIFFERENT, SEE REP103
+    // http://www.ros.org/reps/rep-0103.html
+    double yaw, pitch, roll;
+    getYPR(current_orientation_, yaw, pitch, roll);
+
+    double last_yaw, last_pitch, last_roll;
+    getYPR(last_orientation_, last_yaw, last_pitch, last_roll);
+
+    // Calculate time between last and current frame
+    double dt = (time - last_message_time_).toSec();
+
+    double dp;
+    double dr;
+
+    // These two if statements make sure that dp and dr are the shortest change
+    // in angle that would produce the new observed orientation
+    //
+    // i.e. a change from 0.1rad to (2pi-0.1)rad should result in a delta of
+    // -0.2rad, not (2pi-0.2)rad
+    if (last_pitch > CV_PI/2 && pitch < -CV_PI/2) {
+        dp = (pitch + 2*CV_PI - last_pitch);
+    } else if (last_pitch < -CV_PI/2 && pitch > CV_PI/2) {
+        dp = (pitch - last_pitch - 2*CV_PI);
+    } else {
+        dp = (pitch - last_pitch);
+    }
+
+    if (last_roll > CV_PI/2 && roll < -CV_PI/2) {
+        dr = (roll + 2*CV_PI - last_roll);
+    } else if (last_roll < -CV_PI/2 && roll > CV_PI/2) {
+        dr = (roll - last_roll - 2*CV_PI);
+    } else {
+        dr = (roll - last_roll);
+    }
+
+    dpitch_dt = dp / dt;
+    droll_dt = dr / dt;
+}
+
+bool OpticalFlowEstimator::canEstimateFlow(const ros::Time& time) const
 {
     if (current_altitude_ < flow_estimator_settings_.min_estimation_altitude) {
         ROS_WARN_THROTTLE(2.0,
@@ -255,18 +310,15 @@ bool OpticalFlowEstimator::canEstimateFlow() const
         return false;
     }
 
-    geometry_msgs::Vector3Stamped camera_forward_vector;
-    camera_forward_vector.vector.x = 0;
-    camera_forward_vector.vector.y = 0;
-    camera_forward_vector.vector.z = 1;
-    tf2::doTransform(camera_forward_vector,
-                     camera_forward_vector,
-                     current_camera_to_level_quad_tf_);
-    if (camera_forward_vector.vector.z
-            > -std::cos(flow_estimator_settings_.camera_vertical_threshold)) {
+    double dpitch_dt, droll_dt;
+    calculateRotationRate(time, dpitch_dt, droll_dt);
+
+    // Calculate time between last and current frame
+    if (std::abs(dpitch_dt) > flow_estimator_settings_.max_rotational_vel
+     || std::abs(droll_dt)  > flow_estimator_settings_.max_rotational_vel) {
         ROS_WARN_THROTTLE(
                 2.0,
-                "Camera is not close enough to vertical to calculate flow");
+                "Camera rotating too fast to estimate flow");
         return false;
     }
 
@@ -284,11 +336,8 @@ geometry_msgs::TwistWithCovarianceStamped
     double yaw, pitch, roll;
     getYPR(current_orientation_, yaw, pitch, roll);
 
-    double last_yaw, last_pitch, last_roll;
-    getYPR(last_orientation_, last_yaw, last_pitch, last_roll);
-
-    // Calculate time between last and current frame
-    double dt = (time - last_message_time_).toSec();
+    double dpitch_dt, droll_dt;
+    calculateRotationRate(time, dpitch_dt, droll_dt);
 
     // Publish the orientation we're using for debugging purposes
     if (debug_settings_.debug_orientation) {
@@ -299,6 +348,15 @@ geometry_msgs::TwistWithCovarianceStamped
         ori_msg.data.yaw = yaw;
         orientation_pub_.publish(ori_msg);
     }
+
+    geometry_msgs::Vector3Stamped orientation_rate_msg;
+    orientation_rate_msg.header.stamp = time;
+    orientation_rate_msg.vector.x = droll_dt;
+    orientation_rate_msg.vector.y = dpitch_dt;
+    debug_orientation_rate_pub_.publish(orientation_rate_msg);
+
+    // Calculate time between last and current frame
+    double dt = (time - last_message_time_).toSec();
 
     // Distance from the camera to the ground plane, along the camera's +z axis
     //
@@ -335,33 +393,6 @@ geometry_msgs::TwistWithCovarianceStamped
                            / -std::cos(roll)
                            / dt;
 
-    double dp;
-    double dr;
-
-    // These two if statements make sure that dp and dr are the shortest change
-    // in angle that would produce the new observed orientation
-    //
-    // i.e. a change from 0.1rad to (2pi-0.1)rad should result in a delta of
-    // -0.2rad, not (2pi-0.2)rad
-    if (last_pitch > CV_PI/2 && pitch < -CV_PI/2) {
-        dp = (pitch + 2*CV_PI - last_pitch);
-    } else if (last_pitch < -CV_PI/2 && pitch > CV_PI/2) {
-        dp = (pitch - last_pitch - 2*CV_PI);
-    } else {
-        dp = (pitch - last_pitch);
-    }
-
-    if (last_roll > CV_PI/2 && roll < -CV_PI/2) {
-        dr = (roll + 2*CV_PI - last_roll);
-    } else if (last_roll < -CV_PI/2 && roll > CV_PI/2) {
-        dr = (roll - last_roll - 2*CV_PI);
-    } else {
-        dr = (roll - last_roll);
-    }
-
-    double dpitch_dt = dp / dt;
-    double droll_dt = dr / dt;
-
     // Observed velocity in camera frame due to rotation
     //
     // Positive dpdt means that the x vector rotates down, which means we think
@@ -389,11 +420,14 @@ geometry_msgs::TwistWithCovarianceStamped
     // Calculate covariance
     Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
     covariance(0, 0) = std::pow(flow_estimator_settings_.variance_scale
-                              * dpitch_dt, 2.0)
-                      + flow_estimator_settings_.variance;
+                                * dpitch_dt,
+                                2.0)
+                      + flow_estimator_settings_.variance * std::pow(distance_to_plane, 2);
+
     covariance(1, 1) = std::pow(flow_estimator_settings_.variance_scale
-                              * droll_dt, 2.0)
-                      + flow_estimator_settings_.variance;
+                                * droll_dt,
+                                2.0)
+                      + flow_estimator_settings_.variance * std::pow(distance_to_plane, 2);
 
     // Rotation matrix from level camera frame to level_quad
     Eigen::Matrix3d rotation_matrix;
@@ -471,32 +505,93 @@ bool OpticalFlowEstimator::findAverageVector(
         const std::vector<uchar>& status,
         const double x_cutoff,
         const double y_cutoff,
+        const std::vector<RoombaImageLocation>& roomba_image_locations,
         const cv::Size& image_size,
-        cv::Point2f& average)
+        const cv::cuda::GpuMat& curr_frame,
+        cv::Point2f& average) const
 {
-    double total_x = 0.0;
-    double total_y = 0.0;
     size_t num_points = 0;
 
+    auto in_roomba_perimeter = [&](const cv::Point2f& point) {
+        for(const auto& roomba : roomba_image_locations) {
+            if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    auto in_acceptance_region = [&](const cv::Point2f& point) {
+        return point.x > image_size.width * x_cutoff
+               && point.x < image_size.width  * (1.0 - x_cutoff)
+               && point.y > image_size.height * y_cutoff
+               && point.y < image_size.height * (1.0 - y_cutoff);
+    };
+
     // TODO filter properly based on magnitude, angle and standard deviation
+    std::vector<double> dx;
+    std::vector<double> dy;
+    std::vector<cv::Point2f> filtered_heads;
+    std::vector<cv::Point2f> filtered_tails;
+    std::vector<uchar> filtered_status;
     for (size_t i = 0; i < tails.size(); ++i) {
         if (status[i]
-         && tails[i].x > image_size.width  * x_cutoff
-         && tails[i].x < image_size.width  * (1.0 - x_cutoff)
-         && tails[i].y > image_size.height * y_cutoff
-         && tails[i].y < image_size.height * (1.0 - y_cutoff)) {
-
-            cv::Point tail = tails[i];
-            cv::Point head = heads[i];
-            total_x += head.x - tail.x;
-            total_y += head.y - tail.y;
+         && in_acceptance_region(tails[i])
+         && in_acceptance_region(heads[i])
+         && !in_roomba_perimeter(tails[i])
+         && !in_roomba_perimeter(heads[i])) {
+            dx.push_back(heads[i].x - tails[i].x);
+            dy.push_back(heads[i].y - tails[i].y);
+            filtered_heads.push_back(heads[i]);
+            filtered_tails.push_back(tails[i]);
+            filtered_status.push_back(static_cast<uchar>(true));
             num_points++;
         }
     }
 
+    // Publish debugging image with only the vectors used drawn
+    cv::Mat arrow_image;
+    curr_frame.download(arrow_image);
+
+    for(const auto& roomba : roomba_image_locations) {
+        cv::Point2f p;
+        p.x = roomba.x * image_size.width;
+        p.y = roomba.y * image_size.width;
+        cv::circle(arrow_image,
+                   p,
+                   roomba.radius * image_size.width,
+                   cv::Scalar(0, 255, 0));
+    }
+
+    cv::Rect usable_image_rect(image_size.width  * x_cutoff,
+                               image_size.height * y_cutoff,
+                               image_size.width  * (1.0 - 2.0 * x_cutoff),
+                               image_size.height * (1.0 - 2.0 * y_cutoff));
+
+    cv::rectangle(arrow_image,
+                  usable_image_rect,
+                  cv::Scalar(0, 255, 255));
+
+    cv_utils::drawArrows(arrow_image,
+                         filtered_tails,
+                         filtered_heads,
+                         filtered_status,
+                         cv::Scalar(255, 0, 0));
+
+    cv_bridge::CvImage cv_image {
+        std_msgs::Header(),
+        image_encoding_,
+        arrow_image
+    };
+
+    debug_filtered_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
+
+    std::sort(dx.begin(), dx.end());
+    std::sort(dy.begin(), dy.end());
+
     if (num_points != 0) {
-        average.x = total_x / static_cast<double>(num_points);
-        average.y = total_y / static_cast<double>(num_points);
+        average.x = dx[dx.size() / 2];
+        average.y = dy[dy.size() / 2];
     }
 
     return num_points != 0;
@@ -559,6 +654,34 @@ void OpticalFlowEstimator::findFeatureVectors(
 
         debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
     }
+
+    if (debug && debug_settings_.debug_hist) {
+        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2,
+                                            curr_frame.size().width * 2,
+                                            CV_8UC1);
+        for (size_t i = 0; i < tails.size(); i++) {
+            if (status[i]) {
+                int dx = (int)tails[i].x - (int)heads[i].x;
+                int dy = (int)tails[i].y - (int)heads[i].y;
+                int x = dx + hist_image.size().width / 2;
+                int y = dy + hist_image.size().height / 2;
+                if (x >= 0 && x < hist_image.size().width
+                 && y >= 0 && y < hist_image.size().height) {
+                    hist_image.at<uint8_t>(cv::Point(x, y)) = 255;
+                } else {
+                    ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
+                }
+            }
+        }
+
+        cv_bridge::CvImage cv_hist_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::MONO8,
+            hist_image
+        };
+
+        debug_hist_pub_.publish(cv_hist_image);
+    }
 }
 
 double OpticalFlowEstimator::getFocalLength(
@@ -583,6 +706,8 @@ void OpticalFlowEstimator::getYPR(const tf2::Quaternion& orientation,
 void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
                                         const cv::cuda::GpuMat& gray_image,
                                         const ros::Time& time,
+                                        const std::vector<RoombaImageLocation>&
+                                            roomba_image_locations,
                                         bool debug) const
 {
     // Find vectors from image
@@ -606,7 +731,9 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
             status,
             flow_estimator_settings_.x_cutoff_region_velocity_measurement,
             flow_estimator_settings_.y_cutoff_region_velocity_measurement,
+            roomba_image_locations,
             target_size_,
+            image,
             average_vec);
 
     if (!found_average) {

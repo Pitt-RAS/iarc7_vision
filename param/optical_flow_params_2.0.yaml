@@ -1,7 +1,7 @@
 # Settings for the optical flow estimator
 optical_flow_estimator:
     # fov of the camera
-    fov: 1.07
+    fov: 1.08
 
     # Minimum altitude to run the detector
     min_estimation_altitude: 0.3
@@ -40,7 +40,7 @@ optical_flow_estimator:
     debug_average_vector_image: true
 
     # Publish lots of intermediate velocity calculations
-    debug_intermediate_velocities: false
+    debug_intermediate_velocities: true
 
     # Publish the orientation used by the optical flow estimator
     debug_orientation: true
@@ -52,20 +52,26 @@ optical_flow_estimator:
     # Publish image with the velocity vectors drawn on it
     debug_vectors_image: true
 
+    # Debug histogram of flow vectors
+    debug_hist: true
+
     ################################
 
     # Min variance to send with velocity measurements
-    variance: 1.0
+    variance: 0.24
 
     # What to scale the variance on according to the rotation rate
     variance_scale: 0.19 # 0.3s/90deg
 
     # Cutoff area where velocity vectors aren't included in the average
-    x_cutoff_region_velocity_measurement: 0.2
-    y_cutoff_region_velocity_measurement: 0.2
+    x_cutoff_region_velocity_measurement: 0.1
+    y_cutoff_region_velocity_measurement: 0.1
 
     # Frames to skip before publishing debug images
-    debug_frameskip: 6
+    debug_frameskip: 0
 
     # Timeout for updates from tf
     tf_timeout: 1.0
+
+    # Max rotational velocity allowed for flow to run
+    max_rotational_vel: 1.0

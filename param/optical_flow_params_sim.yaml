@@ -30,7 +30,7 @@ optical_flow_estimator:
     min_dist: 15
 
     # Image scale factor
-    scale_factor: 0.3
+    scale_factor: 0.25
 
     ###############################
     ########## DEBUGGING ##########
@@ -52,6 +52,9 @@ optical_flow_estimator:
     # Publish image with the velocity vectors drawn on it
     debug_vectors_image: false
 
+    # Debug histogram of flow vectors
+    debug_hist: true
+
     ################################
 
     # Min variance to send with velocity measurements
@@ -61,11 +64,14 @@ optical_flow_estimator:
     variance_scale: 1.0
 
     # Cutoff area where velocity vectors aren't included in the average
-    x_cutoff_region_velocity_measurement: 0.2
-    y_cutoff_region_velocity_measurement: 0.2
+    x_cutoff_region_velocity_measurement: 0.1
+    y_cutoff_region_velocity_measurement: 0.1
 
     # Frames to skip before publishing debug images
     debug_frameskip: 0
 
     # Timeout for updates from tf
     tf_timeout: 1.0
+
+    # Max rotational velocity allowed for flow to run
+    max_rotational_vel: 1.0

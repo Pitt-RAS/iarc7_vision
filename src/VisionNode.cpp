@@ -6,21 +6,23 @@
 // END BAD HEADER
 
 #include <chrono>
+#include <deque>
 #include <dynamic_reconfigure/server.h>
 #include <image_transport/image_transport.h>
 #include <limits>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <queue>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
 
+#include "iarc7_safety/SafetyClient.hpp"
 #include <iarc7_vision/VisionNodeConfig.h>
 #include <ros_utils/ParamUtils.hpp>
 
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 #include "iarc7_vision/RoombaEstimator.hpp"
+#include "iarc7_vision/RoombaImageLocation.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& line_settings)
@@ -129,6 +131,10 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/tf_timeout",
             flow_settings.tf_timeout));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/max_rotational_vel",
+            flow_settings.max_rotational_vel));
 }
 
 void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
@@ -215,6 +221,10 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/debug_vectors_image",
             settings.debug_vectors_image));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/debug_hist",
+            settings.debug_hist));
 }
 
 void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
@@ -268,6 +278,8 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         config.flow_debug_frameskip = flow_settings.debug_frameskip;
         config.flow_tf_timeout      = flow_settings.tf_timeout;
 
+        config.flow_max_rotational_vel = flow_settings.max_rotational_vel;
+
         ran = true;
     } else {
         // Begin line extractor settings
@@ -304,8 +316,44 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
             config.flow_y_cutoff_region_velocity_measurement;
         flow_settings.debug_frameskip = config.flow_debug_frameskip;
         flow_settings.tf_timeout = config.flow_tf_timeout;
-
+        flow_settings.max_rotational_vel = config.flow_max_rotational_vel;
     }
+
+    // Begin line extractor settings
+    line_settings.pixels_per_meter = config.pixels_per_meter;
+    line_settings.canny_high_threshold = config.canny_high_threshold;
+
+    line_settings.canny_low_threshold =
+        config.canny_high_threshold / config.canny_threshold_ratio;
+
+    line_settings.canny_sobel_size = config.canny_sobel_size;
+    line_settings.hough_rho_resolution = config.hough_rho_resolution;
+    line_settings.hough_theta_resolution = config.hough_theta_resolution;
+    line_settings.hough_thresh_fraction = config.hough_thresh_fraction;
+    line_settings.fov = config.fov;
+
+    // Begin optical flow estimator settings
+    flow_settings.fov = config.flow_fov;
+    flow_settings.min_estimation_altitude
+        = config.flow_min_estimation_altitude;
+    flow_settings.camera_vertical_threshold
+        = config.flow_camera_vertical_threshold;
+    flow_settings.points = config.flow_points;
+    flow_settings.quality_level = config.flow_quality_level;
+    flow_settings.min_dist = config.flow_min_dist;
+    flow_settings.win_size = config.flow_win_size;
+    flow_settings.max_level = config.flow_max_level;
+    flow_settings.iters = config.flow_iters;
+    flow_settings.scale_factor = config.flow_scale_factor;
+    flow_settings.variance = config.flow_variance;
+    flow_settings.variance_scale = config.flow_variance_scale;
+    flow_settings.x_cutoff_region_velocity_measurement =
+        config.flow_x_cutoff_region_velocity_measurement;
+    flow_settings.y_cutoff_region_velocity_measurement =
+        config.flow_y_cutoff_region_velocity_measurement;
+    flow_settings.debug_frameskip = config.flow_debug_frameskip;
+    flow_settings.tf_timeout = config.flow_tf_timeout;
+    flow_settings.max_rotational_vel = config.flow_max_rotational_vel;
 }
 
 int main(int argc, char **argv)
@@ -320,10 +368,11 @@ int main(int argc, char **argv)
     ros::NodeHandle nh;
     ros::NodeHandle private_nh("~");
 
-    std::string expected_image_format = ros_utils::ParamUtils::getParam<std::string>(
-            private_nh, "image_format");
+    std::string expected_image_format
+        = ros_utils::ParamUtils::getParam<std::string>(
+                private_nh, "image_format");
 
-    // Create GridlineEstimator settings objects
+    // Create settings objects
     iarc7_vision::LineExtractorSettings line_extractor_settings;
     getLineExtractorSettings(private_nh, line_extractor_settings);
     iarc7_vision::GridEstimatorSettings grid_estimator_settings;
@@ -331,22 +380,15 @@ int main(int argc, char **argv)
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
     getGridDebugSettings(private_nh, grid_line_debug_settings);
 
-    iarc7_vision::GridLineEstimator gridline_estimator(
-            line_extractor_settings,
-            grid_estimator_settings,
-            grid_line_debug_settings,
-            expected_image_format);
-
-    // Create OpticalFlowEstimator settings objects
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
     getOpticalFlowEstimatorSettings(private_nh, optical_flow_estimator_settings);
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
+
+    // Load settings not in dynamic reconfigure
     getFlowDebugSettings(private_nh, optical_flow_debug_settings);
 
-    iarc7_vision::OpticalFlowEstimator optical_flow_estimator(
-            optical_flow_estimator_settings,
-            optical_flow_debug_settings,
-            expected_image_format);
+    std::unique_ptr<iarc7_vision::GridLineEstimator> gridline_estimator;
+    std::unique_ptr<iarc7_vision::OpticalFlowEstimator> optical_flow_estimator;
 
     // Set up dynamic reconfigure
     dynamic_reconfigure::Server<iarc7_vision::VisionNodeConfig> dynamic_reconfigure_server;
@@ -359,16 +401,20 @@ int main(int argc, char **argv)
                                line_extractor_settings,
                                optical_flow_estimator_settings,
                                dynamic_reconfigure_called);
-            ROS_ASSERT(gridline_estimator.onSettingsChanged());
-            ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
+            dynamic_reconfigure_called = true;
+
+            if (gridline_estimator != nullptr) {
+                ROS_ASSERT(gridline_estimator->onSettingsChanged());
+            }
+
+            if (optical_flow_estimator != nullptr) {
+                ROS_ASSERT(optical_flow_estimator->onSettingsChanged());
+            }
         };
-    dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
-    iarc7_vision::RoombaEstimator roomba_estimator;
+    dynamic_reconfigure_server.setCallback(
+            dynamic_reconfigure_settings_callback);
 
-    // Check for images at 100 Hz
-    ros::Rate rate (100);
-
-    // Wait for time to begin
+    // Wait for time to begin and settings to be fetched
     while (ros::ok() &&
            (ros::Time::now() == ros::Time(0) ||
            !dynamic_reconfigure_called)) {
@@ -376,24 +422,23 @@ int main(int argc, char **argv)
         ros::spinOnce();
     }
 
-    // Load the parameters specific to the vision node
-    double startup_timeout;
-    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
-
-    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
-            private_nh, "message_queue_item_limit");
-
-    // Initialize the vision classes
-    ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
-    ROS_ASSERT(optical_flow_estimator.waitUntilReady(ros::Duration(startup_timeout)));
-
+    // Create vision processing objects
+    iarc7_vision::RoombaEstimator roomba_estimator;
+    gridline_estimator.reset(new iarc7_vision::GridLineEstimator(
+            line_extractor_settings,
+            grid_estimator_settings,
+            grid_line_debug_settings,
+            expected_image_format));
+    optical_flow_estimator.reset(new iarc7_vision::OpticalFlowEstimator(
+            optical_flow_estimator_settings,
+            optical_flow_debug_settings,
+            expected_image_format));
 
     // Queue and callback for collecting images
-    std::queue<sensor_msgs::Image::ConstPtr> message_queue;
-
+    std::deque<sensor_msgs::Image::ConstPtr> message_queue;
     std::function<void(const sensor_msgs::Image::ConstPtr&)> image_msg_handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
-            message_queue.push(message);
+            message_queue.push_back(message);
         };
 
     image_transport::ImageTransport image_transporter{nh};
@@ -402,32 +447,76 @@ int main(int argc, char **argv)
         100,
         image_msg_handler);
 
+    // Load the parameters specific to the vision node
+    double startup_timeout;
+    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
+
+    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
+            private_nh, "message_queue_item_limit");
+
+    // Loop rate
+    ros::Rate rate (100);
+
+    // Initialize the vision classes
+    ros::Time start_time = ros::Time::now();
+    ROS_ASSERT(gridline_estimator->waitUntilReady(ros::Duration(startup_timeout)));
+    ROS_ASSERT(optical_flow_estimator->waitUntilReady(ros::Duration(startup_timeout)));
+    while (message_queue.empty()) {
+        if (!ros::ok()) {
+            return 1;
+        }
+
+        if (ros::Time::now() > start_time + ros::Duration(startup_timeout)) {
+            ROS_ERROR("Vision node timed out on startup");
+            return 1;
+        }
+
+        ros::spinOnce();
+        rate.sleep();
+    }
+
+    // Form a connection with the node monitor. If no connection can be made
+    // assert because we don't know what's going on with the other nodes.
+    ROS_INFO("vision_node: Attempting to form safety bond");
+    Iarc7Safety::SafetyClient safety_client(nh, "vision_node");
+    ROS_ASSERT_MSG(safety_client.formBond(),
+                   "vision_node: Could not form bond with safety client");
+
+    message_queue.clear();
+
     // Main loop
     while (ros::ok())
     {
-        if (!message_queue.empty()) {
-            sensor_msgs::Image::ConstPtr message = message_queue.front();
-            message_queue.pop();
-
+        if (!message_queue.empty() && ros::ok()) {
             if (message_queue.size() > message_queue_item_limit - 1) {
                 ROS_ERROR(
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
-                message_queue = std::queue<sensor_msgs::Image::ConstPtr>();
+                message_queue.clear();
+                continue;
             }
+
+            sensor_msgs::Image::ConstPtr message = message_queue.front();
+            message_queue.pop_front();
 
             auto cv_shared_ptr = cv_bridge::toCvShare(message);
             cv::cuda::GpuMat image(cv_shared_ptr->image);
 
             const auto start = std::chrono::high_resolution_clock::now();
-            gridline_estimator.update(image, message->header.stamp);
+            //gridline_estimator->update(image, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
-            optical_flow_estimator.update(image, message->header.stamp);
-            const auto flow_time = std::chrono::high_resolution_clock::now();
-
-            roomba_estimator.update(image, message->header.stamp);
+            std::vector<iarc7_vision::RoombaImageLocation>
+                                                      roomba_image_locations;
+            roomba_estimator.update(image,
+                                    message->header.stamp,
+                                    roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
+
+            optical_flow_estimator->update(image,
+                                           message->header.stamp,
+                                           roomba_image_locations);
+            const auto flow_time = std::chrono::high_resolution_clock::now();
 
             ROS_DEBUG_STREAM(
                     "Grid: "
@@ -435,14 +524,16 @@ int main(int argc, char **argv)
                         grid_time - start).count()
                     << " Flow: "
                     << std::chrono::duration_cast<std::chrono::microseconds>(
-                        flow_time - grid_time).count()
+                        flow_time - roomba_time).count()
                     << " Roomba: "
                     << std::chrono::duration_cast<std::chrono::microseconds>(
-                        roomba_time - flow_time).count());
+                        roomba_time - grid_time).count());
+        }
+        else {
+            rate.sleep();
         }
 
         ros::spinOnce();
-        rate.sleep();
     }
 
     // All is good.

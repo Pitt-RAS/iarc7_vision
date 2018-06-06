@@ -14,6 +14,7 @@
 #include "iarc7_vision/RoombaBlobDetector.hpp"
 #include "iarc7_vision/RoombaEstimatorConfig.h"
 #include "iarc7_vision/RoombaEstimatorSettings.hpp"
+#include "iarc7_vision/RoombaImageLocation.hpp"
 
 #include <sensor_msgs/CameraInfo.h>
 #include <iarc7_msgs/RoombaDetection.h>
@@ -35,7 +36,11 @@ class RoombaEstimator {
         ///
         /// @param[in]  image  Current frame to process (in rgb8)
         /// @param[in]  time   Timestamp of current frame
-        void update(const cv::cuda::GpuMat& image, const ros::Time& time);
+        /// @param[out]  roomba_image_locations Vector of roomba locations
+        void update(const cv::cuda::GpuMat& image,
+                    const ros::Time& time,
+                    std::vector<RoombaImageLocation>&
+                                roomba_image_locations);
     private:
 
         /// Converts a pixel in an image to a ray from the camera center
@@ -77,11 +82,13 @@ class RoombaEstimator {
         /// @param[in]  pw      Image width in pixels
         /// @param[in]  ph      Image height in pixels
         /// @param[out] roomba  Roomba detection message
+        //  @param[out] roomba_image_location Location of roomba in image with resolution indpendent scale
         void calcPose(const cv::Point2f& pos,
                       double angle,
                       double pw,
                       double ph,
-                      iarc7_msgs::RoombaDetection& roomba);
+                      iarc7_msgs::RoombaDetection& roomba,
+                      RoombaImageLocation& roomba_image_location);
 
         ros::NodeHandle nh_;
         ros::NodeHandle private_nh_;
