@@ -12,6 +12,6 @@
         <remap from="bottom_image_raw/image_raw" to="/bottom_camera/rgb/image_raw" />
     </node>
 
-    <param name="$(arg bond_id_namespace)/low_level_motion/form_bond"
+    <param name="$(arg bond_id_namespace)/vision_node/form_bond"
         value="true" />
 </launch>
