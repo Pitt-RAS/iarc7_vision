@@ -733,9 +733,11 @@ bool OpticalFlowEstimator::findAverageVector(
 
     if (debug && debug_settings_.debug_hist) {
         // Histogram scale factor scales image so that a more readable plot is made
-        const double hist_scale_factor = 300.0;
-        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2.0,
-                                            curr_frame.size().width * 2.0,
+        const double hist_scale_factor = flow_estimator_settings_.hist_scale_factor;
+        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height
+                                                * flow_estimator_settings_.hist_image_size_scale,
+                                            curr_frame.size().width
+                                                * flow_estimator_settings_.hist_image_size_scale,
                                             CV_8UC3);
 
         auto plot_hist_points = [&](const std::vector<double>& points_x,

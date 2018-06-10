@@ -147,6 +147,14 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/max_normalized_element_variance",
             flow_settings.max_normalized_element_variance));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/hist_scale_factor",
+        flow_settings.hist_scale_factor));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/hist_image_size_scale",
+        flow_settings.hist_image_size_scale));
 }
 
 void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
@@ -295,6 +303,8 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         config.flow_min_vectors = flow_settings.min_vectors;
         config.flow_max_filtered_variance = flow_settings.max_filtered_variance;
         config.flow_max_normalized_element_variance = flow_settings.max_normalized_element_variance;
+        config.flow_hist_scale_factor = flow_settings.hist_scale_factor;
+        config.flow_hist_image_size_scale = flow_settings.hist_image_size_scale;
 
         ran = true;
     } else {
@@ -336,6 +346,8 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.min_vectors = config.flow_min_vectors;
         flow_settings.max_filtered_variance = config.flow_max_filtered_variance;
         flow_settings.max_normalized_element_variance = config.flow_max_normalized_element_variance;
+        flow_settings.hist_scale_factor = config.flow_hist_scale_factor;
+        flow_settings.hist_image_size_scale = config.flow_hist_image_size_scale;
     }
 }
 

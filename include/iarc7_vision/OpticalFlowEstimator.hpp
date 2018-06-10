@@ -40,6 +40,8 @@ struct OpticalFlowEstimatorSettings {
     int min_vectors;
     double max_filtered_variance;
     double max_normalized_element_variance;
+    double hist_scale_factor;
+    double hist_image_size_scale;
 };
 
 struct OpticalFlowDebugSettings {

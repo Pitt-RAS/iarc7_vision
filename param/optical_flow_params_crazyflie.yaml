@@ -81,3 +81,9 @@ optical_flow_estimator:
 
     # Maximum normalized variance of an element to be included in average
     max_normalized_element_variance: 10
+
+    # Scaling factor used to scale the debugging histogram features
+    hist_scale_factor: 300
+
+    # Scaling factor used to scale the debugging histogram image
+    hist_image_size_scale: 3.0
