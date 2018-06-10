@@ -541,17 +541,34 @@ bool OpticalFlowEstimator::findAverageVector(
     std::vector<cv::Point2f> filtered_heads;
     std::vector<cv::Point2f> filtered_tails;
     std::vector<uchar> filtered_status;
+    std::vector<double> rejection_region_dx;
+    std::vector<double> rejection_region_dy;
+    std::vector<double> roomba_region_dx;
+    std::vector<double> roomba_region_dy;
     for (size_t i = 0; i < tails.size(); ++i) {
-        if (status[i]
-         && in_acceptance_region(tails[i])
-         && in_acceptance_region(heads[i])
-         && !in_roomba_perimeter(tails[i])
-         && !in_roomba_perimeter(heads[i])) {
-            dx.push_back(heads[i].x - tails[i].x);
-            dy.push_back(heads[i].y - tails[i].y);
-            filtered_heads.push_back(heads[i]);
-            filtered_tails.push_back(tails[i]);
-            filtered_status.push_back(static_cast<uchar>(true));
+        if (status[i]) {
+            bool in_acceptable_area = in_acceptance_region(tails[i])
+                                      & in_acceptance_region(heads[i]);
+            bool not_in_roomba_perimeter = !in_roomba_perimeter(tails[i])
+                                           & !in_roomba_perimeter(heads[i]);
+
+            if (!in_acceptable_area) {
+                rejection_region_dx.push_back(heads[i].x - tails[i].x);
+                rejection_region_dy.push_back(heads[i].y - tails[i].y);
+            }
+
+            if (!not_in_roomba_perimeter) {
+                roomba_region_dx.push_back(heads[i].x - tails[i].x);
+                roomba_region_dy.push_back(heads[i].y - tails[i].y);
+            }
+
+            if(in_acceptable_area & not_in_roomba_perimeter) {
+                dx.push_back(heads[i].x - tails[i].x);
+                dy.push_back(heads[i].y - tails[i].y);
+                filtered_heads.push_back(heads[i]);
+                filtered_tails.push_back(tails[i]);
+                filtered_status.push_back(static_cast<uchar>(true));
+            }
         }
     }
 
@@ -674,25 +691,106 @@ bool OpticalFlowEstimator::findAverageVector(
     if (debug && debug_settings_.debug_hist) {
         cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2,
                                             curr_frame.size().width * 2,
-                                            CV_8UC1);
-        for (size_t i = 0; i < tails.size(); i++) {
-            if (status[i]) {
-                int dx = (int)tails[i].x - (int)heads[i].x;
-                int dy = (int)tails[i].y - (int)heads[i].y;
-                int x = dx + hist_image.size().width / 2;
-                int y = dy + hist_image.size().height / 2;
+                                            CV_8UC3);
+
+        auto plot_hist_points = [&](const std::vector<double>& points_x,
+                                    const std::vector<double>& points_y,
+                                    const cv::Scalar& color) {
+            for (size_t i = 0; i < points_x.size(); i++) {
+                int x = points_x[i] + hist_image.size().width / 2;
+                int y = points_y[i] + hist_image.size().height / 2;
                 if (x >= 0 && x < hist_image.size().width
                  && y >= 0 && y < hist_image.size().height) {
-                    hist_image.at<uint8_t>(cv::Point(x, y)) = 255;
+                    hist_image.at<cv::Vec3b>(cv::Point(x, y))[0] = color[0];
+                    hist_image.at<cv::Vec3b>(cv::Point(x, y))[0] = color[1];
+                    hist_image.at<cv::Vec3b>(cv::Point(x, y))[0] = color[2];
+
                 } else {
                     ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
                 }
             }
+        };
+
+        // Plot all the accepted vectors
+        plot_hist_points(dx, dy, cv::Scalar(0, 255, 0));
+        // Plot all the vectors in the rejection region
+        plot_hist_points(rejection_region_dx, rejection_region_dy, cv::Scalar(255, 0, 0));
+        // Plot all the vectors on the roomba
+        plot_hist_points(roomba_region_dx, roomba_region_dy, cv::Scalar(0, 0, 255));
+
+        // Calculate rotation angles
+
+        // Plot the distribution contours for 1-3 sigma
+        for(int i = 1; i <= 3; i++) {
+            cv::ellipse(hist_image,
+                        cv::Point(sample_u_x, sample_u_y),
+                        cv::Size(static_cast<double>(i) * std::sqrt(sample_covariance_eigen.eigenvalues()[0]),
+                                 static_cast<double>(i) * std::sqrt(sample_covariance_eigen.eigenvalues()[1])),
+                        std::atan2(-sample_covariance_eigen.eigenvectors().col(0)[1],
+                                   sample_covariance_eigen.eigenvectors().col(0)[0]),
+                        0.0, // Draw the whole ellipse
+                        360.0, // Draw the whole ellipse,
+                        cv::Scalar(0, 255, 0));
         }
+
+        // Plot the distibution bounding circle
+        cv::circle(hist_image,
+                   cv::Point(sample_u_x, sample_u_y),
+                   std::sqrt(flow_estimator_settings_.max_sample_variance),
+                   cv::Scalar(255, 0, 0));
+
+        // Plot the element acceptance boundary
+        cv::ellipse(hist_image,
+                    cv::Point(sample_u_x, sample_u_y),
+                    cv::Size(std::sqrt(flow_estimator_settings_.max_normalized_element_variance
+                                           * sample_covariance_eigen.eigenvalues()[0]),
+                                       flow_estimator_settings_.max_normalized_element_variance
+                                           * sample_covariance_eigen.eigenvalues()[1]),
+                    std::atan2(-sample_covariance_eigen.eigenvectors().col(0)[1],
+                               sample_covariance_eigen.eigenvectors().col(0)[0]),
+                    0.0, // Draw the whole ellipse
+                    360.0, // Draw the whole ellipse,
+                    cv::Scalar(255, 255, 255));
+
+        // Put text on image about vector stats
+        // How many vectors were found by flow
+        cv::putText(hist_image,
+                    std::string("Starting vectors: ")
+                        + std::to_string(dx.size()
+                                         + rejection_region_dx.size()
+                                         + roomba_region_dx.size()),
+                    cv::Point(0, 20),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were rejected by image region
+        cv::putText(hist_image,
+                    std::string("In rejection region: ")
+                        + std::to_string(rejection_region_dx.size()),
+                    cv::Point(0, 30),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were rejected by roomba region
+        cv::putText(hist_image,
+                    std::string("In roomba region: ")
+                        + std::to_string(roomba_region_dx.size()),
+                    cv::Point(0, 40),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were accepted after statistical filtering
+        cv::putText(hist_image,
+                    std::string("Left post stat filter: ")
+                        + std::to_string(no_outlier_deltas_x.size()),
+                    cv::Point(0, 50),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    cv::Scalar(255, 255, 255));
 
         cv_bridge::CvImage cv_hist_image {
             std_msgs::Header(),
-            sensor_msgs::image_encodings::MONO8,
+            sensor_msgs::image_encodings::RGB8,
             hist_image
         };
 
