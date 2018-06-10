@@ -27,8 +27,8 @@
 
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
-#include <iarc7_msgs/OrientationAnglesStamped.h>
-#include "iarc7_msgs/Float64ArrayStamped.h"
+#include "iarc7_msgs/OrientationAnglesStamped.h"
+#include "iarc7_msgs/FlowQuality.h"
 
 namespace iarc7_vision {
 
@@ -83,7 +83,7 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       debug_filtered_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("filtered_vector_image", 1)),
       debug_flow_quality_pub_(
-              local_nh_.advertise<iarc7_msgs::Float64ArrayStamped>(
+              local_nh_.advertise<iarc7_msgs::FlowQuality>(
                   "flow_quality", 10)),
       orientation_pub_(
               local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
@@ -725,11 +725,38 @@ bool OpticalFlowEstimator::findAverageVector(
     average.x = a_x;
     average.y = a_y;
 
-    iarc7_msgs::Float64ArrayStamped debug_msg;
-    debug_msg.header.stamp = time;
-    debug_msg.data = {static_cast<double>(flow_estimator_settings_.min_vectors),
-                      static_cast<double>(no_outlier_deltas_x.size())};
-    debug_flow_quality_pub_.publish(debug_msg);
+    iarc7_msgs::FlowQuality flow_quality_msg;
+    flow_quality_msg.header.stamp = time;
+
+    flow_quality_msg.num_starting_vectors = dx.size()
+                                            + rejection_region_dx.size()
+                                            + roomba_region_dx.size();
+    flow_quality_msg.num_rejection_region_vectors = rejection_region_dx.size();
+    flow_quality_msg.num_roomba_region_vectors = roomba_region_dx.size();
+    flow_quality_msg.num_exceeded_element_var_vectors
+        = dx.size() - no_outlier_deltas_x.size();
+    flow_quality_msg.num_accepted_vectors = no_outlier_deltas_x.size();
+
+    flow_quality_msg.sample_std_dev_eigen_values.x
+        = std::sqrt(sample_covariance_eigen.eigenvalues()[0]);
+    flow_quality_msg.sample_std_dev_eigen_values.y
+        = std::sqrt(sample_covariance_eigen.eigenvalues()[1]);
+    flow_quality_msg.sample_average.x = sample_u_x;
+    flow_quality_msg.sample_average.y = sample_u_y;
+
+    flow_quality_msg.filtered_std_dev_eigen_values.x
+        = std::sqrt(filtered_covariance_eigen.eigenvalues()[0]);
+    flow_quality_msg.filtered_std_dev_eigen_values.y
+        = std::sqrt(filtered_covariance_eigen.eigenvalues()[1]);
+    flow_quality_msg.filtered_average.x = average.x;
+    flow_quality_msg.filtered_average.y = average.y;
+
+    flow_quality_msg.diff_filtered_and_sample_avg.x
+        = average.x - sample_u_x;
+    flow_quality_msg.diff_filtered_and_sample_avg.y
+        = average.y - sample_u_y;
+
+    debug_flow_quality_pub_.publish(flow_quality_msg);
 
     if (debug && debug_settings_.debug_hist) {
         // Histogram scale factor scales image so that a more readable plot is made
@@ -762,7 +789,7 @@ bool OpticalFlowEstimator::findAverageVector(
         //plot_hist_points(rejection_region_dx, rejection_region_dy, cv::Scalar(255, 0, 0));
         // Plot all the vectors on the roomba
         plot_hist_points(roomba_region_dx, roomba_region_dy, cv::Scalar(0, 0, 255));
-        // Plot all the accepted vectors
+        // Plot all the vectors not in the rejection regions
         plot_hist_points(dx, dy, cv::Scalar(0, 255, 0));
 
         const double sampled_filtered_diff_x
@@ -926,6 +953,17 @@ bool OpticalFlowEstimator::findAverageVector(
                     cv::FONT_HERSHEY_SIMPLEX,
                     0.5,
                     cv::Scalar(255, 255, 255));
+        // Sample vs filtered difference
+        cv::putText(hist_image,
+                    std::string("Diff filtered and sample avg: ")
+                        + std::to_string(average.x - sample_u_x)
+                        + std::string(", ")
+                        + std::to_string(average.y - sample_u_y),
+                    cv::Point(0, 150),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+
 
         cv_bridge::CvImage cv_hist_image {
             std_msgs::Header(),
