@@ -128,7 +128,10 @@ class OpticalFlowEstimator {
     /// @param[in]  image_size {Size of image that the points are from, used for
     ///                         calculating cutoffs}
     /// @param[in]  curr_frame The current frame, in RGB8
-    /// @param[in] time        Timestamp when `image` was captured
+    /// @param[in]  time       Timestamp when `image` was captured
+    /// @param[in]  debug      {Whether to spit out debug info, like
+    ///                         images from intermediate steps or with
+    ///                         arrows drawn}
     /// @param[out] average    Average movement of the features in the frame
     ///
     /// @return                {True if result is valid (i.e. at least one
@@ -143,6 +146,7 @@ class OpticalFlowEstimator {
                                          const cv::Size& image_size,
                                          const cv::cuda::GpuMat& curr_frame,
                                          const ros::Time& time,
+                                         const bool& debug,
                                          cv::Point2f& average) const;
 
     /// Process the given current and last frames to find flow vectors

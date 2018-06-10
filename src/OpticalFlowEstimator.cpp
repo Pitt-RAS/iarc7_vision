@@ -516,6 +516,7 @@ bool OpticalFlowEstimator::findAverageVector(
         const cv::Size& image_size,
         const cv::cuda::GpuMat& curr_frame,
         const ros::Time& time,
+        const bool& debug,
         cv::Point2f& average) const
 {
     auto in_roomba_perimeter = [&](const cv::Point2f& point) {
@@ -670,6 +671,34 @@ bool OpticalFlowEstimator::findAverageVector(
                       static_cast<double>(no_outlier_deltas_x.size())};
     debug_flow_quality_pub_.publish(debug_msg);
 
+    if (debug && debug_settings_.debug_hist) {
+        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2,
+                                            curr_frame.size().width * 2,
+                                            CV_8UC1);
+        for (size_t i = 0; i < tails.size(); i++) {
+            if (status[i]) {
+                int dx = (int)tails[i].x - (int)heads[i].x;
+                int dy = (int)tails[i].y - (int)heads[i].y;
+                int x = dx + hist_image.size().width / 2;
+                int y = dy + hist_image.size().height / 2;
+                if (x >= 0 && x < hist_image.size().width
+                 && y >= 0 && y < hist_image.size().height) {
+                    hist_image.at<uint8_t>(cv::Point(x, y)) = 255;
+                } else {
+                    ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
+                }
+            }
+        }
+
+        cv_bridge::CvImage cv_hist_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::MONO8,
+            hist_image
+        };
+
+        debug_hist_pub_.publish(cv_hist_image);
+    }
+
     return sample_std_deviation_accepted
            & (static_cast<int>(no_outlier_deltas_x.size()) 
                  >= flow_estimator_settings_.min_vectors);
@@ -732,34 +761,6 @@ void OpticalFlowEstimator::findFeatureVectors(
 
         debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
     }
-
-    if (debug && debug_settings_.debug_hist) {
-        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2,
-                                            curr_frame.size().width * 2,
-                                            CV_8UC1);
-        for (size_t i = 0; i < tails.size(); i++) {
-            if (status[i]) {
-                int dx = (int)tails[i].x - (int)heads[i].x;
-                int dy = (int)tails[i].y - (int)heads[i].y;
-                int x = dx + hist_image.size().width / 2;
-                int y = dy + hist_image.size().height / 2;
-                if (x >= 0 && x < hist_image.size().width
-                 && y >= 0 && y < hist_image.size().height) {
-                    hist_image.at<uint8_t>(cv::Point(x, y)) = 255;
-                } else {
-                    ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
-                }
-            }
-        }
-
-        cv_bridge::CvImage cv_hist_image {
-            std_msgs::Header(),
-            sensor_msgs::image_encodings::MONO8,
-            hist_image
-        };
-
-        debug_hist_pub_.publish(cv_hist_image);
-    }
 }
 
 double OpticalFlowEstimator::getFocalLength(
@@ -813,6 +814,7 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
             target_size_,
             image,
             time,
+            debug,
             average_vec);
 
     if (!found_average) {
