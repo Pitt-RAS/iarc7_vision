@@ -141,8 +141,8 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
             flow_settings.min_vectors));
 
     ROS_ASSERT(private_nh.getParam(
-            "optical_flow_estimator/max_sample_variance",
-            flow_settings.max_sample_variance));
+            "optical_flow_estimator/max_filtered_variance",
+            flow_settings.max_filtered_variance));
 
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/max_normalized_element_variance",
@@ -293,7 +293,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         config.flow_max_rotational_vel = flow_settings.max_rotational_vel;
 
         config.flow_min_vectors = flow_settings.min_vectors;
-        config.flow_max_sample_variance = flow_settings.max_sample_variance;
+        config.flow_max_filtered_variance = flow_settings.max_filtered_variance;
         config.flow_max_normalized_element_variance = flow_settings.max_normalized_element_variance;
 
         ran = true;
@@ -334,7 +334,7 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.tf_timeout = config.flow_tf_timeout;
         flow_settings.max_rotational_vel = config.flow_max_rotational_vel;
         flow_settings.min_vectors = config.flow_min_vectors;
-        flow_settings.max_sample_variance = config.flow_max_sample_variance;
+        flow_settings.max_filtered_variance = config.flow_max_filtered_variance;
         flow_settings.max_normalized_element_variance = config.flow_max_normalized_element_variance;
     }
 }

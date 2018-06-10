@@ -77,7 +77,7 @@ optical_flow_estimator:
     min_vectors: 100
 
     # Maximum variance of the vector samples
-    max_sample_variance: 10
+    max_filtered_variance: 10
 
     # Maximum normalized variance of an element to be included in average
     max_normalized_element_variance: 10

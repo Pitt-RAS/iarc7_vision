@@ -80,10 +80,10 @@ optical_flow_estimator:
     max_rotational_vel: 1.0
 
     # Mininum number of vectors to compute flow with
-    min_vectors: 100
+    min_vectors: 50
 
     # Maximum variance of the vector samples
-    max_sample_variance: 10
+    max_filtered_variance: 1
 
     # Maximum normalized variance of an element to be included in average
-    max_normalized_element_variance: 10
+    max_normalized_element_variance: 2

@@ -38,7 +38,7 @@ struct OpticalFlowEstimatorSettings {
     double tf_timeout;
     double max_rotational_vel;
     int min_vectors;
-    double max_sample_variance;
+    double max_filtered_variance;
     double max_normalized_element_variance;
 };
 
