@@ -1,3 +1,5 @@
+#include <numeric>
+
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 
 // BAD HEADER
@@ -11,6 +13,7 @@
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #include <Eigen/Geometry>
+#include <Eigen/Eigenvalues> 
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
@@ -25,6 +28,7 @@
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
 #include <iarc7_msgs/OrientationAnglesStamped.h>
+#include "iarc7_msgs/Float64ArrayStamped.h"
 
 namespace iarc7_vision {
 
@@ -78,6 +82,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
               local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
       debug_filtered_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("filtered_vector_image", 1)),
+      debug_flow_quality_pub_(
+              local_nh_.advertise<iarc7_msgs::Float64ArrayStamped>(
+                  "flow_quality", 10)),
       orientation_pub_(
               local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
                   "orientation", 10)),
@@ -508,10 +515,9 @@ bool OpticalFlowEstimator::findAverageVector(
         const std::vector<RoombaImageLocation>& roomba_image_locations,
         const cv::Size& image_size,
         const cv::cuda::GpuMat& curr_frame,
+        const ros::Time& time,
         cv::Point2f& average) const
 {
-    size_t num_points = 0;
-
     auto in_roomba_perimeter = [&](const cv::Point2f& point) {
         for(const auto& roomba : roomba_image_locations) {
             if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
@@ -545,8 +551,12 @@ bool OpticalFlowEstimator::findAverageVector(
             filtered_heads.push_back(heads[i]);
             filtered_tails.push_back(tails[i]);
             filtered_status.push_back(static_cast<uchar>(true));
-            num_points++;
         }
+    }
+
+    if(filtered_tails.size() == 0) {
+        ROS_WARN("iarc7_vision: No flow vectors were within the acceptable image region");
+        return false;
     }
 
     // Publish debugging image with only the vectors used drawn
@@ -586,15 +596,83 @@ bool OpticalFlowEstimator::findAverageVector(
 
     debug_filtered_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
 
-    std::sort(dx.begin(), dx.end());
-    std::sort(dy.begin(), dy.end());
+    auto mean_and_var = [&](const std::vector<double>& x,
+                            double& u,
+                            double& var) {
+        u = std::accumulate(x.begin(), x.end(), 0.0) / x.size();
+        var = 
+            std::accumulate(x.begin(), x.end(), 0.0, 
+                [&](double& sum, double x_i) {
+                    return sum + std::pow(x_i - u, 2.0);
+                })
+            / x.size();
+    };
 
-    if (num_points != 0) {
-        average.x = dx[dx.size() / 2];
-        average.y = dy[dy.size() / 2];
+    double sample_u_x = 0.0;
+    double sample_var_x = 0.0;
+    mean_and_var(dx, sample_u_x, sample_var_x);
+    double sample_u_y = 0.0;
+    double sample_var_y = 0.0;
+    mean_and_var(dy, sample_u_y, sample_var_y);
+
+    double expected_xy = 0.0;
+    for(size_t i = 0; i < dx.size(); i++) {
+        expected_xy += dx[i]*dy[i];
+    }
+    expected_xy /= dx.size();
+    double sample_covariance_xy = expected_xy - (sample_u_x*sample_u_y);
+
+    Eigen::Matrix2d sample_covariance = Eigen::Matrix2d::Zero();
+    sample_covariance(0, 0) = sample_var_x;
+    sample_covariance(0, 1) = sample_covariance_xy;
+    sample_covariance(1, 0) = sample_covariance_xy;
+    sample_covariance(1, 1) = sample_var_y;
+
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> sample_covariance_eigen(sample_covariance);
+
+    bool sample_std_deviation_accepted =
+        (sample_covariance_eigen.eigenvalues()[0] <= flow_estimator_settings_.max_sample_variance)
+        & (sample_covariance_eigen.eigenvalues()[1] <= flow_estimator_settings_.max_sample_variance);
+
+    std::vector<double> no_outlier_deltas_x;
+    std::vector<double> no_outlier_deltas_y;
+    // Perform outlier removal
+    for(size_t i = 0; i < dx.size(); i++) {
+        Eigen::Vector2d delta(dx[i] - sample_u_x, dy[i] - sample_u_y);
+        double normalized_variance
+            = delta.transpose() * sample_covariance.inverse() * delta;
+        if(normalized_variance
+              <= flow_estimator_settings_.max_normalized_element_variance) {
+            no_outlier_deltas_x.push_back(dx[i]);
+            no_outlier_deltas_y.push_back(dy[i]);
+        }
     }
 
-    return num_points != 0;
+    if(no_outlier_deltas_x.size() == 0) {
+        ROS_WARN_STREAM("iarc7_vision: No vectors were within the outlier boundaries, "
+                        << "cannot compute average vector");
+        return false;
+    }
+
+    average.x = std::accumulate(no_outlier_deltas_x.begin(),
+                                 no_outlier_deltas_x.end(),
+                                 0.0)
+                    / no_outlier_deltas_x.size();
+
+    average.y = std::accumulate(no_outlier_deltas_y.begin(),
+                                 no_outlier_deltas_y.end(),
+                                 0.0)
+                    / no_outlier_deltas_y.size();
+
+    iarc7_msgs::Float64ArrayStamped debug_msg;
+    debug_msg.header.stamp = time;
+    debug_msg.data = {static_cast<double>(flow_estimator_settings_.min_vectors),
+                      static_cast<double>(no_outlier_deltas_x.size())};
+    debug_flow_quality_pub_.publish(debug_msg);
+
+    return sample_std_deviation_accepted
+           & (static_cast<int>(no_outlier_deltas_x.size()) 
+                 >= flow_estimator_settings_.min_vectors);
 }
 
 void OpticalFlowEstimator::findFeatureVectors(
@@ -734,6 +812,7 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
             roomba_image_locations,
             target_size_,
             image,
+            time,
             average_vec);
 
     if (!found_average) {

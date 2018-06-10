@@ -37,6 +37,9 @@ struct OpticalFlowEstimatorSettings {
     int debug_frameskip;
     double tf_timeout;
     double max_rotational_vel;
+    int min_vectors;
+    double max_sample_variance;
+    double max_normalized_element_variance;
 };
 
 struct OpticalFlowDebugSettings {
@@ -125,6 +128,7 @@ class OpticalFlowEstimator {
     /// @param[in]  image_size {Size of image that the points are from, used for
     ///                         calculating cutoffs}
     /// @param[in]  curr_frame The current frame, in RGB8
+    /// @param[in] time        Timestamp when `image` was captured
     /// @param[out] average    Average movement of the features in the frame
     ///
     /// @return                {True if result is valid (i.e. at least one
@@ -138,6 +142,7 @@ class OpticalFlowEstimator {
                                              roomba_image_locations,
                                          const cv::Size& image_size,
                                          const cv::cuda::GpuMat& curr_frame,
+                                         const ros::Time& time,
                                          cv::Point2f& average) const;
 
     /// Process the given current and last frames to find flow vectors
@@ -261,6 +266,7 @@ class OpticalFlowEstimator {
     const ros::Publisher debug_unrotated_vel_pub_;
     const ros::Publisher debug_velocity_vector_image_pub_;
     const ros::Publisher debug_filtered_velocity_vector_image_pub_;
+    const ros::Publisher debug_flow_quality_pub_;
     const ros::Publisher orientation_pub_;
     const ros::Publisher twist_pub_;
 };
