@@ -974,11 +974,6 @@ bool OpticalFlowEstimator::findAverageVector(
         debug_hist_pub_.publish(cv_hist_image);
     }
 
-
-    if (flow_estimator_settings_.vector_filter == "statistical") {
-        average.x = filtered_u_x;
-        average.y = filtered_u_y;
-    }
     if (flow_estimator_settings_.vector_filter == "median") {
         if (dx.size() > 0) {
             std::sort(dx.begin(), dx.end());
@@ -995,6 +990,13 @@ bool OpticalFlowEstimator::findAverageVector(
         average.y = sample_u_y;
         return dx.size() > 0;
     }
+    
+    if(flow_estimator_settings_.vector_filter != "statistical") {
+        ROS_ERROR("iarc7_vision: incorrect vector filter selected, defaulting to statistical");
+    }
+
+    average.x = filtered_u_x;
+    average.y = filtered_u_y;
 
     return filtered_variance_accepted & enough_no_outlier_deltas;
 }
