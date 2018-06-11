@@ -971,6 +971,8 @@ bool OpticalFlowEstimator::findAverageVector(
             hist_image
         };
 
+        cv_hist_image.header.stamp = time;
+
         debug_hist_pub_.publish(cv_hist_image);
     }
 
