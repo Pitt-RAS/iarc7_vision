@@ -176,7 +176,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
                                   const bool& images_skipped)
 {
 
-    have_valid_last_image_ = !images_skipped;
+    have_valid_last_image_ = have_valid_last_image_ && !images_skipped;
 
     // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
@@ -248,7 +248,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             ROS_ASSERT(onSettingsChanged());
             have_valid_last_image_ = true;
         } else {
-            ROS_ERROR("Unable to accept new valid last iamge. Ignoring image of size (%dx%d), expected (%dx%d)",
+            ROS_ERROR("Unable to accept new valid last image. Ignoring image of size (%dx%d), expected (%dx%d)",
                       curr_image.size().width,
                       curr_image.size().height,
                       expected_input_size_.width,
