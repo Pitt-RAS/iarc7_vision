@@ -203,7 +203,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
 
     if (have_valid_last_image_) {
         if (curr_image.size() != expected_input_size_) {
-            ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
+            ROS_ERROR("No longer have last valid image. Ignoring image of size (%dx%d), expected (%dx%d)",
                       curr_image.size().width,
                       curr_image.size().height,
                       expected_input_size_.width,
@@ -248,7 +248,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             ROS_ASSERT(onSettingsChanged());
             have_valid_last_image_ = true;
         } else {
-            ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
+            ROS_ERROR("Unable to accept new valid last iamge. Ignoring image of size (%dx%d), expected (%dx%d)",
                       curr_image.size().width,
                       curr_image.size().height,
                       expected_input_size_.width,
