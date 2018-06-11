@@ -479,6 +479,8 @@ int main(int argc, char **argv)
 
     message_queue.clear();
 
+
+    bool images_skipped = false;
     // Main loop
     while (ros::ok())
     {
@@ -488,6 +490,7 @@ int main(int argc, char **argv)
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
                 message_queue.clear();
+                images_skipped = true;
                 continue;
             }
 
@@ -510,7 +513,8 @@ int main(int argc, char **argv)
 
             optical_flow_estimator->update(image,
                                            message->header.stamp,
-                                           roomba_image_locations);
+                                           roomba_image_locations,
+                                           images_skipped);
             const auto flow_time = std::chrono::high_resolution_clock::now();
 
             ROS_DEBUG_STREAM(
@@ -523,6 +527,8 @@ int main(int argc, char **argv)
                     << " Roomba: "
                     << std::chrono::duration_cast<std::chrono::microseconds>(
                         roomba_time - grid_time).count());
+
+            images_skipped = false;
         }
         else {
             rate.sleep();
