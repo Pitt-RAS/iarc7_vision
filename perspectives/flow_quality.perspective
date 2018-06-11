@@ -145,7 +145,7 @@
                 },
                 "topics": {
                   "type": "repr",
-                  "repr": "[u'/optical_flow_estimator/flow_quality/diff_filtered_and_sample_avg/x', u'/optical_flow_estimator/flow_quality/diff_filtered_and_sample_avg/y', u'/optical_flow_estimator/flow_quality/filtered_std_dev_eigen_values/y', u'/optical_flow_estimator/flow_quality/filtered_std_dev_eigen_values/x', u'/optical_flow_estimator/flow_quality/sample_average/y', u'/optical_flow_estimator/flow_quality/sample_average/x', u'/optical_flow_estimator/flow_quality/sample_std_dev_eigen_values/x', u'/optical_flow_estimator/flow_quality/sample_std_dev_eigen_values/y', u'/optical_flow_estimator/flow_quality/filtered_average/x', u'/optical_flow_estimator/flow_quality/filtered_average/y']"
+                  "repr": "[u'/optical_flow_estimator/flow_quality/sample_average/y', u'/optical_flow_estimator/flow_quality/sample_average/x', u'/optical_flow_estimator/flow_quality/filtered_average/x', u'/optical_flow_estimator/flow_quality/filtered_average/y']"
                 },
                 "y_limits": {
                   "type": "repr",
@@ -153,7 +153,7 @@
                 },
                 "x_limits": {
                   "type": "repr",
-                  "repr": "[1.6348104345449839, 5.116666555404663]"
+                  "repr": "[0.0, 1.0]"
                 }
               },
               "groups": {}
