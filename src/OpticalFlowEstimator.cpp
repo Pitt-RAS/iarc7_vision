@@ -51,7 +51,7 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       current_camera_to_level_quad_tf_(),
       last_camera_to_level_quad_tf_(),
       last_message_time_(),
-      expected_input_size_(),
+      expected_input_size_(cv::Size(0, 0)),
       target_size_(),
       local_nh_("optical_flow_estimator"),
       debug_orientation_rate_pub_(
@@ -238,7 +238,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             have_valid_last_image_ = false;
         }
     } else {
-        if (expected_input_size_ == cv::Size()) {
+        if (expected_input_size_ == cv::Size(0, 0)) {
             expected_input_size_ = curr_image.size();
             last_scaled_image_ = curr_image;
             ROS_ASSERT(onSettingsChanged());
