@@ -32,9 +32,6 @@ optical_flow_estimator:
     # Image scale factor
     scale_factor: 0.25
 
-    # Mininum number of vectors to compute flow with
-    min_vectors: 100
-
     ###############################
     ########## DEBUGGING ##########
     ###############################
@@ -78,6 +75,14 @@ optical_flow_estimator:
 
     # Max rotational velocity allowed for flow to run
     max_rotational_vel: 1.0
+
+    # Filter to use on the flow vectors
+    # Can be average, median, or statistical
+    vector_filter: 'statistical'
+
+    ##############################
+    ##### Statistical Filter #####
+    ##############################
 
     # Mininum number of vectors to compute flow with
     min_vectors: 50

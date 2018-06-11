@@ -73,6 +73,14 @@ optical_flow_estimator:
     # Timeout for updates from tf
     tf_timeout: 1.0
 
+    # Filter to use on the flow vectors
+    # Can be average, median, or statistical
+    vector_filter: 'statistical'
+
+    ##############################
+    ##### Statistical Filter #####
+    ##############################
+
     # Mininum number of vectors to compute flow with
     min_vectors: 100
 

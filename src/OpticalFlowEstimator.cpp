@@ -539,7 +539,6 @@ bool OpticalFlowEstimator::findAverageVector(
                && point.y < image_size.height * (1.0 - y_cutoff);
     };
 
-    // TODO filter properly based on magnitude, angle and standard deviation
     std::vector<double> dx;
     std::vector<double> dy;
     std::vector<cv::Point2f> filtered_heads;
@@ -689,27 +688,25 @@ bool OpticalFlowEstimator::findAverageVector(
                         << no_outlier_deltas_x.size());
     }
 
-    // Need a_x, a_y because compilation error ensues when passing
-    // average.y, average.y into lambda by reference
-    double a_x = 0.0;
-    double var_x = 0.0;
-    mean_and_var(no_outlier_deltas_x, a_x, var_x);
-    double a_y = 0.0;
-    double var_y = 0.0;
-    mean_and_var(no_outlier_deltas_y, a_y, var_y);
+    double filtered_u_x = 0.0;
+    double filtered_var_x = 0.0;
+    mean_and_var(no_outlier_deltas_x, filtered_u_x, filtered_var_x);
+    double filtered_u_y = 0.0;
+    double filtered_var_y = 0.0;
+    mean_and_var(no_outlier_deltas_y, filtered_u_y, filtered_var_y);
 
     double filtered_covariance = 0.0;
     covariance(no_outlier_deltas_x,
                no_outlier_deltas_y,
-               a_x,
-               a_y,
+               filtered_u_x,
+               filtered_u_y,
                filtered_covariance);
 
     Eigen::Matrix2d filtered_covariance_matrix = Eigen::Matrix2d::Zero();
-    filtered_covariance_matrix(0, 0) = var_x;
+    filtered_covariance_matrix(0, 0) = filtered_var_x;
     filtered_covariance_matrix(0, 1) = filtered_covariance;
     filtered_covariance_matrix(1, 0) = filtered_covariance;
-    filtered_covariance_matrix(1, 1) = var_y;
+    filtered_covariance_matrix(1, 1) = filtered_var_y;
 
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> filtered_covariance_eigen(filtered_covariance_matrix);
 
@@ -725,9 +722,6 @@ bool OpticalFlowEstimator::findAverageVector(
                         << ", "
                         << filtered_covariance_eigen.eigenvalues()[1]);
     }
-
-    average.x = a_x;
-    average.y = a_y;
 
     iarc7_msgs::FlowQuality flow_quality_msg;
     flow_quality_msg.header.stamp = time;
@@ -752,13 +746,13 @@ bool OpticalFlowEstimator::findAverageVector(
         = std::sqrt(filtered_covariance_eigen.eigenvalues()[0]);
     flow_quality_msg.filtered_std_dev_eigen_values.y
         = std::sqrt(filtered_covariance_eigen.eigenvalues()[1]);
-    flow_quality_msg.filtered_average.x = average.x;
-    flow_quality_msg.filtered_average.y = average.y;
+    flow_quality_msg.filtered_average.x = filtered_u_x;
+    flow_quality_msg.filtered_average.y = filtered_u_y;
 
     flow_quality_msg.diff_filtered_and_sample_avg.x
-        = average.x - sample_u_x;
+        = filtered_u_x - sample_u_x;
     flow_quality_msg.diff_filtered_and_sample_avg.y
-        = average.y - sample_u_y;
+        = filtered_u_y - sample_u_y;
 
     debug_flow_quality_pub_.publish(flow_quality_msg);
 
@@ -797,10 +791,10 @@ bool OpticalFlowEstimator::findAverageVector(
         plot_hist_points(dx, dy, cv::Scalar(0, 255, 0));
 
         const double sampled_filtered_diff_x
-          = (average.x - sample_u_x) * hist_scale_factor;
+          = (filtered_u_x - sample_u_x) * hist_scale_factor;
 
         const double sampled_filtered_diff_y
-          = (average.y - sample_u_y) * hist_scale_factor;
+          = (filtered_u_y - sample_u_y) * hist_scale_factor;
 
         // Plot the element acceptance boundary
         cv::ellipse(hist_image,
@@ -950,9 +944,9 @@ bool OpticalFlowEstimator::findAverageVector(
         // Filtered sample average
         cv::putText(hist_image,
                     std::string("Filtered sample avg: ")
-                        + std::to_string(average.x)
+                        + std::to_string(filtered_u_x)
                         + std::string(", ")
-                        + std::to_string(average.y),
+                        + std::to_string(filtered_u_y),
                     cv::Point(0, 135),
                     cv::FONT_HERSHEY_SIMPLEX,
                     0.5,
@@ -960,9 +954,9 @@ bool OpticalFlowEstimator::findAverageVector(
         // Sample vs filtered difference
         cv::putText(hist_image,
                     std::string("Diff filtered and sample avg: ")
-                        + std::to_string(average.x - sample_u_x)
+                        + std::to_string(filtered_u_x - sample_u_x)
                         + std::string(", ")
-                        + std::to_string(average.y - sample_u_y),
+                        + std::to_string(filtered_u_y - sample_u_y),
                     cv::Point(0, 150),
                     cv::FONT_HERSHEY_SIMPLEX,
                     0.5,
@@ -978,6 +972,28 @@ bool OpticalFlowEstimator::findAverageVector(
         cv_hist_image.header.stamp = time;
 
         debug_hist_pub_.publish(cv_hist_image);
+    }
+
+
+    if (flow_estimator_settings_.vector_filter == "statistical") {
+        average.x = filtered_u_x;
+        average.y = filtered_u_y;
+    }
+    if (flow_estimator_settings_.vector_filter == "median") {
+        if (dx.size() > 0) {
+            std::sort(dx.begin(), dx.end());
+            std::sort(dy.begin(), dy.end());
+
+            average.x = dx[dx.size() / 2];
+            average.y = dy[dy.size() / 2];
+        }
+
+        return dx.size() > 0;
+    }
+    else if (flow_estimator_settings_.vector_filter == "average") {
+        average.x = sample_u_x;
+        average.y = sample_u_y;
+        return dx.size() > 0;
     }
 
     return filtered_variance_accepted & enough_no_outlier_deltas;
