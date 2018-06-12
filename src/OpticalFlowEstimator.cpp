@@ -520,7 +520,7 @@ bool OpticalFlowEstimator::findAverageVector(
         const cv::Size& image_size,
         const cv::cuda::GpuMat& curr_frame,
         const ros::Time& time,
-        const bool& debug,
+        const bool debug,
         cv::Point2f& average) const
 {
     auto in_roomba_perimeter = [&](const cv::Point2f& point) {

@@ -177,7 +177,7 @@ class OpticalFlowEstimator {
                                          const cv::Size& image_size,
                                          const cv::cuda::GpuMat& curr_frame,
                                          const ros::Time& time,
-                                         const bool& debug,
+                                         const bool debug,
                                          cv::Point2f& average) const;
 
     /// Process the given current and last frames to find flow vectors
