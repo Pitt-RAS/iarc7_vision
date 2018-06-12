@@ -77,9 +77,8 @@ class OpticalFlowEstimator {
     /// Process a new image message
     void update(const cv::cuda::GpuMat& curr_image,
                 const ros::Time& time,
-                const std::vector<RoombaImageLocation>&
-                                    roomba_image_locations,
-                const bool& images_skipped);
+                const std::vector<RoombaImageLocation>& roomba_image_locations,
+                const bool images_skipped);
 
     /// MUST be called successfully before `update` is called
     bool __attribute__((warn_unused_result)) waitUntilReady(

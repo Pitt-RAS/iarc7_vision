@@ -13,7 +13,7 @@
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #include <Eigen/Geometry>
-#include <Eigen/Eigenvalues> 
+#include <Eigen/Eigenvalues>
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
@@ -173,7 +173,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
                                   const ros::Time& time,
                                   const std::vector<RoombaImageLocation>&
                                           roomba_image_locations,
-                                  const bool& images_skipped)
+                                  const bool images_skipped)
 {
 
     have_valid_last_image_ = have_valid_last_image_ && !images_skipped;
@@ -540,6 +540,7 @@ bool OpticalFlowEstimator::findAverageVector(
     };
 
     std::vector<double> dx;
+    dx.reserve(tails.size())
     std::vector<double> dy;
     std::vector<cv::Point2f> filtered_heads;
     std::vector<cv::Point2f> filtered_tails;
@@ -551,9 +552,9 @@ bool OpticalFlowEstimator::findAverageVector(
     for (size_t i = 0; i < tails.size(); ++i) {
         if (status[i]) {
             bool in_acceptable_area = in_acceptance_region(tails[i])
-                                      & in_acceptance_region(heads[i]);
+                                      && in_acceptance_region(heads[i]);
             bool not_in_roomba_perimeter = !in_roomba_perimeter(tails[i])
-                                           & !in_roomba_perimeter(heads[i]);
+                                           && !in_roomba_perimeter(heads[i]);
 
             if (!in_acceptable_area) {
                 rejection_region_dx.push_back(heads[i].x - tails[i].x);
@@ -565,7 +566,7 @@ bool OpticalFlowEstimator::findAverageVector(
                 roomba_region_dy.push_back(heads[i].y - tails[i].y);
             }
 
-            if(in_acceptable_area & not_in_roomba_perimeter) {
+            if(in_acceptable_area && not_in_roomba_perimeter) {
                 dx.push_back(heads[i].x - tails[i].x);
                 dy.push_back(heads[i].y - tails[i].y);
                 filtered_heads.push_back(heads[i]);
@@ -621,8 +622,8 @@ bool OpticalFlowEstimator::findAverageVector(
                             double& u,
                             double& var) {
         u = std::accumulate(x.begin(), x.end(), 0.0) / x.size();
-        var = 
-            std::accumulate(x.begin(), x.end(), 0.0, 
+        var =
+            std::accumulate(x.begin(), x.end(), 0.0,
                 [&](double& sum, double x_i) {
                     return sum + std::pow(x_i - u, 2.0);
                 })
@@ -990,7 +991,7 @@ bool OpticalFlowEstimator::findAverageVector(
         average.y = sample_u_y;
         return dx.size() > 0;
     }
-    
+
     if(flow_estimator_settings_.vector_filter != "statistical") {
         ROS_ERROR("iarc7_vision: incorrect vector filter selected, defaulting to statistical");
     }
@@ -998,7 +999,7 @@ bool OpticalFlowEstimator::findAverageVector(
     average.x = filtered_u_x;
     average.y = filtered_u_y;
 
-    return filtered_variance_accepted & enough_no_outlier_deltas;
+    return filtered_variance_accepted && enough_no_outlier_deltas;
 }
 
 void OpticalFlowEstimator::findFeatureVectors(
