@@ -19,6 +19,13 @@
 
 namespace iarc7_vision {
 
+enum class VectorFilterType
+{
+    Average,
+    Median,
+    Statistical
+};
+
 struct OpticalFlowEstimatorSettings {
     double fov;
     double min_estimation_altitude;
@@ -37,12 +44,33 @@ struct OpticalFlowEstimatorSettings {
     int debug_frameskip;
     double tf_timeout;
     double max_rotational_vel;
-    std::string vector_filter;
+    VectorFilterType vector_filter;
     int min_vectors;
     double max_filtered_variance;
     double max_normalized_element_variance;
     double hist_scale_factor;
     double hist_image_size_scale;
+
+    void set_vector_filter_str(const std::string& str) {
+        if (str == "statistical") vector_filter = VectorFilterType::Statistical;
+        else if (str == "median") vector_filter = VectorFilterType::Median;
+        else if (str == "average") vector_filter = VectorFilterType::Average;
+        else ROS_ERROR("Invalid vector filter type set, defaulting to last set");
+    }
+
+    void get_vector_filter_str(std::string& str) {
+        switch (vector_filter)
+        {
+            case VectorFilterType::Statistical:
+                str = "statistical";
+                break;
+            case VectorFilterType::Median:
+                str = "median";
+                break;
+            case VectorFilterType::Average:
+                str = "average";
+        }
+    }
 };
 
 struct OpticalFlowDebugSettings {
