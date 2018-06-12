@@ -540,15 +540,23 @@ bool OpticalFlowEstimator::findAverageVector(
     };
 
     std::vector<double> dx;
-    dx.reserve(tails.size())
+    dx.reserve(tails.size());
     std::vector<double> dy;
+    dy.reserve(tails.size());
     std::vector<cv::Point2f> filtered_heads;
+    filtered_heads.reserve(tails.size());
     std::vector<cv::Point2f> filtered_tails;
+    filtered_tails.reserve(tails.size());
     std::vector<uchar> filtered_status;
+    filtered_status.reserve(tails.size());
     std::vector<double> rejection_region_dx;
+    rejection_region_dx.reserve(tails.size());
     std::vector<double> rejection_region_dy;
+    rejection_region_dy.reserve(tails.size());
     std::vector<double> roomba_region_dx;
+    roomba_region_dx.reserve(tails.size());
     std::vector<double> roomba_region_dy;
+    roomba_region_dy.reserve(tails.size());
     for (size_t i = 0; i < tails.size(); ++i) {
         if (status[i]) {
             bool in_acceptable_area = in_acceptance_region(tails[i])
@@ -661,7 +669,9 @@ bool OpticalFlowEstimator::findAverageVector(
     Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> sample_covariance_eigen(sample_covariance_matrix);
 
     std::vector<double> no_outlier_deltas_x;
+    no_outlier_deltas_x.reserve(dx.size());
     std::vector<double> no_outlier_deltas_y;
+    no_outlier_deltas_y.reserve(dx.size());
     // Perform outlier removal
     for(size_t i = 0; i < dx.size(); i++) {
         Eigen::Vector2d delta(dx[i] - sample_u_x, dy[i] - sample_u_y);
