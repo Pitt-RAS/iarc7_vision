@@ -734,6 +734,36 @@ bool OpticalFlowEstimator::findAverageVector(
                         << filtered_covariance_eigen.eigenvalues()[1]);
     }
 
+    bool flow_average_accepted = false;
+    if (flow_estimator_settings_.vector_filter == VectorFilterType::Median) {
+        if (dx.size() > 0) {
+            std::sort(dx.begin(), dx.end());
+            std::sort(dy.begin(), dy.end());
+
+            average.x = dx[dx.size() / 2];
+            average.y = dy[dy.size() / 2];
+        }
+
+        flow_average_accepted = dx.size() > 0;
+    }
+    else if (flow_estimator_settings_.vector_filter == VectorFilterType::Average) {
+        average.x = sample_u_x;
+        average.y = sample_u_y;
+        flow_average_accepted =  dx.size() > 0;
+    }
+    else {
+        if(flow_estimator_settings_.vector_filter != VectorFilterType::Statistical) {
+            ROS_ERROR("iarc7_vision: incorrect vector filter selected, defaulting to statistical");
+        }
+
+        average.x = filtered_u_x;
+        average.y = filtered_u_y;
+        flow_average_accepted = filtered_variance_accepted && enough_no_outlier_deltas;
+    }
+
+    // Output debugging information about the Flow Quality
+    // Includes message for plotting and histogram
+
     iarc7_msgs::FlowQuality flow_quality_msg;
     flow_quality_msg.header.stamp = time;
 
@@ -985,31 +1015,7 @@ bool OpticalFlowEstimator::findAverageVector(
         debug_hist_pub_.publish(cv_hist_image);
     }
 
-    if (flow_estimator_settings_.vector_filter == VectorFilterType::Median) {
-        if (dx.size() > 0) {
-            std::sort(dx.begin(), dx.end());
-            std::sort(dy.begin(), dy.end());
-
-            average.x = dx[dx.size() / 2];
-            average.y = dy[dy.size() / 2];
-        }
-
-        return dx.size() > 0;
-    }
-    else if (flow_estimator_settings_.vector_filter == VectorFilterType::Average) {
-        average.x = sample_u_x;
-        average.y = sample_u_y;
-        return dx.size() > 0;
-    }
-
-    if(flow_estimator_settings_.vector_filter != VectorFilterType::Statistical) {
-        ROS_ERROR("iarc7_vision: incorrect vector filter selected, defaulting to statistical");
-    }
-
-    average.x = filtered_u_x;
-    average.y = filtered_u_y;
-
-    return filtered_variance_accepted && enough_no_outlier_deltas;
+    return flow_average_accepted;
 }
 
 void OpticalFlowEstimator::findFeatureVectors(
