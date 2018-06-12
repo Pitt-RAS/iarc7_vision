@@ -135,6 +135,32 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/max_rotational_vel",
             flow_settings.max_rotational_vel));
+
+    std::string vector_filter_string;
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/vector_filter",
+            vector_filter_string));
+    flow_settings.set_vector_filter_str(vector_filter_string);
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/min_vectors",
+            flow_settings.min_vectors));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/max_filtered_variance",
+            flow_settings.max_filtered_variance));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/max_normalized_element_variance",
+            flow_settings.max_normalized_element_variance));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/hist_scale_factor",
+        flow_settings.hist_scale_factor));
+
+    ROS_ASSERT(private_nh.getParam(
+        "optical_flow_estimator/hist_image_size_scale",
+        flow_settings.hist_image_size_scale));
 }
 
 void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
@@ -280,6 +306,14 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
 
         config.flow_max_rotational_vel = flow_settings.max_rotational_vel;
 
+        flow_settings.get_vector_filter_str(config.flow_vector_filter);
+
+        config.flow_min_vectors = flow_settings.min_vectors;
+        config.flow_max_filtered_variance = flow_settings.max_filtered_variance;
+        config.flow_max_normalized_element_variance = flow_settings.max_normalized_element_variance;
+        config.flow_hist_scale_factor = flow_settings.hist_scale_factor;
+        config.flow_hist_image_size_scale = flow_settings.hist_image_size_scale;
+
         ran = true;
     } else {
         // Begin line extractor settings
@@ -317,43 +351,13 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
         flow_settings.debug_frameskip = config.flow_debug_frameskip;
         flow_settings.tf_timeout = config.flow_tf_timeout;
         flow_settings.max_rotational_vel = config.flow_max_rotational_vel;
+        flow_settings.set_vector_filter_str(config.flow_vector_filter);
+        flow_settings.min_vectors = config.flow_min_vectors;
+        flow_settings.max_filtered_variance = config.flow_max_filtered_variance;
+        flow_settings.max_normalized_element_variance = config.flow_max_normalized_element_variance;
+        flow_settings.hist_scale_factor = config.flow_hist_scale_factor;
+        flow_settings.hist_image_size_scale = config.flow_hist_image_size_scale;
     }
-
-    // Begin line extractor settings
-    line_settings.pixels_per_meter = config.pixels_per_meter;
-    line_settings.canny_high_threshold = config.canny_high_threshold;
-
-    line_settings.canny_low_threshold =
-        config.canny_high_threshold / config.canny_threshold_ratio;
-
-    line_settings.canny_sobel_size = config.canny_sobel_size;
-    line_settings.hough_rho_resolution = config.hough_rho_resolution;
-    line_settings.hough_theta_resolution = config.hough_theta_resolution;
-    line_settings.hough_thresh_fraction = config.hough_thresh_fraction;
-    line_settings.fov = config.fov;
-
-    // Begin optical flow estimator settings
-    flow_settings.fov = config.flow_fov;
-    flow_settings.min_estimation_altitude
-        = config.flow_min_estimation_altitude;
-    flow_settings.camera_vertical_threshold
-        = config.flow_camera_vertical_threshold;
-    flow_settings.points = config.flow_points;
-    flow_settings.quality_level = config.flow_quality_level;
-    flow_settings.min_dist = config.flow_min_dist;
-    flow_settings.win_size = config.flow_win_size;
-    flow_settings.max_level = config.flow_max_level;
-    flow_settings.iters = config.flow_iters;
-    flow_settings.scale_factor = config.flow_scale_factor;
-    flow_settings.variance = config.flow_variance;
-    flow_settings.variance_scale = config.flow_variance_scale;
-    flow_settings.x_cutoff_region_velocity_measurement =
-        config.flow_x_cutoff_region_velocity_measurement;
-    flow_settings.y_cutoff_region_velocity_measurement =
-        config.flow_y_cutoff_region_velocity_measurement;
-    flow_settings.debug_frameskip = config.flow_debug_frameskip;
-    flow_settings.tf_timeout = config.flow_tf_timeout;
-    flow_settings.max_rotational_vel = config.flow_max_rotational_vel;
 }
 
 int main(int argc, char **argv)
@@ -484,6 +488,8 @@ int main(int argc, char **argv)
 
     message_queue.clear();
 
+
+    bool images_skipped = false;
     // Main loop
     while (ros::ok())
     {
@@ -493,6 +499,7 @@ int main(int argc, char **argv)
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
                 message_queue.clear();
+                images_skipped = true;
                 continue;
             }
 
@@ -515,7 +522,8 @@ int main(int argc, char **argv)
 
             optical_flow_estimator->update(image,
                                            message->header.stamp,
-                                           roomba_image_locations);
+                                           roomba_image_locations,
+                                           images_skipped);
             const auto flow_time = std::chrono::high_resolution_clock::now();
 
             ROS_DEBUG_STREAM(
@@ -528,6 +536,8 @@ int main(int argc, char **argv)
                     << " Roomba: "
                     << std::chrono::duration_cast<std::chrono::microseconds>(
                         roomba_time - grid_time).count());
+
+            images_skipped = false;
         }
         else {
             rate.sleep();

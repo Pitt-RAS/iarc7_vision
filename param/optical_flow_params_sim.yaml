@@ -75,3 +75,26 @@ optical_flow_estimator:
 
     # Max rotational velocity allowed for flow to run
     max_rotational_vel: 1.0
+
+    # Filter to use on the flow vectors
+    # Can be average, median, or statistical
+    vector_filter: 'statistical'
+
+    ##############################
+    ##### Statistical Filter #####
+    ##############################
+
+    # Mininum number of vectors to compute flow with
+    min_vectors: 50
+
+    # Maximum variance of the vector samples
+    max_filtered_variance: 1
+
+    # Maximum normalized variance of an element to be included in average
+    max_normalized_element_variance: 2
+
+    # Scaling factor used to scale the debugging histogram features
+    hist_scale_factor: 100
+
+    # Scaling factor used to scale the debugging histogram image
+    hist_image_size_scale: 1.5

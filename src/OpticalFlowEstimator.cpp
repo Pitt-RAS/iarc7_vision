@@ -1,3 +1,5 @@
+#include <numeric>
+
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 
 // BAD HEADER
@@ -11,6 +13,7 @@
 #pragma GCC diagnostic ignored "-Wignored-attributes"
 #pragma GCC diagnostic ignored "-Wmisleading-indentation"
 #include <Eigen/Geometry>
+#include <Eigen/Eigenvalues>
 #pragma GCC diagnostic pop
 // END BAD HEADER
 
@@ -24,7 +27,8 @@
 
 #include <geometry_msgs/PointStamped.h>
 #include <geometry_msgs/Vector3Stamped.h>
-#include <iarc7_msgs/OrientationAnglesStamped.h>
+#include "iarc7_msgs/OrientationAnglesStamped.h"
+#include "iarc7_msgs/FlowQuality.h"
 
 namespace iarc7_vision {
 
@@ -47,7 +51,7 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       current_camera_to_level_quad_tf_(),
       last_camera_to_level_quad_tf_(),
       last_message_time_(),
-      expected_input_size_(),
+      expected_input_size_(cv::Size(0, 0)),
       target_size_(),
       local_nh_("optical_flow_estimator"),
       debug_orientation_rate_pub_(
@@ -78,6 +82,9 @@ OpticalFlowEstimator::OpticalFlowEstimator(
               local_nh_.advertise<sensor_msgs::Image>("vector_image", 1)),
       debug_filtered_velocity_vector_image_pub_(
               local_nh_.advertise<sensor_msgs::Image>("filtered_vector_image", 1)),
+      debug_flow_quality_pub_(
+              local_nh_.advertise<iarc7_msgs::FlowQuality>(
+                  "flow_quality", 10)),
       orientation_pub_(
               local_nh_.advertise<iarc7_msgs::OrientationAnglesStamped>(
                   "orientation", 10)),
@@ -165,8 +172,12 @@ bool __attribute__((warn_unused_result))
 void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
                                   const ros::Time& time,
                                   const std::vector<RoombaImageLocation>&
-                                          roomba_image_locations)
+                                          roomba_image_locations,
+                                  const bool images_skipped)
 {
+
+    have_valid_last_image_ = have_valid_last_image_ && !images_skipped;
+
     // start time for debugging time spent in updateFilteredPosition
     const ros::WallTime start = ros::WallTime::now();
 
@@ -192,7 +203,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
 
     if (have_valid_last_image_) {
         if (curr_image.size() != expected_input_size_) {
-            ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
+            ROS_ERROR("No longer have last valid image. Ignoring image of size (%dx%d), expected (%dx%d)",
                       curr_image.size().width,
                       curr_image.size().height,
                       expected_input_size_.width,
@@ -227,7 +238,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             have_valid_last_image_ = false;
         }
     } else {
-        if (expected_input_size_ == cv::Size()) {
+        if (expected_input_size_ == cv::Size(0, 0)) {
             expected_input_size_ = curr_image.size();
             last_scaled_image_ = curr_image;
             ROS_ASSERT(onSettingsChanged());
@@ -237,7 +248,7 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
             ROS_ASSERT(onSettingsChanged());
             have_valid_last_image_ = true;
         } else {
-            ROS_ERROR("Ignoring image of size (%dx%d), expected (%dx%d)",
+            ROS_ERROR("Unable to accept new valid last image. Ignoring image of size (%dx%d), expected (%dx%d)",
                       curr_image.size().width,
                       curr_image.size().height,
                       expected_input_size_.width,
@@ -508,10 +519,10 @@ bool OpticalFlowEstimator::findAverageVector(
         const std::vector<RoombaImageLocation>& roomba_image_locations,
         const cv::Size& image_size,
         const cv::cuda::GpuMat& curr_frame,
+        const ros::Time& time,
+        const bool debug,
         cv::Point2f& average) const
 {
-    size_t num_points = 0;
-
     auto in_roomba_perimeter = [&](const cv::Point2f& point) {
         for(const auto& roomba : roomba_image_locations) {
             if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
@@ -528,25 +539,54 @@ bool OpticalFlowEstimator::findAverageVector(
                && point.y < image_size.height * (1.0 - y_cutoff);
     };
 
-    // TODO filter properly based on magnitude, angle and standard deviation
     std::vector<double> dx;
+    dx.reserve(tails.size());
     std::vector<double> dy;
+    dy.reserve(tails.size());
     std::vector<cv::Point2f> filtered_heads;
+    filtered_heads.reserve(tails.size());
     std::vector<cv::Point2f> filtered_tails;
+    filtered_tails.reserve(tails.size());
     std::vector<uchar> filtered_status;
+    filtered_status.reserve(tails.size());
+    std::vector<double> rejection_region_dx;
+    rejection_region_dx.reserve(tails.size());
+    std::vector<double> rejection_region_dy;
+    rejection_region_dy.reserve(tails.size());
+    std::vector<double> roomba_region_dx;
+    roomba_region_dx.reserve(tails.size());
+    std::vector<double> roomba_region_dy;
+    roomba_region_dy.reserve(tails.size());
     for (size_t i = 0; i < tails.size(); ++i) {
-        if (status[i]
-         && in_acceptance_region(tails[i])
-         && in_acceptance_region(heads[i])
-         && !in_roomba_perimeter(tails[i])
-         && !in_roomba_perimeter(heads[i])) {
-            dx.push_back(heads[i].x - tails[i].x);
-            dy.push_back(heads[i].y - tails[i].y);
-            filtered_heads.push_back(heads[i]);
-            filtered_tails.push_back(tails[i]);
-            filtered_status.push_back(static_cast<uchar>(true));
-            num_points++;
+        if (status[i]) {
+            bool in_acceptable_area = in_acceptance_region(tails[i])
+                                      && in_acceptance_region(heads[i]);
+            bool not_in_roomba_perimeter = !in_roomba_perimeter(tails[i])
+                                           && !in_roomba_perimeter(heads[i]);
+
+            if (!in_acceptable_area) {
+                rejection_region_dx.push_back(heads[i].x - tails[i].x);
+                rejection_region_dy.push_back(heads[i].y - tails[i].y);
+            }
+
+            if (!not_in_roomba_perimeter) {
+                roomba_region_dx.push_back(heads[i].x - tails[i].x);
+                roomba_region_dy.push_back(heads[i].y - tails[i].y);
+            }
+
+            if(in_acceptable_area && not_in_roomba_perimeter) {
+                dx.push_back(heads[i].x - tails[i].x);
+                dy.push_back(heads[i].y - tails[i].y);
+                filtered_heads.push_back(heads[i]);
+                filtered_tails.push_back(tails[i]);
+                filtered_status.push_back(static_cast<uchar>(true));
+            }
         }
+    }
+
+    if(filtered_tails.size() == 0) {
+        ROS_WARN("iarc7_vision: No flow vectors were within the acceptable image region");
+        return false;
     }
 
     // Publish debugging image with only the vectors used drawn
@@ -586,15 +626,396 @@ bool OpticalFlowEstimator::findAverageVector(
 
     debug_filtered_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
 
-    std::sort(dx.begin(), dx.end());
-    std::sort(dy.begin(), dy.end());
+    auto mean_and_var = [&](const std::vector<double>& x,
+                            double& u,
+                            double& var) {
+        u = std::accumulate(x.begin(), x.end(), 0.0) / x.size();
+        var =
+            std::accumulate(x.begin(), x.end(), 0.0,
+                [&](double& sum, double x_i) {
+                    return sum + std::pow(x_i - u, 2.0);
+                })
+            / x.size();
+    };
 
-    if (num_points != 0) {
-        average.x = dx[dx.size() / 2];
-        average.y = dy[dy.size() / 2];
+    double sample_u_x = 0.0;
+    double sample_var_x = 0.0;
+    mean_and_var(dx, sample_u_x, sample_var_x);
+    double sample_u_y = 0.0;
+    double sample_var_y = 0.0;
+    mean_and_var(dy, sample_u_y, sample_var_y);
+
+    auto covariance = [&](const std::vector<double>& x,
+                          const std::vector<double>& y,
+                          const double& u_x,
+                          const double& u_y,
+                          double& cov) {
+        double sum_xy = 0.0;
+        for(size_t i = 0; i < x.size(); i++) {
+            sum_xy += x[i]*y[i];
+        }
+        cov = (sum_xy/static_cast<double>(x.size())) - (u_x * u_y);
+    };
+
+    double sample_covariance = 0.0;
+    covariance(dx, dy, sample_u_x, sample_u_y, sample_covariance);
+
+    Eigen::Matrix2d sample_covariance_matrix = Eigen::Matrix2d::Zero();
+    sample_covariance_matrix(0, 0) = sample_var_x;
+    sample_covariance_matrix(0, 1) = sample_covariance;
+    sample_covariance_matrix(1, 0) = sample_covariance;
+    sample_covariance_matrix(1, 1) = sample_var_y;
+
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> sample_covariance_eigen(sample_covariance_matrix);
+
+    std::vector<double> no_outlier_deltas_x;
+    no_outlier_deltas_x.reserve(dx.size());
+    std::vector<double> no_outlier_deltas_y;
+    no_outlier_deltas_y.reserve(dx.size());
+    // Perform outlier removal
+    for(size_t i = 0; i < dx.size(); i++) {
+        Eigen::Vector2d delta(dx[i] - sample_u_x, dy[i] - sample_u_y);
+        double normalized_variance
+            = delta.transpose() * sample_covariance_matrix.inverse() * delta;
+        if(normalized_variance
+              <= flow_estimator_settings_.max_normalized_element_variance) {
+            no_outlier_deltas_x.push_back(dx[i]);
+            no_outlier_deltas_y.push_back(dy[i]);
+        }
     }
 
-    return num_points != 0;
+    if(no_outlier_deltas_x.size() == 0) {
+        ROS_WARN_STREAM("iarc7_vision: No vectors were within the outlier boundaries, "
+                        << "cannot compute average vector");
+        return false;
+    }
+
+    bool enough_no_outlier_deltas = static_cast<int>(no_outlier_deltas_x.size())
+                                      >= flow_estimator_settings_.min_vectors;
+    if(!enough_no_outlier_deltas) {
+        ROS_WARN_STREAM("iarc7_vision: Not enough flow vectors after outlier rejection, Min: "
+                        << flow_estimator_settings_.min_vectors
+                        << " Actual: "
+                        << no_outlier_deltas_x.size());
+    }
+
+    double filtered_u_x = 0.0;
+    double filtered_var_x = 0.0;
+    mean_and_var(no_outlier_deltas_x, filtered_u_x, filtered_var_x);
+    double filtered_u_y = 0.0;
+    double filtered_var_y = 0.0;
+    mean_and_var(no_outlier_deltas_y, filtered_u_y, filtered_var_y);
+
+    double filtered_covariance = 0.0;
+    covariance(no_outlier_deltas_x,
+               no_outlier_deltas_y,
+               filtered_u_x,
+               filtered_u_y,
+               filtered_covariance);
+
+    Eigen::Matrix2d filtered_covariance_matrix = Eigen::Matrix2d::Zero();
+    filtered_covariance_matrix(0, 0) = filtered_var_x;
+    filtered_covariance_matrix(0, 1) = filtered_covariance;
+    filtered_covariance_matrix(1, 0) = filtered_covariance;
+    filtered_covariance_matrix(1, 1) = filtered_var_y;
+
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix2d> filtered_covariance_eigen(filtered_covariance_matrix);
+
+    bool filtered_variance_accepted =
+        (filtered_covariance_eigen.eigenvalues()[0] <= flow_estimator_settings_.max_filtered_variance)
+        & (filtered_covariance_eigen.eigenvalues()[1] <= flow_estimator_settings_.max_filtered_variance);
+
+    if(!filtered_variance_accepted) {
+        ROS_WARN_STREAM("iarc7_vision: Flow filtered variance out of bounds. Max: "
+                        << flow_estimator_settings_.max_filtered_variance
+                        << " Actual: "
+                        << filtered_covariance_eigen.eigenvalues()[0]
+                        << ", "
+                        << filtered_covariance_eigen.eigenvalues()[1]);
+    }
+
+    bool flow_average_accepted = false;
+    if (flow_estimator_settings_.vector_filter == VectorFilterType::Median) {
+        if (dx.size() > 0) {
+            std::sort(dx.begin(), dx.end());
+            std::sort(dy.begin(), dy.end());
+
+            average.x = dx[dx.size() / 2];
+            average.y = dy[dy.size() / 2];
+        }
+
+        flow_average_accepted = dx.size() > 0;
+    }
+    else if (flow_estimator_settings_.vector_filter == VectorFilterType::Average) {
+        average.x = sample_u_x;
+        average.y = sample_u_y;
+        flow_average_accepted =  dx.size() > 0;
+    }
+    else {
+        if(flow_estimator_settings_.vector_filter != VectorFilterType::Statistical) {
+            ROS_ERROR("iarc7_vision: incorrect vector filter selected, defaulting to statistical");
+        }
+
+        average.x = filtered_u_x;
+        average.y = filtered_u_y;
+        flow_average_accepted = filtered_variance_accepted && enough_no_outlier_deltas;
+    }
+
+    // Output debugging information about the Flow Quality
+    // Includes message for plotting and histogram
+
+    iarc7_msgs::FlowQuality flow_quality_msg;
+    flow_quality_msg.header.stamp = time;
+
+    flow_quality_msg.num_starting_vectors = dx.size()
+                                            + rejection_region_dx.size()
+                                            + roomba_region_dx.size();
+    flow_quality_msg.num_rejection_region_vectors = rejection_region_dx.size();
+    flow_quality_msg.num_roomba_region_vectors = roomba_region_dx.size();
+    flow_quality_msg.num_exceeded_element_var_vectors
+        = dx.size() - no_outlier_deltas_x.size();
+    flow_quality_msg.num_accepted_vectors = no_outlier_deltas_x.size();
+
+    flow_quality_msg.sample_std_dev_eigen_values.x
+        = std::sqrt(sample_covariance_eigen.eigenvalues()[0]);
+    flow_quality_msg.sample_std_dev_eigen_values.y
+        = std::sqrt(sample_covariance_eigen.eigenvalues()[1]);
+    flow_quality_msg.sample_average.x = sample_u_x;
+    flow_quality_msg.sample_average.y = sample_u_y;
+
+    flow_quality_msg.filtered_std_dev_eigen_values.x
+        = std::sqrt(filtered_covariance_eigen.eigenvalues()[0]);
+    flow_quality_msg.filtered_std_dev_eigen_values.y
+        = std::sqrt(filtered_covariance_eigen.eigenvalues()[1]);
+    flow_quality_msg.filtered_average.x = filtered_u_x;
+    flow_quality_msg.filtered_average.y = filtered_u_y;
+
+    flow_quality_msg.diff_filtered_and_sample_avg.x
+        = filtered_u_x - sample_u_x;
+    flow_quality_msg.diff_filtered_and_sample_avg.y
+        = filtered_u_y - sample_u_y;
+
+    debug_flow_quality_pub_.publish(flow_quality_msg);
+
+    if (debug && debug_settings_.debug_hist) {
+        // Histogram scale factor scales image so that a more readable plot is made
+        const double hist_scale_factor = flow_estimator_settings_.hist_scale_factor;
+        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height
+                                                * flow_estimator_settings_.hist_image_size_scale,
+                                            curr_frame.size().width
+                                                * flow_estimator_settings_.hist_image_size_scale,
+                                            CV_8UC3);
+
+        auto plot_hist_points = [&](const std::vector<double>& points_x,
+                                    const std::vector<double>& points_y,
+                                    const cv::Scalar& color) {
+            for (size_t i = 0; i < points_x.size(); i++) {
+                int x = ((points_x[i] - sample_u_x) * hist_scale_factor) + hist_image.size().width / 2;
+                int y = ((points_y[i] - sample_u_y) * hist_scale_factor) + hist_image.size().height / 2;
+                if (x >= 0 && x < hist_image.size().width
+                 && y >= 0 && y < hist_image.size().height) {
+                    hist_image.at<cv::Vec3b>(cv::Point(x, y))[0] = color[0];
+                    hist_image.at<cv::Vec3b>(cv::Point(x, y))[1] = color[1];
+                    hist_image.at<cv::Vec3b>(cv::Point(x, y))[2] = color[2];
+
+                } else {
+                    ROS_DEBUG("VECTOR OUTSIDE HIST IMAGE");
+                }
+            }
+        };
+
+        // Plot all the vectors in the rejection region
+        //plot_hist_points(rejection_region_dx, rejection_region_dy, cv::Scalar(255, 0, 0));
+        // Plot all the vectors on the roomba
+        plot_hist_points(roomba_region_dx, roomba_region_dy, cv::Scalar(0, 0, 255));
+        // Plot all the vectors not in the rejection regions
+        plot_hist_points(dx, dy, cv::Scalar(0, 255, 0));
+
+        const double sampled_filtered_diff_x
+          = (filtered_u_x - sample_u_x) * hist_scale_factor;
+
+        const double sampled_filtered_diff_y
+          = (filtered_u_y - sample_u_y) * hist_scale_factor;
+
+        // Plot the element acceptance boundary
+        cv::ellipse(hist_image,
+                    cv::Point(hist_image.size().width / 2,
+                              hist_image.size().height / 2),
+                    cv::Size(std::sqrt(flow_estimator_settings_.max_normalized_element_variance
+                                           * sample_covariance_eigen.eigenvalues()[0])
+                                 * hist_scale_factor,
+                             std::sqrt(flow_estimator_settings_.max_normalized_element_variance
+                                           * sample_covariance_eigen.eigenvalues()[1])
+                                 * hist_scale_factor),
+                    std::atan2(-sample_covariance_eigen.eigenvectors().col(0)[1],
+                               sample_covariance_eigen.eigenvectors().col(0)[0])
+                        * 180.0 / CV_PI,
+                    0.0, // Draw the whole ellipse
+                    360.0, // Draw the whole ellipse,
+                    cv::Scalar(255, 0, 0));
+
+        // Plot the filtered sample max variance limit
+        cv::circle(hist_image,
+                    cv::Point(sampled_filtered_diff_x + hist_image.size().width / 2,
+                              sampled_filtered_diff_y + hist_image.size().height / 2),
+                   std::sqrt(flow_estimator_settings_.max_filtered_variance)
+                       * hist_scale_factor,
+                   cv::Scalar(255, 255, 255));
+
+        // Plot the filtered sample variance
+        cv::ellipse(hist_image,
+                    cv::Point(sampled_filtered_diff_x + hist_image.size().width / 2,
+                              sampled_filtered_diff_y + hist_image.size().height / 2),
+                    cv::Size(std::sqrt(filtered_covariance_eigen.eigenvalues()[0])
+                                 * hist_scale_factor,
+                             std::sqrt(filtered_covariance_eigen.eigenvalues()[1])
+                                 * hist_scale_factor),
+                    std::atan2(-filtered_covariance_eigen.eigenvectors().col(0)[1],
+                               filtered_covariance_eigen.eigenvectors().col(0)[0])
+                        * 180.0 / CV_PI,
+                    0.0, // Draw the whole ellipse
+                    360.0, // Draw the whole ellipse,
+                    cv::Scalar(255, 255, 0));
+
+        // Plot two lines that intersect at the sample average
+        cv::line(hist_image,
+                 cv::Point(hist_image.size().width/2,0),
+                 cv::Point(hist_image.size().width/2,
+                           hist_image.size().height),
+                 cv::Scalar(255, 0, 0));
+        cv::line(hist_image,
+                 cv::Point(0, hist_image.size().height/2),
+                 cv::Point(hist_image.size().width,
+                           hist_image.size().height/2),
+                 cv::Scalar(255, 0, 0));
+
+        // Plot two lines that intersect at the filtered average
+        cv::line(hist_image,
+                 cv::Point(sampled_filtered_diff_x
+                               + hist_image.size().width/2,
+                           0),
+                 cv::Point(sampled_filtered_diff_x
+                               + hist_image.size().width/2,
+                           hist_image.size().height),
+                 cv::Scalar(255, 255, 0));
+        cv::line(hist_image,
+                 cv::Point(0,
+                           sampled_filtered_diff_y
+                               + hist_image.size().height/2),
+                 cv::Point(hist_image.size().width,
+                           sampled_filtered_diff_y
+                               + hist_image.size().height/2),
+                 cv::Scalar(255, 255, 0));
+
+        // Put text on image about vector stats
+        // How many vectors were found by flow
+        cv::putText(hist_image,
+                    std::string("Starting vectors: ")
+                        + std::to_string(dx.size()
+                                         + rejection_region_dx.size()
+                                         + roomba_region_dx.size()),
+                    cv::Point(0, 15),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were rejected by image region
+        cv::putText(hist_image,
+                    std::string("In rejection region: ")
+                        + std::to_string(rejection_region_dx.size()),
+                    cv::Point(0, 30),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were rejected by roomba region
+        cv::putText(hist_image,
+                    std::string("In roomba region: ")
+                        + std::to_string(roomba_region_dx.size()),
+                    cv::Point(0, 45),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were rejected by stat filter
+        cv::putText(hist_image,
+                    std::string("Exceed element var: ")
+                        + std::to_string(dx.size() - no_outlier_deltas_x.size()),
+                    cv::Point(0, 60),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // How many vectors were accepted after statistical filtering
+        cv::putText(hist_image,
+                    std::string("Left post stat filter: ")
+                        + std::to_string(no_outlier_deltas_x.size()),
+                    cv::Point(0, 75),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // Eigen values corresponding to the max element variance
+        cv::putText(hist_image,
+                    std::string("Sample std dev acceptance: ")
+                        + std::to_string(std::sqrt(flow_estimator_settings_.max_normalized_element_variance
+                                           * sample_covariance_eigen.eigenvalues()[0]))
+                        + std::string(", ")
+                        + std::to_string(std::sqrt(flow_estimator_settings_.max_normalized_element_variance
+                                           * sample_covariance_eigen.eigenvalues()[1])),
+                    cv::Point(0, 90),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // Sample average
+        cv::putText(hist_image,
+                    std::string("Sample avg: ")
+                        + std::to_string(sample_u_x)
+                        + std::string(", ")
+                        + std::to_string(sample_u_y),
+                    cv::Point(0, 105),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // Filtered sample std dev
+        cv::putText(hist_image,
+                    std::string("Filtered sample std dev: ")
+                        + std::to_string(std::sqrt(filtered_covariance_eigen.eigenvalues()[0]))
+                        + std::string(", ")
+                        + std::to_string(std::sqrt(filtered_covariance_eigen.eigenvalues()[1])),
+                    cv::Point(0, 120),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // Filtered sample average
+        cv::putText(hist_image,
+                    std::string("Filtered sample avg: ")
+                        + std::to_string(filtered_u_x)
+                        + std::string(", ")
+                        + std::to_string(filtered_u_y),
+                    cv::Point(0, 135),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+        // Sample vs filtered difference
+        cv::putText(hist_image,
+                    std::string("Diff filtered and sample avg: ")
+                        + std::to_string(filtered_u_x - sample_u_x)
+                        + std::string(", ")
+                        + std::to_string(filtered_u_y - sample_u_y),
+                    cv::Point(0, 150),
+                    cv::FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    cv::Scalar(255, 255, 255));
+
+
+        cv_bridge::CvImage cv_hist_image {
+            std_msgs::Header(),
+            sensor_msgs::image_encodings::RGB8,
+            hist_image
+        };
+
+        cv_hist_image.header.stamp = time;
+
+        debug_hist_pub_.publish(cv_hist_image);
+    }
+
+    return flow_average_accepted;
 }
 
 void OpticalFlowEstimator::findFeatureVectors(
@@ -654,34 +1075,6 @@ void OpticalFlowEstimator::findFeatureVectors(
 
         debug_velocity_vector_image_pub_.publish(cv_image.toImageMsg());
     }
-
-    if (debug && debug_settings_.debug_hist) {
-        cv::Mat hist_image = cv::Mat::zeros(curr_frame.size().height * 2,
-                                            curr_frame.size().width * 2,
-                                            CV_8UC1);
-        for (size_t i = 0; i < tails.size(); i++) {
-            if (status[i]) {
-                int dx = (int)tails[i].x - (int)heads[i].x;
-                int dy = (int)tails[i].y - (int)heads[i].y;
-                int x = dx + hist_image.size().width / 2;
-                int y = dy + hist_image.size().height / 2;
-                if (x >= 0 && x < hist_image.size().width
-                 && y >= 0 && y < hist_image.size().height) {
-                    hist_image.at<uint8_t>(cv::Point(x, y)) = 255;
-                } else {
-                    ROS_ERROR("VECTOR OUTSIDE HIST IMAGE");
-                }
-            }
-        }
-
-        cv_bridge::CvImage cv_hist_image {
-            std_msgs::Header(),
-            sensor_msgs::image_encodings::MONO8,
-            hist_image
-        };
-
-        debug_hist_pub_.publish(cv_hist_image);
-    }
 }
 
 double OpticalFlowEstimator::getFocalLength(
@@ -734,10 +1127,12 @@ void OpticalFlowEstimator::processImage(const cv::cuda::GpuMat& image,
             roomba_image_locations,
             target_size_,
             image,
+            time,
+            debug,
             average_vec);
 
     if (!found_average) {
-        ROS_ERROR("OpticalFlow image with no valid features, returning");
+        ROS_WARN("iarc7_vision: OpticalFlow image with no valid features, returning");
         return;
     }
 

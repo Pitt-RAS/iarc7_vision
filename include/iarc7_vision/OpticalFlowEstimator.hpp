@@ -19,6 +19,13 @@
 
 namespace iarc7_vision {
 
+enum class VectorFilterType
+{
+    Average,
+    Median,
+    Statistical
+};
+
 struct OpticalFlowEstimatorSettings {
     double fov;
     double min_estimation_altitude;
@@ -37,6 +44,33 @@ struct OpticalFlowEstimatorSettings {
     int debug_frameskip;
     double tf_timeout;
     double max_rotational_vel;
+    VectorFilterType vector_filter;
+    int min_vectors;
+    double max_filtered_variance;
+    double max_normalized_element_variance;
+    double hist_scale_factor;
+    double hist_image_size_scale;
+
+    void set_vector_filter_str(const std::string& str) {
+        if (str == "statistical") vector_filter = VectorFilterType::Statistical;
+        else if (str == "median") vector_filter = VectorFilterType::Median;
+        else if (str == "average") vector_filter = VectorFilterType::Average;
+        else ROS_ERROR("Invalid vector filter type set, defaulting to last set");
+    }
+
+    void get_vector_filter_str(std::string& str) {
+        switch (vector_filter)
+        {
+            case VectorFilterType::Statistical:
+                str = "statistical";
+                break;
+            case VectorFilterType::Median:
+                str = "median";
+                break;
+            case VectorFilterType::Average:
+                str = "average";
+        }
+    }
 };
 
 struct OpticalFlowDebugSettings {
@@ -71,8 +105,8 @@ class OpticalFlowEstimator {
     /// Process a new image message
     void update(const cv::cuda::GpuMat& curr_image,
                 const ros::Time& time,
-                const std::vector<RoombaImageLocation>&
-                                    roomba_image_locations);
+                const std::vector<RoombaImageLocation>& roomba_image_locations,
+                const bool images_skipped);
 
     /// MUST be called successfully before `update` is called
     bool __attribute__((warn_unused_result)) waitUntilReady(
@@ -125,6 +159,10 @@ class OpticalFlowEstimator {
     /// @param[in]  image_size {Size of image that the points are from, used for
     ///                         calculating cutoffs}
     /// @param[in]  curr_frame The current frame, in RGB8
+    /// @param[in]  time       Timestamp when `image` was captured
+    /// @param[in]  debug      {Whether to spit out debug info, like
+    ///                         images from intermediate steps or with
+    ///                         arrows drawn}
     /// @param[out] average    Average movement of the features in the frame
     ///
     /// @return                {True if result is valid (i.e. at least one
@@ -138,6 +176,8 @@ class OpticalFlowEstimator {
                                              roomba_image_locations,
                                          const cv::Size& image_size,
                                          const cv::cuda::GpuMat& curr_frame,
+                                         const ros::Time& time,
+                                         const bool debug,
                                          cv::Point2f& average) const;
 
     /// Process the given current and last frames to find flow vectors
@@ -261,6 +301,7 @@ class OpticalFlowEstimator {
     const ros::Publisher debug_unrotated_vel_pub_;
     const ros::Publisher debug_velocity_vector_image_pub_;
     const ros::Publisher debug_filtered_velocity_vector_image_pub_;
+    const ros::Publisher debug_flow_quality_pub_;
     const ros::Publisher orientation_pub_;
     const ros::Publisher twist_pub_;
 };
