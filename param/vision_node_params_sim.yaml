@@ -66,6 +66,7 @@ roomba_estimator:
     template_pixels_per_meter: 335
     # Measured in meters
     roomba_plate_width: 0.254
+    roomba_plate_height: 0.15
     # Measued in meters
     roomba_height: 0.065
 
@@ -85,6 +86,10 @@ roomba_estimator:
 
     morphology_size: 3
     morphology_iterations: 3
+
+    # Multiplier on difference between observed and actual plate diagonal to
+    # get angle estimate stddev
+    uncertainty_scale: 1.0
 
     # Camera settings
     # https://en.wikipedia.org/wiki/LifeCam#HD-6000

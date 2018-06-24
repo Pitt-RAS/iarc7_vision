@@ -8,6 +8,7 @@ namespace iarc7_vision
 struct RoombaEstimatorSettings {
     double template_pixels_per_meter;
     double roomba_plate_width;
+    double roomba_plate_height;
     double roomba_height;
 
     int min_roomba_blob_size;
@@ -26,6 +27,8 @@ struct RoombaEstimatorSettings {
 
     int morphology_size;
     int morphology_iterations;
+
+    double uncertainty_scale;
 
     double bottom_camera_aov;
     bool debug_hsv_slice;

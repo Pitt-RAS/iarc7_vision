@@ -79,13 +79,20 @@ void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
     cv::Mat structuring_element = cv::getStructuringElement(
             cv::MORPH_RECT,
             cv::Size(settings_.morphology_size, settings_.morphology_size));
-    cv::Ptr<cv::cuda::Filter> morphology = cv::cuda::createMorphologyFilter(
+    cv::Ptr<cv::cuda::Filter> morphology_open = cv::cuda::createMorphologyFilter(
             cv::MORPH_OPEN,
             CV_8UC1,
             structuring_element,
             cv::Point(-1, -1),
             settings_.morphology_iterations);
-    morphology->apply(dst, dst);
+    morphology_open->apply(dst, dst);
+    cv::Ptr<cv::cuda::Filter> morphology_close = cv::cuda::createMorphologyFilter(
+            cv::MORPH_CLOSE,
+            CV_8UC1,
+            structuring_element,
+            cv::Point(-1, -1),
+            settings_.morphology_iterations);
+    morphology_close->apply(dst, dst);
 
     ROS_ASSERT(dst.channels() == 1);
 }
@@ -138,6 +145,7 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
         // throw out blobs that are too small or too large
         if (moments.m00 < settings_.min_roomba_blob_size
          || moments.m00 > settings_.max_roomba_blob_size) {
+            ROS_DEBUG("Rejecting bad blob size: %f", moments.m00);
             continue;
         }
 
@@ -198,17 +206,17 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
                 cv::Size2f(rect_max_x - rect_min_x, rect_max_y - rect_min_y),
                 -std::atan2(evector1(0), evector1(1)) * 180 / M_PI);
 
-        if (rect.size.height > rect.size.width * 4
-         || rect.size.width > rect.size.height * 4) {
-            continue;
-        }
         boundRect.push_back(rect);
     }
 }
 
 void RoombaBlobDetector::checkCorners(const cv::cuda::GpuMat& image,
-                                      std::vector<cv::RotatedRect>& rects)
+                                      std::vector<cv::RotatedRect>& rects,
+                                      std::vector<double>& flip_certainties)
 {
+    ROS_ASSERT(flip_certainties.empty());
+    flip_certainties.reserve(rects.size());
+
     cv::Mat cpu_image;
     image.download(cpu_image);
 
@@ -225,6 +233,7 @@ void RoombaBlobDetector::checkCorners(const cv::cuda::GpuMat& image,
                              * (1 - scale) / 2
                              * cv::Point2f(-std::sin(rads), std::cos(rads));
 
+        // True if the patch is red/green, false otherwise
         cv::Mat corners = cv::Mat::zeros(2, 2, CV_8UC1);
 
         for (int i = -1; i != 3; i += 2) {
@@ -236,6 +245,7 @@ void RoombaBlobDetector::checkCorners(const cv::cuda::GpuMat& image,
                 patch_sum_mat.at<cv::Vec3b>(0, 0) = patch_sum;
                 cv::cvtColor(patch_sum_mat, patch_sum_mat, cv::COLOR_RGB2HSV);
 
+                // True if the patch is red/green, false otherwise
                 cv::Mat patch_good_mat = cv::Mat::zeros(1, 1, CV_8U);
                 patch_good_mat.at<uchar>(0, 0) = 0;
 
@@ -283,12 +293,21 @@ void RoombaBlobDetector::checkCorners(const cv::cuda::GpuMat& image,
          && corners.at<uchar>(1, 1)) {
             rect.angle += 180;
             rect.angle = std::fmod(rect.angle, 360);
+            flip_certainties.push_back(1.0);
+        } else if (corners.at<uchar>(0, 0)
+                && corners.at<uchar>(0, 1)
+                && !corners.at<uchar>(1, 0)
+                && !corners.at<uchar>(1, 1)) {
+            flip_certainties.push_back(1.0);
+        } else {
+            flip_certainties.push_back(0.0);
         }
     }
 }
 
 void RoombaBlobDetector::detect(const cv::cuda::GpuMat& image,
-                                std::vector<cv::RotatedRect>& bounding_rects)
+                                std::vector<cv::RotatedRect>& bounding_rects,
+                                std::vector<double>& flip_certainties)
 {
     cv::cuda::GpuMat mask;
     thresholdFrame(image, mask);
@@ -307,7 +326,7 @@ void RoombaBlobDetector::detect(const cv::cuda::GpuMat& image,
     }
 
     boundMask(mask, bounding_rects);
-    checkCorners(image, bounding_rects);
+    checkCorners(image, bounding_rects, flip_certainties);
 }
 
 } // namespace iarc7_vision

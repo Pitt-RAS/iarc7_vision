@@ -25,7 +25,8 @@ class RoombaBlobDetector {
     /// @param[in]   image           Current frame to process (in rgb8)
     /// @param[out]  bounding_rects  Bounding rectangles of detected top plates
     void detect(const cv::cuda::GpuMat& image,
-                std::vector<cv::RotatedRect>& bounding_rects);
+                std::vector<cv::RotatedRect>& bounding_rects,
+                std::vector<double>& flip_certainties);
   private:
 
     /// Find roomba rotated bounding rects in mask
@@ -38,7 +39,8 @@ class RoombaBlobDetector {
     /// @param[in]      image  Image to examine
     /// @param[in,out]  rects  Detection rects for roombas in image
     void checkCorners(const cv::cuda::GpuMat& image,
-                      std::vector<cv::RotatedRect>& rects);
+                      std::vector<cv::RotatedRect>& rects,
+                      std::vector<double>& flip_certainties);
 
     /// Perform HSV slice and morphology to get pixels which are likely
     /// to be roomba top plates

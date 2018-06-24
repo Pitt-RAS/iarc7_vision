@@ -1,5 +1,6 @@
 #include "iarc7_vision/RoombaEstimator.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cv_bridge/cv_bridge.h>
@@ -38,7 +39,7 @@ RoombaEstimator::RoombaEstimator()
               }),
       dynamic_reconfigure_called_(false),
       transform_wrapper_(),
-      cam_tf_(),
+      camera_to_map_tf_(),
       roomba_pub_(nh_.advertise<iarc7_msgs::RoombaDetectionFrame>(
                   "detected_roombas", 100)),
       settings_(getSettings(private_nh_)),
@@ -57,7 +58,7 @@ void RoombaEstimator::pixelToRay(double px,
                                  double py,
                                  double pw,
                                  double ph,
-                                 geometry_msgs::Vector3Stamped& ray)
+                                 geometry_msgs::Vector3Stamped& ray) const
 {
     px -= pw * 0.5;
     py -= ph * 0.5;
@@ -138,6 +139,7 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     RoombaEstimatorSettings settings;
     IARC7_VISION_RES_LOAD(template_pixels_per_meter);
     IARC7_VISION_RES_LOAD(roomba_plate_width);
+    IARC7_VISION_RES_LOAD(roomba_plate_height);
     IARC7_VISION_RES_LOAD(roomba_height);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_max);
@@ -154,6 +156,7 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     IARC7_VISION_RES_LOAD(morphology_size);
     IARC7_VISION_RES_LOAD(morphology_iterations);
     IARC7_VISION_RES_LOAD(morphology_size);
+    IARC7_VISION_RES_LOAD(uncertainty_scale);
     IARC7_VISION_RES_LOAD(bottom_camera_aov);
     IARC7_VISION_RES_LOAD(debug_hsv_slice);
     IARC7_VISION_RES_LOAD(debug_contours);
@@ -167,14 +170,102 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
 double RoombaEstimator::getHeight(const ros::Time& time)
 {
     if (!transform_wrapper_.getTransformAtTime(
-                cam_tf_,
+                camera_to_map_tf_,
                 "map",
                 "bottom_camera_rgb_optical_frame",
                 time,
                 ros::Duration(1.0))) {
         throw ros::Exception("Failed to fetch transform");
     }
-    return cam_tf_.transform.translation.z;
+    return camera_to_map_tf_.transform.translation.z;
+}
+
+void RoombaEstimator::calcBoxUncertainties(
+       const cv::Size& image_size,
+       const std::vector<cv::RotatedRect>& bounding_rects,
+       std::vector<std::array<double, 4>>& position_covariances,
+       std::vector<double>& box_uncertainties) const
+{
+    ROS_ASSERT(box_uncertainties.empty());
+    box_uncertainties.reserve(bounding_rects.size());
+
+    ROS_ASSERT(position_covariances.empty());
+    position_covariances.reserve(bounding_rects.size());
+
+    geometry_msgs::PointStamped cam_pos;
+    tf2::doTransform(cam_pos, cam_pos, camera_to_map_tf_);
+
+    for (size_t i = 0; i < bounding_rects.size(); i++) {
+        const cv::RotatedRect& bounding_rect = bounding_rects[i];
+
+        geometry_msgs::Vector3Stamped roomba_center_ray;
+        pixelToRay(bounding_rect.center.x,
+                   bounding_rect.center.y,
+                   image_size.width,
+                   image_size.height,
+                   roomba_center_ray);
+
+        tf2::doTransform(roomba_center_ray,
+                         roomba_center_ray,
+                         camera_to_map_tf_);
+
+        const double roomba_center_ray_scale =
+            (cam_pos.point.z - settings_.roomba_height)
+          / -roomba_center_ray.vector.z;
+
+        const double plate_location_x =
+            roomba_center_ray.vector.x * roomba_center_ray_scale;
+        const double plate_location_y =
+            roomba_center_ray.vector.y * roomba_center_ray_scale;
+
+        geometry_msgs::Vector3Stamped roomba_plate_side_ray;
+        pixelToRay(bounding_rect.center.x + bounding_rect.size.width,
+                   bounding_rect.center.y,
+                   image_size.width,
+                   image_size.height,
+                   roomba_plate_side_ray);
+
+        tf2::doTransform(roomba_plate_side_ray,
+                         roomba_plate_side_ray,
+                         camera_to_map_tf_);
+
+        const double roomba_plate_side_ray_scale =
+            (cam_pos.point.z - settings_.roomba_height)
+          / -roomba_plate_side_ray.vector.z;
+
+        const double plate_side_location_x =
+            roomba_plate_side_ray.vector.x * roomba_plate_side_ray_scale;
+        const double plate_side_location_y =
+            roomba_plate_side_ray.vector.y * roomba_plate_side_ray_scale;
+
+        const double meters_per_pixel = std::hypot(
+                plate_location_x - plate_side_location_x,
+                plate_location_y - plate_side_location_y)
+            / bounding_rect.size.width;
+
+        const double plate_width_meters = bounding_rect.size.width * meters_per_pixel;
+        const double plate_height_meters = bounding_rect.size.height * meters_per_pixel;
+
+        const double position_error = std::max(
+                std::abs(plate_width_meters - settings_.roomba_plate_width),
+                std::abs(plate_height_meters - settings_.roomba_plate_height));
+
+        position_covariances.push_back({
+                position_error * position_error,
+                0,
+                0,
+                position_error * position_error});
+
+        const double relative_error =
+                std::abs(plate_width_meters - settings_.roomba_plate_width)
+                            / settings_.roomba_plate_width
+              + std::abs(plate_height_meters - settings_.roomba_plate_height)
+                            / settings_.roomba_plate_height;
+
+        const double uncertainty = settings_.uncertainty_scale * relative_error;
+
+        box_uncertainties.push_back(uncertainty);
+    }
 }
 
 void RoombaEstimator::calcFloorPoly(geometry_msgs::Polygon& poly)
@@ -186,7 +277,7 @@ void RoombaEstimator::calcFloorPoly(geometry_msgs::Polygon& poly)
     double scale;
 
     geometry_msgs::PointStamped camera_position;
-    tf2::doTransform(camera_position, camera_position, cam_tf_);
+    tf2::doTransform(camera_position, camera_position, camera_to_map_tf_);
 
     for (const auto& image_point : {
             std::make_pair(0, 0),
@@ -194,7 +285,7 @@ void RoombaEstimator::calcFloorPoly(geometry_msgs::Polygon& poly)
             std::make_pair(1, 1),
             std::make_pair(1, 0)}) {
         pixelToRay(image_point.first, image_point.second, 1, 1, camera_ray);
-        tf2::doTransform(camera_ray, camera_ray, cam_tf_);
+        tf2::doTransform(camera_ray, camera_ray, camera_to_map_tf_);
         scale = camera_position.point.z / -camera_ray.vector.z;
         point.x = camera_position.point.x + camera_ray.vector.x * scale;
         point.y = camera_position.point.y + camera_ray.vector.y * scale;
@@ -210,13 +301,13 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
                                RoombaImageLocation& roomba_image_location)
 {
     geometry_msgs::PointStamped cam_pos;
-    tf2::doTransform(cam_pos, cam_pos, cam_tf_);
+    tf2::doTransform(cam_pos, cam_pos, camera_to_map_tf_);
 
     geometry_msgs::Vector3Stamped camera_ray;
     pixelToRay(pos.x, pos.y, pw, ph, camera_ray);
 
     geometry_msgs::Vector3Stamped map_ray;
-    tf2::doTransform(camera_ray, map_ray, cam_tf_);
+    tf2::doTransform(camera_ray, map_ray, camera_to_map_tf_);
 
     double ray_scale = (cam_pos.point.z - settings_.roomba_height)
                      / -map_ray.vector.z;
@@ -228,7 +319,7 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
     geometry_msgs::Vector3Stamped roomba_yaw_after;
     roomba_yaw.vector.x = std::cos(angle);
     roomba_yaw.vector.y = std::sin(angle);
-    tf2::doTransform(roomba_yaw, roomba_yaw_after, cam_tf_);
+    tf2::doTransform(roomba_yaw, roomba_yaw_after, camera_to_map_tf_);
 
     roomba.pose.theta = std::atan2(roomba_yaw_after.vector.y,
                                    roomba_yaw_after.vector.x);
@@ -282,6 +373,8 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     /// Declare variables
     //////////////////////////////////////////////////////////////////////////
     std::vector<cv::RotatedRect> bounding_rects;
+    std::vector<double> box_uncertainties;
+    std::vector<double> flip_certainties;
 
     //////////////////////////////////////////////////////////////////////////
     /// Calculate the world field of view in meters and use to resize the image
@@ -302,7 +395,7 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
 
     geometry_msgs::Vector3Stamped c;
     c.vector.z = 1;
-    tf2::doTransform(c, c, cam_tf_);
+    tf2::doTransform(c, c, camera_to_map_tf_);
     distance *= (height - settings_.roomba_height) / -c.vector.z;
 
     double desired_width = settings_.template_pixels_per_meter * distance;
@@ -314,7 +407,18 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     //////////////////////////////////////////////////////////////////////////
     /// Run blob detection
     //////////////////////////////////////////////////////////////////////////
-    blob_detector_.detect(image_scaled, bounding_rects);
+    blob_detector_.detect(image_scaled,
+                          bounding_rects,
+                          flip_certainties);
+
+    std::vector<std::array<double, 4>> position_covariances;
+    calcBoxUncertainties(image_scaled.size(),
+                         bounding_rects,
+                         position_covariances,
+                         box_uncertainties);
+
+    ROS_ASSERT(box_uncertainties.size() == bounding_rects.size());
+    ROS_ASSERT(flip_certainties.size() == bounding_rects.size());
 
     cv::Mat detected_rect_image;
     if (settings_.debug_detected_rects) {
@@ -351,6 +455,12 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
                  image_scaled.rows,
                  roomba,
                  roomba_image_location);
+        roomba.position_covariance[0] = position_covariances[i][0];
+        roomba.position_covariance[1] = position_covariances[i][1];
+        roomba.position_covariance[2] = position_covariances[i][2];
+        roomba.position_covariance[3] = position_covariances[i][3];
+        roomba.box_uncertainty = box_uncertainties[i];
+        roomba.flip_certainty = flip_certainties[i];
         roomba_frame.roombas.push_back(roomba);
         roomba_image_locations.push_back(roomba_image_location);
 
