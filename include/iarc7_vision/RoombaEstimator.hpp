@@ -54,7 +54,7 @@ class RoombaEstimator {
                         double py,
                         double pw,
                         double ph,
-                        geometry_msgs::Vector3Stamped& ray);
+                        geometry_msgs::Vector3Stamped& ray) const;
 
         /// Callback for dynamic_reconfigure
         void getDynamicSettings(iarc7_vision::RoombaEstimatorConfig& config);
@@ -70,6 +70,12 @@ class RoombaEstimator {
         /// @throws ros::Exception {Thrown if transform is not available at
         ///                         requested time}
         double getHeight(const ros::Time& time);
+
+        void calcBoxUncertainties(
+                const cv::Size& image_size,
+                const std::vector<cv::RotatedRect>& bounding_rects,
+                std::vector<std::array<double, 4>>& position_covariances,
+                std::vector<double>& box_uncertainties) const;
 
         /// Calculate bounding polygon of the area of the floor that is
         /// currently visible to the camera
@@ -100,7 +106,7 @@ class RoombaEstimator {
         bool dynamic_reconfigure_called_;
 
         ros_utils::SafeTransformWrapper transform_wrapper_;
-        geometry_msgs::TransformStamped cam_tf_;
+        geometry_msgs::TransformStamped camera_to_map_tf_;
         ros::Publisher roomba_pub_;
 
         RoombaEstimatorSettings settings_;

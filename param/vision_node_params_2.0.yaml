@@ -64,26 +64,31 @@ roomba_estimator:
     # Calculation: Roomba template pixel width / Roomba meter width
     template_pixels_per_meter: 335
     # Measured in meters
-    roomba_plate_width: 0.254
+    roomba_plate_height: 0.225
+    roomba_plate_width: 0.135
     # Measued in meters
     roomba_height: 0.065
 
     hsv_slice_h_green_min: 47
-    hsv_slice_h_green_max: 67
+    hsv_slice_h_green_max: 78
     hsv_slice_h_red1_min: 0
     hsv_slice_h_red1_max: 30
     hsv_slice_h_red2_min: 150
     hsv_slice_h_red2_max: 180
-    hsv_slice_s_min: 51
+    hsv_slice_s_min: 50
     hsv_slice_s_max: 255
     hsv_slice_v_min: 15
     hsv_slice_v_max: 255
 
-    min_roomba_blob_size: 2000
+    min_roomba_blob_size: 700
     max_roomba_blob_size: 15000
 
-    morphology_size: 5
-    morphology_iterations: 3
+    morphology_size: 7
+    morphology_iterations: 1
+
+    # Multiplier on difference between observed and actual plate diagonal to
+    # get angle estimate stddev
+    uncertainty_scale: 1.0
 
     # Camera settings
     # https://en.wikipedia.org/wiki/LifeCam#HD-6000

@@ -1,6 +1,5 @@
 <launch>
-    <arg name="platform" default="1.0" />
-    <arg name="bond_id_namespace" default="safety_bonds" />
+    <arg name="platform" default="sim" />
 
     <node pkg="iarc7_vision" type="iarc7_vision_node" name="iarc7_vision_node">
 
@@ -11,9 +10,6 @@
         <remap from="grid_line_estimator/pose" to="/camera_localized_pose" />
         <remap from="bottom_image_raw/image_raw" to="/bottom_camera/rgb/image_raw" />
     </node>
-
-    <param name="$(arg bond_id_namespace)/vision_node/form_bond"
-        value="true" />
 
     <node pkg="iarc7_vision"
         type="republish_roomba_detections.py"
