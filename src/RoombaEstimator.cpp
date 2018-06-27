@@ -351,14 +351,20 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
                      << " cos(theta): " << std::cos(theta));
 }
 
-void RoombaEstimator::update(const cv::cuda::GpuMat& image,
-                             const ros::Time& time,
-                             std::vector<RoombaImageLocation>&
-                                roomba_image_locations)
+void RoombaEstimator::update(
+        const cv::cuda::GpuMat& image,
+        const ros::Time& time,
+        std::vector<RoombaImageLocation>& roomba_image_locations)
 {
     // Validation
-    if(image.empty())
+    if(image.empty()) {
+        iarc7_msgs::RoombaDetectionFrame result;
+        result.header.stamp = time;
+        result.header.frame_id = "map";
+        result.camera_id = "bottom_camera";
+        roomba_pub_.publish(result);
         return;
+    }
 
     //////////////////////////////////////////////////////////////////////////
     /// Fetch height
@@ -366,6 +372,11 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     double height = getHeight(time);
 
     if (height < settings_.roomba_height + 0.01) {
+        iarc7_msgs::RoombaDetectionFrame result;
+        result.header.stamp = time;
+        result.header.frame_id = "map";
+        result.camera_id = "bottom_camera";
+        roomba_pub_.publish(result);
         return;
     }
 
@@ -432,6 +443,7 @@ void RoombaEstimator::update(const cv::cuda::GpuMat& image,
     iarc7_msgs::RoombaDetectionFrame roomba_frame;
     roomba_frame.header.stamp = time;
     roomba_frame.header.frame_id = "map";
+    roomba_frame.camera_id = "bottom_camera";
 
     for (unsigned int i = 0; i < bounding_rects.size(); i++) {
         cv::Point2f pos = bounding_rects[i].center;
