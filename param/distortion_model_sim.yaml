@@ -1,0 +1,11 @@
+distortion_model:
+    f_x: 1
+    c_x: 0
+    f_y: 1
+    c_y: 0
+
+    k1: 0
+    k2: 0
+    p1: 0
+    p2: 0
+    k3: 0

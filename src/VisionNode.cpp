@@ -23,6 +23,7 @@
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 #include "iarc7_vision/RoombaEstimator.hpp"
 #include "iarc7_vision/RoombaImageLocation.hpp"
+#include "iarc7_vision/UndistortionModel.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& line_settings)
@@ -479,6 +480,11 @@ int main(int argc, char **argv)
         rate.sleep();
     }
 
+    const iarc7_vision::UndistortionModel undistortion_model(
+            ros::NodeHandle("~/distortion_model"),
+            cv::Size(message_queue.front()->width,
+                     message_queue.front()->height));
+
     // Form a connection with the node monitor. If no connection can be made
     // assert because we don't know what's going on with the other nodes.
     ROS_INFO("vision_node: Attempting to form safety bond");
@@ -487,7 +493,6 @@ int main(int argc, char **argv)
                    "vision_node: Could not form bond with safety client");
 
     message_queue.clear();
-
 
     bool images_skipped = false;
     // Main loop
@@ -507,7 +512,10 @@ int main(int argc, char **argv)
             message_queue.pop_front();
 
             auto cv_shared_ptr = cv_bridge::toCvShare(message);
-            cv::cuda::GpuMat image(cv_shared_ptr->image);
+            const cv::cuda::GpuMat image_distorted(cv_shared_ptr->image);
+
+            cv::cuda::GpuMat image_undistorted;
+            undistortion_model.undistort(image_distorted, image_undistorted);
 
             const auto start = std::chrono::high_resolution_clock::now();
             //gridline_estimator->update(image, message->header.stamp);
@@ -515,12 +523,12 @@ int main(int argc, char **argv)
 
             std::vector<iarc7_vision::RoombaImageLocation>
                                                       roomba_image_locations;
-            roomba_estimator.update(image,
+            roomba_estimator.update(image_undistorted,
                                     message->header.stamp,
                                     roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
 
-            optical_flow_estimator->update(image,
+            optical_flow_estimator->update(image_undistorted,
                                            message->header.stamp,
                                            roomba_image_locations,
                                            images_skipped);

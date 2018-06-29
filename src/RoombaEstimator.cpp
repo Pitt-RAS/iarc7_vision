@@ -446,6 +446,16 @@ void RoombaEstimator::update(
     roomba_frame.camera_id = "bottom_camera";
 
     for (unsigned int i = 0; i < bounding_rects.size(); i++) {
+        if (box_uncertainties[i] < 0) {
+            if (settings_.debug_detected_rects) {
+                // Draw yellow rect for bad detection
+                cv_utils::drawRotatedRect(detected_rect_image,
+                                          bounding_rects[i],
+                                          cv::Scalar(255, 255, 0));
+            }
+            continue;
+        }
+
         cv::Point2f pos = bounding_rects[i].center;
         double angle = bounding_rects[i].angle * M_PI / 180;
 
