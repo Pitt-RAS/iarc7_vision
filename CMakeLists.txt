@@ -26,11 +26,6 @@ find_package(catkin REQUIRED COMPONENTS
   image_geometry
 )
 
-generate_dynamic_reconfigure_options(
-  cfg/VisionNode.cfg
-  cfg/RoombaEstimator.cfg
-)
-
 ## System dependencies are found with CMake's conventions
 
 ## Find OpenCV
@@ -52,7 +47,12 @@ add_definitions(-DEIGEN_NO_DEBUG -DEIGEN_MPL2_ONLY)
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+catkin_python_setup()
+
+generate_dynamic_reconfigure_options(
+  cfg/VisionNode.cfg
+  cfg/RoombaEstimator.cfg
+)
 
 ################################################
 ## Declare ROS messages, services and actions ##
