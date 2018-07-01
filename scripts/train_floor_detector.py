@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from timeit import default_timer as timer
+import pickle
 
 import rosbag
 import cv2
@@ -73,9 +74,9 @@ def get_feature_vectors(images):
     for i in range(0, shape[0]):
         for j in range(0, shape[1]):
             for k in range(0, shape[2]):
-                vectors.append(images[i, j, k, :4])
-    #return vectors
-    vectors = np.float64(np.asarray(vectors))
+                vectors.append(images[i, j, k, :])
+    vectors = np.float32(np.asarray(vectors))
+    print('Feature vectors shape')
     print vectors.shape
     return vectors
 
@@ -112,7 +113,8 @@ if __name__ == '__main__':
                                                    sigmas,
                                                    n_orientations,
                                                    show_filters=False)
-
+    filters = filters[:, :, :, :18]
+    print filters.shape
     floor_images = rosbag.Bag('sim_floor_set.bag', 'r')
     not_floor_images = rosbag.Bag('sim_gym_set.bag', 'r')
 
@@ -142,3 +144,5 @@ if __name__ == '__main__':
            end_time-start_time,
            test_vectors.shape[0]/(end_time-start_time)))
     print('SCORE OF TEST SET: {}'.format(score))
+
+    pickle.dump(clf, open( "clf.params", "wb" ))
