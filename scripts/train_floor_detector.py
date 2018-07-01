@@ -33,7 +33,7 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
         if num_processed >= start_image:
             if filter_applicator is None:
                 scale = 0.25
-                target_size = (int(msg.image.width*scale), int(msg.image.height*scale))
+                target_size = (320, 240)
                 filter_applicator = ImageFilterApplicator(filters, target_size)
             try:
               image = bridge.imgmsg_to_cv2(msg.image, "rgb8")

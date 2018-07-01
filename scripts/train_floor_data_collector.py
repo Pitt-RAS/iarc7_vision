@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
 import rospy
-import cv2
-from cv_bridge import CvBridge, CvBridgeError
 import tf2_ros
 
 from sensor_msgs.msg import Image

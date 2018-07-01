@@ -39,13 +39,13 @@ class ImageFilterApplicator:
                                           3,
                                           3,
                                           1],
-                                padding='VALID')
+                                padding='SAME')
 
         squared = tf.square(convolved)
 
         # TODO square shapes need to change with height
         print('Pre average size: {}'.format(squared.shape))
-        average_size = squared.shape[1]/5
+        average_size = 20 #squared.shape[1]/2
         self.averaged = tf.nn.avg_pool(squared,
                                        (1, average_size, average_size, 1),
                                        (1, average_size, average_size, 1),
@@ -63,8 +63,8 @@ class ImageFilterApplicator:
 
         if show_result:
             imgs = []
-            for i in range(0, len(self.filterbank)):
+            for i in range(0, self.filterbank.shape[3]):
                 imgs.append(np.uint8(255.0 * stretch_contrast(result[0, :, :, i])))
-                im_show_m(imgs)
-            cv2.waitKey()
+            im_show_m(imgs)
+            cv2.waitKey(1)
         return result
