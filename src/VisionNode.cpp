@@ -377,6 +377,18 @@ int main(int argc, char **argv)
         = ros_utils::ParamUtils::getParam<std::string>(
                 private_nh, "image_format");
 
+    int color_conversion_code;
+    if (expected_image_format == "RGB") {
+        color_conversion_code = 0;
+    } else if (expected_image_format == "RGBA") {
+        color_conversion_code = CV_RGBA2RGB;
+    } else if (expected_image_format == "BGR") {
+        color_conversion_code = CV_BGR2RGB;
+    } else {
+        ROS_ERROR("Invalid color conversion code");
+        return 1;
+    }
+
     // Create settings objects
     iarc7_vision::LineExtractorSettings line_extractor_settings;
     getLineExtractorSettings(private_nh, line_extractor_settings);
@@ -433,11 +445,11 @@ int main(int argc, char **argv)
             line_extractor_settings,
             grid_estimator_settings,
             grid_line_debug_settings,
-            expected_image_format));
+            "RGB"));
     optical_flow_estimator.reset(new iarc7_vision::OpticalFlowEstimator(
             optical_flow_estimator_settings,
             optical_flow_debug_settings,
-            expected_image_format));
+            "RGB"));
 
     // Queue and callback for collecting images
     std::deque<sensor_msgs::Image::ConstPtr> message_queue;
@@ -517,18 +529,27 @@ int main(int argc, char **argv)
             cv::cuda::GpuMat image_undistorted;
             undistortion_model.undistort(image_distorted, image_undistorted);
 
+            cv::cuda::GpuMat image_undistorted_rgb;
+            if (color_conversion_code != 0) {
+                cv::cuda::cvtColor(image_undistorted,
+                                   image_undistorted_rgb,
+                                   color_conversion_code);
+            } else {
+                image_undistorted_rgb = image_undistorted;
+            }
+
             const auto start = std::chrono::high_resolution_clock::now();
-            //gridline_estimator->update(image, message->header.stamp);
+            //gridline_estimator->update(image_undistorted_rgb, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
             std::vector<iarc7_vision::RoombaImageLocation>
                                                       roomba_image_locations;
-            roomba_estimator.update(image_undistorted,
+            roomba_estimator.update(image_undistorted_rgb,
                                     message->header.stamp,
                                     roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
 
-            optical_flow_estimator->update(image_undistorted,
+            optical_flow_estimator->update(image_undistorted_rgb,
                                            message->header.stamp,
                                            roomba_image_locations,
                                            images_skipped);
