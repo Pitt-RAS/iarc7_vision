@@ -53,13 +53,6 @@ tf_filters = tf.constant(np_filters)
 
 placeholder_image = tf.placeholder(tf.float32, shape=(1, 960, 1280, 3))
 
-resized_image = tf.image.resize_images(
-    placeholder_image,
-    (240, 426),
-    method=tf.image.ResizeMethod.BILINEAR,
-    align_corners=False
-)
-
 gray_image = tf.image.rgb_to_grayscale(placeholder_image)
 
 convolved = tf.nn.conv2d(gray_image, tf_filters, strides=[1, kernel_size/3, kernel_size/3, 1], padding='VALID')

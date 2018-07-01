@@ -29,31 +29,23 @@ class ImageFilterApplicator:
                                                   self.incoming_resolution[0],
                                                   3))
 
-        resized_image = tf.image.resize_images(
-            self.placeholder_image,
-            # TODO resized resolution needs to change with height
-            (240, 426),
-            method=tf.image.ResizeMethod.BILINEAR,
-            align_corners=False
-        )
-
         gray_image = tf.image.rgb_to_grayscale(self.placeholder_image)
-
 
         filterbank_shape = self.filterbank.shape
         tf_filters = tf.constant(self.filterbank)
         convolved = tf.nn.conv2d(gray_image,
                                  tf_filters,
                                  strides=[1,
-                                          filterbank_shape[0]/3,
-                                          filterbank_shape[1]/3,
+                                          3,
+                                          3,
                                           1],
                                 padding='VALID')
 
         squared = tf.square(convolved)
 
         # TODO square shapes need to change with height
-        average_size = squared.shape[1]/10
+        print('Pre average size: {}'.format(squared.shape))
+        average_size = squared.shape[1]/5
         self.averaged = tf.nn.avg_pool(squared,
                                        (1, average_size, average_size, 1),
                                        (1, average_size, average_size, 1),

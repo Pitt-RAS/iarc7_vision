@@ -116,7 +116,7 @@ def get_RFS_filters_in_tensorflow_format(kernel_size,
     if show_filters:
         fig, ax = plt.subplots(nrows=len(sigmas)*2+1, ncols=n_orientations)
         for x in range(0, len(all_filters)):
-            ax[x/n_orientations, x%n_orientations].imshow(np_filters[:, :, 0, x], cmap=plt.cm.gray)
+            ax[x/n_orientations, x%n_orientations].imshow(np_filters[:, :, 0, x], cmap=plt.cm.gray, interpolation='none')
             ax[x/n_orientations, x%n_orientations].set_xticks(())
             ax[x/n_orientations, x%n_orientations].set_yticks(())
         plt.show()
