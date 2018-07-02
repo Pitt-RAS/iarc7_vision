@@ -1,0 +1,10 @@
+<launch>
+    <arg name="bagname" doc="string to be appennded to the bag name" />
+
+    <node pkg="rosbag" type="record" name="rosbag_floor_data"
+           args="record -o $(find iarc7_vision)/training_bags/$(arg bagname) /bottom_camera/height_image" />
+
+    <node pkg="iarc7_vision"
+        type="train_floor_data_collector.py"
+        name="train_floor_data_collector" />
+</launch>

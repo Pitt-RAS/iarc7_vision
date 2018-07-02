@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 from timeit import default_timer as timer
 import pickle
+import glob
 
 import rosbag
+import rospkg
 import cv2
 import numpy as np
 from cv_bridge import CvBridge, CvBridgeError
@@ -42,11 +44,11 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
               print(e)
 
             height = msg.height
-            crop_amount_width = int(target_size[0]/(height/0.5)/2)
-            crop_amount_height = int(target_size[1]/(height/0.5)/2)
+            min_height = 0.7
+            crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
+            crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
             cropped = image[crop_amount_width:image.shape[1]-crop_amount_width,
                             crop_amount_height:image.shape[0]-crop_amount_height]
-
             resized_image = cv2.resize(cropped, target_size, interpolation=cv2.INTER_LINEAR)
 
             result = filter_applicator.apply_filters(np.asarray([np.float32(resized_image)/255.0]), show_result=False)
@@ -92,8 +94,8 @@ def create_classifier_set(floor_vectors, not_floor_vectors):
     return all_vectors, all_labels
 
 def train_classifier(vectors, labels):
-    clf = SVC(kernel="linear", C=0.025)
-    #clf = SVC(gamma=2, C=1)
+    #clf = SVC(kernel="linear", C=25.0)
+    clf = SVC(gamma=2, C=10.0)
     start_time = timer()
     clf.fit(vectors, labels)
     end_time = timer()
@@ -113,13 +115,19 @@ if __name__ == '__main__':
                                                    sigmas,
                                                    n_orientations,
                                                    show_filters=False)
-    filters = filters[:, :, :, :18]
+    filters = filters[:, :, :, :]
     print filters.shape
-    floor_images = rosbag.Bag('sim_floor_set.bag', 'r')
-    not_floor_images = rosbag.Bag('sim_gym_set.bag', 'r')
 
-    filtered_floor_images = filter_image_set(floor_images, filters, max_images=100)
-    filtered_not_floor_images = filter_image_set(not_floor_images, filters, max_images=100)
+    rospack = rospkg.RosPack()
+
+    floors     = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/floor*'))
+    antifloors = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/antifloor*'))
+
+    floor_images     = rosbag.Bag(floors[-1], 'r')
+    not_floor_images = rosbag.Bag(antifloors[-1], 'r')
+
+    filtered_floor_images = filter_image_set(floor_images, filters, max_images=300)
+    filtered_not_floor_images = filter_image_set(not_floor_images, filters, max_images=300)
 
     floor_vectors = get_feature_vectors(filtered_floor_images)
     not_floor_vectors = get_feature_vectors(filtered_not_floor_images)
@@ -130,8 +138,8 @@ if __name__ == '__main__':
     score = clf.score(vectors, labels)
     print('SCORE OF TRAINED SET: {}'.format(score))
 
-    test_filtered_floor_images = filter_image_set(floor_images, filters, start_image=150, max_images=400)
-    test_filtered_not_floor_images = filter_image_set(not_floor_images, filters, start_image=150, max_images=400)
+    test_filtered_floor_images = filter_image_set(floor_images, filters, start_image=300)
+    test_filtered_not_floor_images = filter_image_set(not_floor_images, filters, start_image=300)
     test_floor_vectors = get_feature_vectors(test_filtered_floor_images)
     test_not_floor_vectors = get_feature_vectors(test_filtered_not_floor_images)
     test_vectors, test_labels = create_classifier_set(test_floor_vectors, test_not_floor_vectors)
@@ -145,4 +153,4 @@ if __name__ == '__main__':
            test_vectors.shape[0]/(end_time-start_time)))
     print('SCORE OF TEST SET: {}'.format(score))
 
-    pickle.dump(clf, open( "clf.params", "wb" ))
+    pickle.dump(clf, open(rospack.get_path('iarc7_vision') + "/clf.params", "wb" ))
