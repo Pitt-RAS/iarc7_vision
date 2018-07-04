@@ -32,44 +32,46 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
     filtered_images = []
     num_processed = 0
     start_time = timer()
-    for topic, msg, t in images.read_messages(topics=['/bottom_camera/height_image']):
-        if num_processed >= start_image:
-            if filter_applicator is None:
-                scale = 0.25
-                target_size = (320, 240)
-                filter_applicator = ImageFilterApplicator(filters, target_size)
-            try:
-              image = bridge.imgmsg_to_cv2(msg.image, "rgb8")
-            except CvBridgeError as e:
-              print(e)
+    num_seen = 0
+    for topic, msg, t in images.read_messages(topics=['/bottom_camera/height_image'])[start_image:]:
+        num_seen += 1
+        if filter_applicator is None:
+            scale = 0.25
+            target_size = (320, 240)
+            filter_applicator = ImageFilterApplicator(filters, target_size)
+        try:
+          image = bridge.imgmsg_to_cv2(msg.image, "rgb8")
+        except CvBridgeError as e:
+          print(e)
 
-            height = msg.height
-            min_height = 0.7
-            if height > min_height:
-                crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
-                crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
-                cropped = image[crop_amount_width:image.shape[1]-crop_amount_width,
-                                crop_amount_height:image.shape[0]-crop_amount_height]
-                resized_image = cv2.resize(cropped, target_size, interpolation=cv2.INTER_LINEAR)
+        height = msg.height
+        min_height = 0.7
+        if height > min_height:
+            crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
+            crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
+            cropped = image[crop_amount_width:image.shape[1]-crop_amount_width,
+                            crop_amount_height:image.shape[0]-crop_amount_height]
+            resized_image = cv2.resize(cropped, target_size, interpolation=cv2.INTER_LINEAR)
 
-                result = filter_applicator.apply_filters(np.asarray([np.float32(resized_image)/255.0]), show_result=False)
-                filtered_images.append(result[0, :, :, :])
-                #cv2.imshow('T', np.uint8(255.0 * stretch_contrast(result[0, :, :, 0])))
-                #cv2.waitKey(1)
-        num_processed += 1
+            result = filter_applicator.apply_filters(np.asarray([np.float32(resized_image)/255.0]), show_result=False)
+            filtered_images.append(result[0, :, :, :])
+            #cv2.imshow('T', np.uint8(255.0 * stretch_contrast(result[0, :, :, 0])))
+            #cv2.waitKey(1)
+            num_processed += 1
         if max_images is not None:
-            if num_processed >= max_images + start_image:
+            if num_processed >= max_images:
                 break
     end_time = timer()
 
     print ('Filtered {} images in {} seconds fps: {}'.format(
-           num_processed - start_image,
+           num_processed,
            end_time-start_time,
-           (num_processed - start_image)/(end_time-start_time)))
+           (num_processed)/(end_time-start_time)))
+    print ('Went through {} images'.format(num_seen))
 
     np_filtered_images = np.asarray(filtered_images)
     print np_filtered_images.shape
-    return np_filtered_images
+    return np_filtered_images, num_seen
 
 def get_feature_vectors(images):
     shape = images.shape
@@ -127,8 +129,8 @@ if __name__ == '__main__':
     floor_images     = rosbag.Bag(floors[-1], 'r')
     not_floor_images = rosbag.Bag(antifloors[-1], 'r')
 
-    filtered_floor_images = filter_image_set(floor_images, filters, max_images=300)
-    filtered_not_floor_images = filter_image_set(not_floor_images, filters, max_images=300)
+    filtered_floor_images, floor_split = filter_image_set(floor_images, filters, max_images=300)
+    filtered_not_floor_images, not_floor_split = filter_image_set(not_floor_images, filters, max_images=300)
 
     floor_vectors = get_feature_vectors(filtered_floor_images)
     not_floor_vectors = get_feature_vectors(filtered_not_floor_images)
@@ -139,8 +141,8 @@ if __name__ == '__main__':
     score = clf.score(vectors, labels)
     print('SCORE OF TRAINED SET: {}'.format(score))
 
-    test_filtered_floor_images = filter_image_set(floor_images, filters, start_image=300)
-    test_filtered_not_floor_images = filter_image_set(not_floor_images, filters, start_image=300)
+    test_filtered_floor_images, end_floor_image = filter_image_set(floor_images, filters, start_image=floor_split)
+    test_filtered_not_floor_images, end_not_floor_image = filter_image_set(not_floor_images, filters, start_image=not_floor_split)
     test_floor_vectors = get_feature_vectors(test_filtered_floor_images)
     test_not_floor_vectors = get_feature_vectors(test_filtered_not_floor_images)
     test_vectors, test_labels = create_classifier_set(test_floor_vectors, test_not_floor_vectors)
