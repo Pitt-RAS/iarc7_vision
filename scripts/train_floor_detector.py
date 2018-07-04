@@ -45,16 +45,17 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
 
             height = msg.height
             min_height = 0.7
-            crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
-            crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
-            cropped = image[crop_amount_width:image.shape[1]-crop_amount_width,
-                            crop_amount_height:image.shape[0]-crop_amount_height]
-            resized_image = cv2.resize(cropped, target_size, interpolation=cv2.INTER_LINEAR)
+            if height > min_height:
+                crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
+                crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
+                cropped = image[crop_amount_width:image.shape[1]-crop_amount_width,
+                                crop_amount_height:image.shape[0]-crop_amount_height]
+                resized_image = cv2.resize(cropped, target_size, interpolation=cv2.INTER_LINEAR)
 
-            result = filter_applicator.apply_filters(np.asarray([np.float32(resized_image)/255.0]), show_result=False)
-            filtered_images.append(result[0, :, :, :])
-            #cv2.imshow('T', np.uint8(255.0 * stretch_contrast(result[0, :, :, 0])))
-            #cv2.waitKey(1)
+                result = filter_applicator.apply_filters(np.asarray([np.float32(resized_image)/255.0]), show_result=False)
+                filtered_images.append(result[0, :, :, :])
+                #cv2.imshow('T', np.uint8(255.0 * stretch_contrast(result[0, :, :, 0])))
+                #cv2.waitKey(1)
         num_processed += 1
         if max_images is not None:
             if num_processed >= max_images + start_image:
