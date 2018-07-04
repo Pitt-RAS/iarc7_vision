@@ -101,7 +101,7 @@ def create_classifier_set(floor_vectors, not_floor_vectors):
 
 def train_classifier(vectors, labels):
     #clf = SVC(kernel="linear", C=25.0)
-    clf = SVC(gamma=2, C=10.0)
+    clf = SVC(gamma=2, C=1000.0)
     start_time = timer()
     clf.fit(vectors, labels)
     end_time = timer()
@@ -132,8 +132,8 @@ if __name__ == '__main__':
     floor_images     = rosbag.Bag(floors[-1], 'r')
     not_floor_images = rosbag.Bag(antifloors[-1], 'r')
 
-    filtered_floor_images, floor_split = filter_image_set(floor_images, filters, max_images=300)
-    filtered_not_floor_images, not_floor_split = filter_image_set(not_floor_images, filters, max_images=300)
+    filtered_floor_images, floor_split = filter_image_set(floor_images, filters, max_images=100)
+    filtered_not_floor_images, not_floor_split = filter_image_set(not_floor_images, filters, max_images=100)
 
     floor_vectors = get_feature_vectors(filtered_floor_images)
     not_floor_vectors = get_feature_vectors(filtered_not_floor_images)
