@@ -33,8 +33,11 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
     num_processed = 0
     start_time = timer()
     num_seen = 0
-    for topic, msg, t in images.read_messages(topics=['/bottom_camera/height_image'])[start_image:]:
+    for topic, msg, t in images.read_messages(topics=['/bottom_camera/height_image']):
         num_seen += 1
+        if num_seen < start_image:
+            continue
+
         if filter_applicator is None:
             scale = 0.25
             target_size = (320, 240)
