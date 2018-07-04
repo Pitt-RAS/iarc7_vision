@@ -1,0 +1,14 @@
+color_correction_model:
+    r_a1: 1
+    r_b1: 0
+    r_a2: 1
+    r_b2: 0
+    g_a1: 1
+    g_b1: 0
+    g_a2: 1
+    g_b2: 0
+    b_a1: 1
+    b_b1: 0
+    b_a2: 1
+    b_b2: 0
+    gamma: 1.0

@@ -99,11 +99,8 @@ roomba_estimator:
     #    C920 DFOV:   78 deg
     # Lifecam DFOV:   66 deg
     #     Sim DFOV:   60 deg
-    bottom_camera_aov: 61.8
-    front_camera_aov: 93.5
-    left_camera_aov: 93.5
-    right_camera_aov: 93.5
-    back_camera_aov: 93.5
+    # Leopard DFOV:107.7 deg
+    bottom_camera_aov: 107.7
 
     debug_hsv_slice: true
     debug_contours: true

@@ -30,8 +30,11 @@ UndistortionModel::UndistortionModel(const ros::NodeHandle& nh,
     dist.at<float>(3, 0) = ros_utils::ParamUtils::getParam<double>(nh, "p2");
     dist.at<float>(4, 0) = ros_utils::ParamUtils::getParam<double>(nh, "k3");
 
+    cv::Size new_image_size(
+            ros_utils::ParamUtils::getParam<int>(nh, "out_width"),
+            ros_utils::ParamUtils::getParam<int>(nh, "out_height"));
     cv::Mat new_camera_matrix = cv::getOptimalNewCameraMatrix(
-            camera_matrix, dist, image_size_, 0);
+            camera_matrix, dist, image_size_, 0, new_image_size, 0, true);
 
     cv::Mat map1_cpu;
     cv::Mat map2_cpu;
@@ -39,7 +42,7 @@ UndistortionModel::UndistortionModel(const ros::NodeHandle& nh,
                                 dist,
                                 cv::Mat(),
                                 new_camera_matrix,
-                                image_size_,
+                                new_image_size,
                                 CV_32FC1,
                                 map1_cpu,
                                 map2_cpu);
@@ -49,13 +52,21 @@ UndistortionModel::UndistortionModel(const ros::NodeHandle& nh,
 }
 
 void UndistortionModel::undistort(const cv::cuda::GpuMat& in,
-                                  cv::cuda::GpuMat& out) const
+                                  cv::cuda::GpuMat& out,
+                                  cv::cuda::Stream& stream) const
 {
     if (in.size() != image_size_) {
         throw std::runtime_error("Image size does not match");
     }
 
-    cv::cuda::remap(in, out, map1_, map2_, cv::INTER_LINEAR);
+    cv::cuda::remap(in,
+                    out,
+                    map1_,
+                    map2_,
+                    cv::INTER_LINEAR,
+                    cv::BORDER_CONSTANT,
+                    cv::Scalar(),
+                    stream);
 }
 
 } // namespace iarc7_vision

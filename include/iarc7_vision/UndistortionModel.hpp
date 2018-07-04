@@ -14,7 +14,7 @@ class UndistortionModel {
     UndistortionModel(const ros::NodeHandle& nh,
                       const cv::Size& image_size);
 
-    void undistort(const cv::cuda::GpuMat& in, cv::cuda::GpuMat& out) const;
+    void undistort(const cv::cuda::GpuMat& in, cv::cuda::GpuMat& out, cv::cuda::Stream& stream) const;
 
   private:
     const cv::Size image_size_;

@@ -14,11 +14,13 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Image.h>
 
 #include "iarc7_safety/SafetyClient.hpp"
 #include <iarc7_vision/VisionNodeConfig.h>
 #include <ros_utils/ParamUtils.hpp>
 
+#include "iarc7_vision/ColorCorrectionModel.hpp"
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 #include "iarc7_vision/RoombaEstimator.hpp"
@@ -464,6 +466,8 @@ int main(int argc, char **argv)
         100,
         image_msg_handler);
 
+    ros::Publisher corrected_image_pub = nh.advertise<sensor_msgs::Image>("corrected_image", 1);
+
     // Load the parameters specific to the vision node
     double startup_timeout;
     ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
@@ -496,6 +500,8 @@ int main(int argc, char **argv)
             ros::NodeHandle("~/distortion_model"),
             cv::Size(message_queue.front()->width,
                      message_queue.front()->height));
+    const iarc7_vision::ColorCorrectionModel color_correction_model(
+            ros::NodeHandle("~/color_correction_model"));
 
     // Form a connection with the node monitor. If no connection can be made
     // assert because we don't know what's going on with the other nodes.
@@ -524,32 +530,58 @@ int main(int argc, char **argv)
             message_queue.pop_front();
 
             auto cv_shared_ptr = cv_bridge::toCvShare(message);
-            const cv::cuda::GpuMat image_distorted(cv_shared_ptr->image);
+            cv::cuda::Stream cuda_stream;
+
+            cv::cuda::GpuMat image_distorted;
+            image_distorted.upload(cv_shared_ptr->image, cuda_stream);
 
             cv::cuda::GpuMat image_undistorted;
-            undistortion_model.undistort(image_distorted, image_undistorted);
+            undistortion_model.undistort(image_distorted,
+                                         image_undistorted,
+                                         cuda_stream);
 
             cv::cuda::GpuMat image_undistorted_rgb;
             if (color_conversion_code != 0) {
                 cv::cuda::cvtColor(image_undistorted,
                                    image_undistorted_rgb,
-                                   color_conversion_code);
+                                   color_conversion_code,
+                                   0,
+                                   cuda_stream);
             } else {
                 image_undistorted_rgb = image_undistorted;
             }
 
+            cv::cuda::GpuMat image_correct;
+            color_correction_model.correct(image_undistorted_rgb,
+                                           image_correct,
+                                           cuda_stream);
+
+            {
+                cv::Mat corrected_image_cpu;
+                image_correct.download(corrected_image_cpu, cuda_stream);
+                cuda_stream.waitForCompletion();
+
+                cv_bridge::CvImage cv_image {
+                    std_msgs::Header(),
+                    sensor_msgs::image_encodings::RGB8,
+                    corrected_image_cpu
+                };
+
+                corrected_image_pub.publish(cv_image.toImageMsg());
+            }
+
             const auto start = std::chrono::high_resolution_clock::now();
-            //gridline_estimator->update(image_undistorted_rgb, message->header.stamp);
+            //gridline_estimator->update(image_correct, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
             std::vector<iarc7_vision::RoombaImageLocation>
                                                       roomba_image_locations;
-            roomba_estimator.update(image_undistorted_rgb,
+            roomba_estimator.update(image_correct,
                                     message->header.stamp,
                                     roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
 
-            optical_flow_estimator->update(image_undistorted_rgb,
+            optical_flow_estimator->update(image_correct,
                                            message->header.stamp,
                                            roomba_image_locations,
                                            images_skipped);

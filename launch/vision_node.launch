@@ -12,6 +12,8 @@
             file="$(find iarc7_vision)/param/optical_flow_params_$(arg platform).yaml" />
         <rosparam command="load"
             file="$(find iarc7_vision)/param/distortion_model_$(arg platform).yaml" />
+        <rosparam command="load"
+            file="$(find iarc7_vision)/param/color_correction_model_$(arg platform).yaml" />
 
         <remap from="grid_line_estimator/pose" to="/camera_localized_pose" />
         <remap from="bottom_image_raw/image_raw" to="/bottom_camera/rgb/image_raw" />

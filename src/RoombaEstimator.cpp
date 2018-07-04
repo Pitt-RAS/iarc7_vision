@@ -490,10 +490,10 @@ void RoombaEstimator::update(
             cv::Point2f p;
             p.x = roomba_image_location.x * image_scaled.cols;
             p.y = roomba_image_location.y * image_scaled.cols;
-            cv::circle(detected_rect_image,
-                       p,
-                       roomba_image_location.radius * image_scaled.cols,
-                       cv::Scalar(0, 255, 0));
+            //cv::circle(detected_rect_image,
+            //           p,
+            //           roomba_image_location.radius * image_scaled.cols,
+            //           cv::Scalar(0, 255, 0));
         }
     }
 
