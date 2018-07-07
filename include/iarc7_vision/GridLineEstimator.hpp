@@ -10,6 +10,7 @@
 #pragma GCC diagnostic pop
 // END BAD HEADERS
 
+#include <dynamic_reconfigure/server.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/cudaimgproc.hpp>
@@ -18,6 +19,8 @@
 #include <ros/ros.h>
 #include <ros_utils/SafeTransformWrapper.hpp>
 #include <tf2_ros/transform_listener.h>
+
+#include "iarc7_vision/GridEstimatorConfig.h"
 
 namespace iarc7_vision {
 
@@ -55,23 +58,18 @@ struct GridLineDebugSettings {
 
 class GridLineEstimator {
   public:
-    GridLineEstimator(const LineExtractorSettings& line_estimator_settings,
-                      const GridEstimatorSettings& grid_estimator_settings,
-                      const GridLineDebugSettings& debug_settings,
-                      const std::string& expected_image_format);
+    GridLineEstimator(const std::string& expected_image_format);
 
     void update(const cv::cuda::GpuMat& image, const ros::Time& time);
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& timeout);
 
-    /// MUST be called when either of the settings objects passed into the
-    /// constructor have their variables changed
-    bool __attribute__((warn_unused_result)) onSettingsChanged();
-
   private:
 
     /// Returns the current angle of the quad from +x (with positive towards +y)
     double getCurrentTheta(const ros::Time& time) const;
+
+    void getDynamicSettings(iarc7_vision::GridEstimatorConfig& config);
 
     /// Compute the focal length (in px) from image size and dfov
     ///
@@ -188,6 +186,10 @@ class GridLineEstimator {
     double gridLoss(const std::vector<double>& wrapped_dists,
                     double dist) const;
 
+    /// MUST be called when either of the settings objects passed into the
+    /// constructor have their variables changed
+    bool __attribute__((warn_unused_result)) onSettingsChanged();
+
     /// Extract grid position from the image and publish if possible
     void processImage(const cv::cuda::GpuMat& image, const ros::Time& time) const;
 
@@ -235,16 +237,25 @@ class GridLineEstimator {
 
     void updateFilteredPosition(const ros::Time& time);
 
+    ros::NodeHandle nh_;
+    ros::NodeHandle private_nh_;
+
+    dynamic_reconfigure::Server<iarc7_vision::GridEstimatorConfig>
+        dynamic_reconfigure_server_;
+    boost::function<void(iarc7_vision::GridEstimatorConfig&, uint32_t)>
+        dynamic_reconfigure_settings_callback_;
+    bool dynamic_reconfigure_called_;
+
     uint32_t hsv_conversion_constant_;
     std::string image_encoding_;
 
     ros::Publisher pose_pub_;
     ros::Publisher yaw_pub_;
 
-    const LineExtractorSettings& line_extractor_settings_;
-    const GridEstimatorSettings& grid_estimator_settings_;
+    LineExtractorSettings line_extractor_settings_;
+    const GridEstimatorSettings grid_estimator_settings_;
 
-    const GridLineDebugSettings& debug_settings_;
+    const GridLineDebugSettings debug_settings_;
     ros::Publisher debug_direction_marker_pub_;
     ros::Publisher debug_edges_pub_;
     ros::Publisher debug_lines_pub_;

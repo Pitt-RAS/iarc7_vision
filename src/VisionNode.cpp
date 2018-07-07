@@ -27,46 +27,6 @@
 #include "iarc7_vision/RoombaImageLocation.hpp"
 #include "iarc7_vision/UndistortionModel.hpp"
 
-void getLineExtractorSettings(const ros::NodeHandle& private_nh,
-                              iarc7_vision::LineExtractorSettings& line_settings)
-{
-    // Begin line extractor settings
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/pixels_per_meter",
-            line_settings.pixels_per_meter));
-
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/canny_high_threshold",
-            line_settings.canny_high_threshold));
-
-    double canny_threshold_ratio;
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/canny_threshold_ratio",
-            canny_threshold_ratio));
-    line_settings.canny_low_threshold =
-        line_settings.canny_high_threshold / canny_threshold_ratio;
-
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/canny_sobel_size",
-            line_settings.canny_sobel_size));
-
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/hough_rho_resolution",
-            line_settings.hough_rho_resolution));
-
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/hough_theta_resolution",
-            line_settings.hough_theta_resolution));
-
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/hough_thresh_fraction",
-            line_settings.hough_thresh_fraction));
-
-    ROS_ASSERT(private_nh.getParam(
-            "line_extractor/fov",
-            line_settings.fov));
-}
-
 void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
                     iarc7_vision::OpticalFlowEstimatorSettings& flow_settings)
 {
@@ -178,68 +138,6 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
         flow_settings.hist_image_size_scale));
 }
 
-void getGridEstimatorSettings(const ros::NodeHandle& private_nh,
-                              iarc7_vision::GridEstimatorSettings& settings)
-{
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/theta_step",
-            settings.theta_step));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/grid_step",
-            settings.grid_step));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/grid_spacing",
-            settings.grid_spacing));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/grid_line_thickness",
-            settings.grid_line_thickness));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/grid_zero_offset_x",
-            settings.grid_zero_offset(0)));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/grid_zero_offset_y",
-            settings.grid_zero_offset(1)));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/grid_translation_mean_iterations",
-            settings.grid_translation_mean_iterations));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/line_rejection_angle_threshold",
-            settings.line_rejection_angle_threshold));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/min_extraction_altitude",
-            settings.min_extraction_altitude));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_estimator/allowed_position_stamp_error",
-            settings.allowed_position_stamp_error));
-}
-
-void getGridDebugSettings(const ros::NodeHandle& private_nh,
-                      iarc7_vision::GridLineDebugSettings& settings)
-{
-   ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_line_detector",
-            settings.debug_line_detector));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_direction",
-            settings.debug_direction));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_edges",
-            settings.debug_edges));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_lines",
-            settings.debug_lines));
-    ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_line_markers",
-            settings.debug_line_markers));
-    if (private_nh.hasParam("grid_line_estimator/debug_height")) {
-        ROS_ASSERT(private_nh.getParam(
-            "grid_line_estimator/debug_height",
-            settings.debug_height));
-    } else {
-        settings.debug_height = std::numeric_limits<double>::quiet_NaN();
-    }
-}
-
 void getFlowDebugSettings(const ros::NodeHandle& private_nh,
                           iarc7_vision::OpticalFlowDebugSettings& settings)
 {
@@ -270,25 +168,11 @@ void getFlowDebugSettings(const ros::NodeHandle& private_nh,
 
 void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
                         const ros::NodeHandle& private_nh,
-                        iarc7_vision::LineExtractorSettings& line_settings,
                         iarc7_vision::OpticalFlowEstimatorSettings& flow_settings,
                         bool& ran)
 {
     if (!ran) {
-        getLineExtractorSettings(private_nh, line_settings);
         getOpticalFlowEstimatorSettings(private_nh, flow_settings);
-
-        // Overwrite line extractor settings from dynamic reconfigure
-        // with the ones from the param server
-        config.pixels_per_meter       = line_settings.pixels_per_meter;
-        config.canny_high_threshold   = line_settings.canny_high_threshold;
-        config.canny_threshold_ratio  = line_settings.canny_high_threshold
-                                            / line_settings.canny_low_threshold;
-        config.canny_sobel_size       = line_settings.canny_sobel_size;
-        config.hough_rho_resolution   = line_settings.hough_rho_resolution;
-        config.hough_theta_resolution = line_settings.hough_theta_resolution;
-        config.hough_thresh_fraction  = line_settings.hough_thresh_fraction;
-        config.fov                    = line_settings.fov;
 
         // Overwrite optical flow settings from dynamic reconfigure
         // with the ones from the param server
@@ -331,19 +215,6 @@ void getDynamicSettings(iarc7_vision::VisionNodeConfig &config,
 
         ran = true;
     } else {
-        // Begin line extractor settings
-        line_settings.pixels_per_meter = config.pixels_per_meter;
-        line_settings.canny_high_threshold = config.canny_high_threshold;
-
-        line_settings.canny_low_threshold =
-            config.canny_high_threshold / config.canny_threshold_ratio;
-
-        line_settings.canny_sobel_size = config.canny_sobel_size;
-        line_settings.hough_rho_resolution = config.hough_rho_resolution;
-        line_settings.hough_theta_resolution = config.hough_theta_resolution;
-        line_settings.hough_thresh_fraction = config.hough_thresh_fraction;
-        line_settings.fov = config.fov;
-
         // Begin optical flow estimator settings
         flow_settings.fov = config.flow_fov;
         flow_settings.min_estimation_altitude
@@ -404,13 +275,6 @@ int main(int argc, char **argv)
     }
 
     // Create settings objects
-    iarc7_vision::LineExtractorSettings line_extractor_settings;
-    getLineExtractorSettings(private_nh, line_extractor_settings);
-    iarc7_vision::GridEstimatorSettings grid_estimator_settings;
-    getGridEstimatorSettings(private_nh, grid_estimator_settings);
-    iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
-    getGridDebugSettings(private_nh, grid_line_debug_settings);
-
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
     getOpticalFlowEstimatorSettings(private_nh, optical_flow_estimator_settings);
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
@@ -418,7 +282,6 @@ int main(int argc, char **argv)
     // Load settings not in dynamic reconfigure
     getFlowDebugSettings(private_nh, optical_flow_debug_settings);
 
-    std::unique_ptr<iarc7_vision::GridLineEstimator> gridline_estimator;
     std::unique_ptr<iarc7_vision::OpticalFlowEstimator> optical_flow_estimator;
 
     // Set up dynamic reconfigure
@@ -429,14 +292,9 @@ int main(int argc, char **argv)
         [&](iarc7_vision::VisionNodeConfig &config, uint32_t) {
             getDynamicSettings(config,
                                private_nh,
-                               line_extractor_settings,
                                optical_flow_estimator_settings,
                                dynamic_reconfigure_called);
             dynamic_reconfigure_called = true;
-
-            if (gridline_estimator != nullptr) {
-                ROS_ASSERT(gridline_estimator->onSettingsChanged());
-            }
 
             if (optical_flow_estimator != nullptr) {
                 ROS_ASSERT(optical_flow_estimator->onSettingsChanged());
@@ -455,9 +313,6 @@ int main(int argc, char **argv)
 
     // Create vision processing objects
     gridline_estimator.reset(new iarc7_vision::GridLineEstimator(
-            line_extractor_settings,
-            grid_estimator_settings,
-            grid_line_debug_settings,
             "RGB"));
     optical_flow_estimator.reset(new iarc7_vision::OpticalFlowEstimator(
             optical_flow_estimator_settings,
@@ -497,7 +352,7 @@ int main(int argc, char **argv)
 
     // Initialize the vision classes
     ros::Time start_time = ros::Time::now();
-    ROS_ASSERT(gridline_estimator->waitUntilReady(ros::Duration(startup_timeout)));
+    ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
     ROS_ASSERT(optical_flow_estimator->waitUntilReady(ros::Duration(startup_timeout)));
     while (message_queue.empty()) {
         if (!ros::ok()) {
@@ -525,10 +380,10 @@ int main(int argc, char **argv)
 
     // Form a connection with the node monitor. If no connection can be made
     // assert because we don't know what's going on with the other nodes.
-    ROS_INFO("vision_node: Attempting to form safety bond");
-    Iarc7Safety::SafetyClient safety_client(nh, "vision_node");
-    ROS_ASSERT_MSG(safety_client.formBond(),
-                   "vision_node: Could not form bond with safety client");
+    //ROS_INFO("vision_node: Attempting to form safety bond");
+    //Iarc7Safety::SafetyClient safety_client(nh, "vision_node");
+    //ROS_ASSERT_MSG(safety_client.formBond(),
+    //               "vision_node: Could not form bond with safety client");
 
     message_queue.clear();
 
@@ -599,7 +454,7 @@ int main(int argc, char **argv)
 
             const auto color_correct_time = std::chrono::high_resolution_clock::now();
 
-            //gridline_estimator->update(image_correct, message->header.stamp);
+            gridline_estimator->update(image_correct, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
             std::vector<iarc7_vision::RoombaImageLocation>

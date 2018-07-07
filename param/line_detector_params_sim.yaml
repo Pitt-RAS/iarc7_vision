@@ -1,5 +1,6 @@
 # Settings for the image processing portion of the GridLineEstimator
-line_extractor:
+
+grid_estimator:
     # Pixels per meter to scale image to
     pixels_per_meter: 250
     canny_high_threshold: 35000.0

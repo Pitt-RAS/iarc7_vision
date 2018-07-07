@@ -50,7 +50,8 @@ add_definitions(-DEIGEN_NO_DEBUG -DEIGEN_MPL2_ONLY)
 catkin_python_setup()
 
 generate_dynamic_reconfigure_options(
-  cfg/VisionNode.cfg
+  cfg/GridEstimator.cfg
+  cfg/OpticalFlow.cfg
   cfg/RoombaEstimator.cfg
 )
 

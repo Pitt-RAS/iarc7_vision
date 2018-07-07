@@ -29,6 +29,77 @@
 #include <iarc7_msgs/Float64Stamped.h>
 #include <visualization_msgs/Marker.h>
 
+#define IARC7_VISION_GLE_PARAM_LOAD(x) \
+    ROS_ASSERT(private_nh.getParam( \
+               #x, \
+               settings.x));
+
+static iarc7_vision::LineExtractorSettings getLineExtractorSettings(
+        const ros::NodeHandle& private_nh)
+{
+
+    iarc7_vision::LineExtractorSettings settings;
+    IARC7_VISION_GLE_PARAM_LOAD(pixels_per_meter);
+    IARC7_VISION_GLE_PARAM_LOAD(canny_high_threshold);
+    IARC7_VISION_GLE_PARAM_LOAD(canny_sobel_size);
+    IARC7_VISION_GLE_PARAM_LOAD(hough_rho_resolution);
+    IARC7_VISION_GLE_PARAM_LOAD(hough_theta_resolution);
+    IARC7_VISION_GLE_PARAM_LOAD(hough_thresh_fraction);
+    IARC7_VISION_GLE_PARAM_LOAD(fov);
+
+    double canny_threshold_ratio;
+    ROS_ASSERT(private_nh.getParam(
+            "canny_threshold_ratio",
+            canny_threshold_ratio));
+    settings.canny_low_threshold =
+        settings.canny_high_threshold / canny_threshold_ratio;
+
+    return settings;
+}
+
+static iarc7_vision::GridEstimatorSettings getGridEstimatorSettings(
+        const ros::NodeHandle& private_nh)
+{
+    iarc7_vision::GridEstimatorSettings settings;
+    IARC7_VISION_GLE_PARAM_LOAD(theta_step);
+    IARC7_VISION_GLE_PARAM_LOAD(grid_step);
+    IARC7_VISION_GLE_PARAM_LOAD(grid_spacing);
+    IARC7_VISION_GLE_PARAM_LOAD(grid_line_thickness);
+    IARC7_VISION_GLE_PARAM_LOAD(grid_translation_mean_iterations);
+    IARC7_VISION_GLE_PARAM_LOAD(line_rejection_angle_threshold);
+    IARC7_VISION_GLE_PARAM_LOAD(min_extraction_altitude);
+    IARC7_VISION_GLE_PARAM_LOAD(allowed_position_stamp_error);
+
+    ROS_ASSERT(private_nh.getParam(
+            "grid_zero_offset_x",
+            settings.grid_zero_offset(0)));
+    ROS_ASSERT(private_nh.getParam(
+            "grid_zero_offset_y",
+            settings.grid_zero_offset(1)));
+
+    return settings;
+}
+
+static iarc7_vision::GridLineDebugSettings getGridDebugSettings(
+        const ros::NodeHandle& private_nh)
+{
+    iarc7_vision::GridLineDebugSettings settings;
+    IARC7_VISION_GLE_PARAM_LOAD(debug_line_detector);
+    IARC7_VISION_GLE_PARAM_LOAD(debug_direction);
+    IARC7_VISION_GLE_PARAM_LOAD(debug_edges);
+    IARC7_VISION_GLE_PARAM_LOAD(debug_lines);
+    IARC7_VISION_GLE_PARAM_LOAD(debug_line_markers);
+    if (private_nh.hasParam("debug_height")) {
+        IARC7_VISION_GLE_PARAM_LOAD(debug_height);
+    } else {
+        settings.debug_height = std::numeric_limits<double>::quiet_NaN();
+    }
+
+    return settings;
+}
+
+#undef IARC7_VISION_GLE_PARAM_LOAD
+
 static void drawLines(const std::vector<cv::Vec2f>& lines, cv::Mat image)
 {
     for (auto& line : lines) {
@@ -69,56 +140,60 @@ static double theta_loss(const std::vector<double>& thetas, double theta)
 namespace iarc7_vision {
 
 GridLineEstimator::GridLineEstimator(
-        const LineExtractorSettings& line_extractor_settings,
-        const GridEstimatorSettings& grid_estimator_settings,
-        const GridLineDebugSettings& debug_settings,
         const std::string& expected_image_format)
-    : line_extractor_settings_(line_extractor_settings),
-      grid_estimator_settings_(grid_estimator_settings),
-      debug_settings_(debug_settings),
-      gpu_canny_edge_detector_(),
-      gpu_hough_lines_detector_(),
+    : nh_(),
+      private_nh_("~/grid_estimator"),
+      dynamic_reconfigure_server_(private_nh_),
+      dynamic_reconfigure_settings_callback_(
+              [this](iarc7_vision::GridEstimatorConfig& config, uint32_t) {
+                  getDynamicSettings(config);
+                  if (!onSettingsChanged()) {
+                      throw std::runtime_error(
+                              "Failed to update settings in GridLineEstimator");
+                  }
+              }),
+      dynamic_reconfigure_called_(false),
+      line_extractor_settings_(getLineExtractorSettings(private_nh_)),
+      grid_estimator_settings_(getGridEstimatorSettings(private_nh_)),
+      debug_settings_(getGridDebugSettings(private_nh_)),
+      gpu_canny_edge_detector_(cv::cuda::createCannyEdgeDetector(
+                                line_extractor_settings_.canny_low_threshold,
+                                line_extractor_settings_.canny_high_threshold,
+                                line_extractor_settings_.canny_sobel_size)),
+      // Threshold does not need to be set here because it is recalculated
+      // for every image based on the current height
+      gpu_hough_lines_detector_(cv::cuda::createHoughLinesDetector(
+                              line_extractor_settings_.hough_rho_resolution,
+                              line_extractor_settings_.hough_theta_resolution,
+                              0.0)),
       transform_wrapper_()
 {
-    ros::NodeHandle local_nh ("grid_line_estimator");
+    dynamic_reconfigure_server_.setCallback(
+            dynamic_reconfigure_settings_callback_);
 
     if (debug_settings_.debug_direction) {
         debug_direction_marker_pub_
-            = local_nh.advertise<visualization_msgs::Marker>("direction", 1);
+            = private_nh_.advertise<visualization_msgs::Marker>("direction", 1);
     }
 
     if (debug_settings_.debug_edges) {
-        debug_edges_pub_ = local_nh.advertise<sensor_msgs::Image>("edges", 10);
+        debug_edges_pub_ = private_nh_.advertise<sensor_msgs::Image>("edges", 10);
     }
 
     if (debug_settings_.debug_lines) {
-        debug_lines_pub_ = local_nh.advertise<sensor_msgs::Image>("lines", 10);
+        debug_lines_pub_ = private_nh_.advertise<sensor_msgs::Image>("lines", 10);
     }
 
     if (debug_settings_.debug_line_markers) {
-        debug_line_markers_pub_ = local_nh.advertise<visualization_msgs::Marker>(
+        debug_line_markers_pub_ = private_nh_.advertise<visualization_msgs::Marker>(
                 "line_markers", 1);
     }
 
     pose_pub_
-        = local_nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose",
+        = private_nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose",
                                                                        10);
 
-    yaw_pub_ = local_nh.advertise<iarc7_msgs::Float64Stamped>("line_yaw", 10);
-
-    // Create the canny edge detector object
-    gpu_canny_edge_detector_ = cv::cuda::createCannyEdgeDetector(
-                                line_extractor_settings_.canny_low_threshold,
-                                line_extractor_settings_.canny_high_threshold,
-                                line_extractor_settings_.canny_sobel_size);
-
-    // Create the hough line detector object
-    // Threshold does not need to be set here because it is recalculated
-    // for every image based on the current height
-    gpu_hough_lines_detector_ = cv::cuda::createHoughLinesDetector(
-                            line_extractor_settings_.hough_rho_resolution,
-                            line_extractor_settings_.hough_theta_resolution,
-                            0.0);
+    yaw_pub_ = private_nh_.advertise<iarc7_msgs::Float64Stamped>("line_yaw", 10);
 
     if (expected_image_format == "RGB") {
         hsv_conversion_constant_ = CV_RGB2HSV;
@@ -131,6 +206,37 @@ GridLineEstimator::GridLineEstimator(
     }
     else {
         ROS_ASSERT("Unkown image format requested of Grid Line Estimator");
+    }
+}
+
+void GridLineEstimator::getDynamicSettings(iarc7_vision::GridEstimatorConfig& config)
+{
+    if (!dynamic_reconfigure_called_) {
+        // Overwrite line extractor settings from dynamic reconfigure
+        // with the ones from the param server
+        config.pixels_per_meter       = line_extractor_settings_.pixels_per_meter;
+        config.canny_high_threshold   = line_extractor_settings_.canny_high_threshold;
+        config.canny_threshold_ratio  = line_extractor_settings_.canny_high_threshold
+                                            / line_extractor_settings_.canny_low_threshold;
+        config.canny_sobel_size       = line_extractor_settings_.canny_sobel_size;
+        config.hough_rho_resolution   = line_extractor_settings_.hough_rho_resolution;
+        config.hough_theta_resolution = line_extractor_settings_.hough_theta_resolution;
+        config.hough_thresh_fraction  = line_extractor_settings_.hough_thresh_fraction;
+        config.fov                    = line_extractor_settings_.fov;
+
+        dynamic_reconfigure_called_ = true;
+    } else {
+        line_extractor_settings_.pixels_per_meter = config.pixels_per_meter;
+        line_extractor_settings_.canny_high_threshold = config.canny_high_threshold;
+
+        line_extractor_settings_.canny_low_threshold =
+            config.canny_high_threshold / config.canny_threshold_ratio;
+
+        line_extractor_settings_.canny_sobel_size = config.canny_sobel_size;
+        line_extractor_settings_.hough_rho_resolution = config.hough_rho_resolution;
+        line_extractor_settings_.hough_theta_resolution = config.hough_theta_resolution;
+        line_extractor_settings_.hough_thresh_fraction = config.hough_thresh_fraction;
+        line_extractor_settings_.fov = config.fov;
     }
 }
 

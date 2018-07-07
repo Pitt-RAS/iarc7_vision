@@ -39,7 +39,6 @@ grid_estimator:
     # Allowed lag between available position and frame timestamp
     allowed_position_stamp_error: 0.1
 
-grid_line_estimator:
     # Should we forgo line counting and just detect lines on the ground?
     debug_line_detector: false
 
