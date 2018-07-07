@@ -16,21 +16,23 @@ class ColorCorrectionModel {
                  cv::cuda::GpuMat& out,
                  cv::cuda::Stream& stream) const;
   private:
-    const double r_a1_;
-    const double r_b1_;
-    const double r_a2_;
-    const double r_b2_;
-    const double g_a1_;
-    const double g_b1_;
-    const double g_a2_;
-    const double g_b2_;
-    const double b_a1_;
-    const double b_b1_;
-    const double b_a2_;
-    const double b_b2_;
+    const double a00_;
+    const double a01_;
+    const double a02_;
+    const double a10_;
+    const double a11_;
+    const double a12_;
+    const double a20_;
+    const double a21_;
+    const double a22_;
+    const double offset0_;
+    const double offset1_;
+    const double offset2_;
     const double gamma_;
+    const double final_gamma_;
 
-    cv::Ptr<cv::cuda::LookUpTable> lut_;
+    cv::Ptr<cv::cuda::LookUpTable> gamma_lut_;
+    cv::Ptr<cv::cuda::LookUpTable> final_lut_;
 };
 
 } // namespace iarc7_vision

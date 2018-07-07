@@ -5,60 +5,114 @@
 namespace iarc7_vision {
 
 ColorCorrectionModel::ColorCorrectionModel(const ros::NodeHandle& nh)
-    : r_a1_(ros_utils::ParamUtils::getParam<double>(nh, "r_a1")),
-      r_b1_(ros_utils::ParamUtils::getParam<double>(nh, "r_b1")),
-      r_a2_(ros_utils::ParamUtils::getParam<double>(nh, "r_a2")),
-      r_b2_(ros_utils::ParamUtils::getParam<double>(nh, "r_b2")),
-      g_a1_(ros_utils::ParamUtils::getParam<double>(nh, "g_a1")),
-      g_b1_(ros_utils::ParamUtils::getParam<double>(nh, "g_b1")),
-      g_a2_(ros_utils::ParamUtils::getParam<double>(nh, "g_a2")),
-      g_b2_(ros_utils::ParamUtils::getParam<double>(nh, "g_b2")),
-      b_a1_(ros_utils::ParamUtils::getParam<double>(nh, "b_a1")),
-      b_b1_(ros_utils::ParamUtils::getParam<double>(nh, "b_b1")),
-      b_a2_(ros_utils::ParamUtils::getParam<double>(nh, "b_a2")),
-      b_b2_(ros_utils::ParamUtils::getParam<double>(nh, "b_b2")),
-      gamma_(ros_utils::ParamUtils::getParam<double>(nh, "gamma"))
+    : a00_(ros_utils::ParamUtils::getParam<double>(nh, "a00")),
+      a01_(ros_utils::ParamUtils::getParam<double>(nh, "a01")),
+      a02_(ros_utils::ParamUtils::getParam<double>(nh, "a02")),
+      a10_(ros_utils::ParamUtils::getParam<double>(nh, "a10")),
+      a11_(ros_utils::ParamUtils::getParam<double>(nh, "a11")),
+      a12_(ros_utils::ParamUtils::getParam<double>(nh, "a12")),
+      a20_(ros_utils::ParamUtils::getParam<double>(nh, "a20")),
+      a21_(ros_utils::ParamUtils::getParam<double>(nh, "a21")),
+      a22_(ros_utils::ParamUtils::getParam<double>(nh, "a22")),
+      offset0_(ros_utils::ParamUtils::getParam<double>(nh, "offset0")),
+      offset1_(ros_utils::ParamUtils::getParam<double>(nh, "offset1")),
+      offset2_(ros_utils::ParamUtils::getParam<double>(nh, "offset2")),
+      gamma_(ros_utils::ParamUtils::getParam<double>(nh, "gamma")),
+      final_gamma_(ros_utils::ParamUtils::getParam<double>(nh, "final_gamma"))
 {
-    cv::Mat lut(cv::Size(256, 1), CV_8UC3);
-    for (size_t i = 0; i < 256; i++) {
-        uint8_t r_result;
-        uint8_t g_result;
-        uint8_t b_result;
-        {
-            const double inner = (r_a1_*i + r_b1_) / 255.;
-            const double after_gamma = std::pow(inner, gamma_) * 255.;
-            const double result = r_a2_*after_gamma + r_b2_;
-            r_result = result < 0
-                     ? 0
-                     : (result > 255 ? 255 : static_cast<char>(result));
+    {
+        cv::Mat lut(cv::Size(256, 1), CV_8UC3);
+        for (int i = 0; i < 256; i++) {
+            const double result = 255. * std::pow(static_cast<double>(i) / 255.,
+                                           1/gamma_);
+            const uchar result_b = std::max(0., std::min(255., result));
+            lut.at<cv::Vec3b>(0, i) = cv::Vec3b(result_b, result_b, result_b);
         }
-        {
-            const double inner = (g_a1_*i + g_b1_) / 255.;
-            const double afteg_gamma = std::pow(inner, gamma_) * 255.;
-            const double result = g_a2_*afteg_gamma + g_b2_;
-            g_result = result < 0
-                     ? 0
-                     : (result > 255 ? 255 : static_cast<char>(result));
-        }
-        {
-            const double inner = (b_a1_*i + b_b1_) / 255.;
-            const double afteb_gamma = std::pow(inner, gamma_) * 255.;
-            const double result = b_a2_*afteb_gamma + b_b2_;
-            b_result = result < 0
-                     ? 0
-                     : (result > 255 ? 255 : static_cast<char>(result));
-        }
-        lut.at<cv::Vec3b>(0, i) = cv::Vec3b(r_result, g_result, b_result);
+        gamma_lut_ = cv::cuda::createLookUpTable(lut);
     }
 
-    lut_ = cv::cuda::createLookUpTable(lut);
+    {
+        cv::Mat lut(cv::Size(256, 1), CV_8UC3);
+        for (int i = 0; i < 256; i++) {
+            const double result = 255. * std::pow(static_cast<double>(i) / 255.,
+                                           1/final_gamma_);
+            const uchar result_b = std::max(0., std::min(255., result));
+            lut.at<cv::Vec3b>(0, i) = cv::Vec3b(result_b, result_b, result_b);
+        }
+        final_lut_ = cv::cuda::createLookUpTable(lut);
+    }
 }
 
 void ColorCorrectionModel::correct(const cv::cuda::GpuMat& in,
                                    cv::cuda::GpuMat& out,
                                    cv::cuda::Stream& stream) const
 {
-    lut_->transform(in, out, stream);
+    cv::cuda::GpuMat in_post_gamma;
+    gamma_lut_->transform(in, in_post_gamma, stream);
+
+    std::array<cv::cuda::GpuMat, 3> in_channels;
+    cv::cuda::split(in_post_gamma, in_channels.data(), stream);
+
+    std::array<cv::cuda::GpuMat, 3> saturated_masks;
+    for (int i = 0; i < 3; i++) {
+        cv::cuda::compare(in_channels[i], 255, saturated_masks[i], cv::CMP_GE, stream);
+    }
+
+    std::array<cv::cuda::GpuMat, 3> gbr_channels = {{in_channels[1],
+                                                     in_channels[2],
+                                                     in_channels[0]}};
+    cv::cuda::GpuMat gbr_order;
+    cv::cuda::merge(gbr_channels.data(), 3, gbr_order, stream);
+
+    std::array<cv::cuda::GpuMat, 3> brg_channels = {{in_channels[2],
+                                                     in_channels[0],
+                                                     in_channels[1]}};
+    cv::cuda::GpuMat brg_order;
+    cv::cuda::merge(brg_channels.data(), 3, brg_order, stream);
+
+    cv::cuda::GpuMat out1, out2, out3;
+    cv::cuda::multiply(in_post_gamma,
+                       cv::Scalar(a00_, a11_, a22_),
+                       out1,
+                       1.,
+                       CV_32FC3,
+                       stream);
+    cv::cuda::multiply(gbr_order,
+                       cv::Scalar(a01_, a12_, a20_),
+                       out2,
+                       1.,
+                       CV_32FC3,
+                       stream);
+    cv::cuda::multiply(brg_order,
+                       cv::Scalar(a02_, a10_, a21_),
+                       out3,
+                       1.,
+                       CV_32FC3,
+                       stream);
+
+    cv::cuda::GpuMat out_float1;
+    cv::cuda::GpuMat out_float2;
+    cv::cuda::add(out1, out2, out_float1, cv::noArray(), CV_32FC3, stream);
+    cv::cuda::add(out3,
+                  cv::Scalar(offset0_, offset1_, offset2_),
+                  out_float2,
+                  cv::noArray(),
+                  CV_32FC3,
+                  stream);
+
+    cv::cuda::GpuMat out_float;
+    cv::cuda::add(out_float1, out_float2, out_float, cv::noArray(), CV_32FC3, stream);
+
+    cv::cuda::GpuMat out_before_gamma, out_after_gamma;
+    out_float.convertTo(out_before_gamma, CV_8UC3);
+    final_lut_->transform(out_before_gamma, out_after_gamma, stream);
+
+    std::array<cv::cuda::GpuMat, 3> out_channels;
+    cv::cuda::split(out_after_gamma, out_channels.data(), stream);
+    for (int i = 0; i < 3; i++) {
+        out_channels[i].setTo(255, saturated_masks[i], stream);
+    }
+    cv::cuda::merge(out_channels.data(), 3, out, stream);
 }
 
 } // namespace iarc7_vision
