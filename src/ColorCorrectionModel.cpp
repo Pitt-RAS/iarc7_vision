@@ -1,5 +1,7 @@
 #include "iarc7_vision/ColorCorrectionModel.hpp"
 
+#include <chrono>
+
 #include "ros_utils/ParamUtils.hpp"
 
 namespace iarc7_vision {
@@ -47,72 +49,84 @@ void ColorCorrectionModel::correct(const cv::cuda::GpuMat& in,
                                    cv::cuda::GpuMat& out,
                                    cv::cuda::Stream& stream) const
 {
-    cv::cuda::GpuMat in_post_gamma;
-    gamma_lut_->transform(in, in_post_gamma, stream);
+    const auto start = std::chrono::high_resolution_clock::now();
 
-    std::array<cv::cuda::GpuMat, 3> in_channels;
-    cv::cuda::split(in_post_gamma, in_channels.data(), stream);
+    gamma_lut_->transform(in, in_post_gamma_, stream);
 
-    std::array<cv::cuda::GpuMat, 3> saturated_masks;
+    const auto after_gamma = std::chrono::high_resolution_clock::now();
+
+    cv::cuda::split(in_post_gamma_, in_channels_.data(), stream);
+
     for (int i = 0; i < 3; i++) {
-        cv::cuda::compare(in_channels[i], 255, saturated_masks[i], cv::CMP_GE, stream);
+        cv::cuda::compare(in_channels_[i], 255, saturated_masks_[i], cv::CMP_GE, stream);
     }
 
-    std::array<cv::cuda::GpuMat, 3> gbr_channels = {{in_channels[1],
-                                                     in_channels[2],
-                                                     in_channels[0]}};
-    cv::cuda::GpuMat gbr_order;
-    cv::cuda::merge(gbr_channels.data(), 3, gbr_order, stream);
+    std::array<cv::cuda::GpuMat, 3> gbr_channels = {{in_channels_[1],
+                                                     in_channels_[2],
+                                                     in_channels_[0]}};
+    cv::cuda::merge(gbr_channels.data(), 3, gbr_order_, stream);
 
-    std::array<cv::cuda::GpuMat, 3> brg_channels = {{in_channels[2],
-                                                     in_channels[0],
-                                                     in_channels[1]}};
-    cv::cuda::GpuMat brg_order;
-    cv::cuda::merge(brg_channels.data(), 3, brg_order, stream);
+    std::array<cv::cuda::GpuMat, 3> brg_channels = {{in_channels_[2],
+                                                     in_channels_[0],
+                                                     in_channels_[1]}};
+    cv::cuda::merge(brg_channels.data(), 3, brg_order_, stream);
 
-    cv::cuda::GpuMat out1, out2, out3;
-    cv::cuda::multiply(in_post_gamma,
+    const auto after_splits = std::chrono::high_resolution_clock::now();
+
+    cv::cuda::multiply(in_post_gamma_,
                        cv::Scalar(a00_, a11_, a22_),
-                       out1,
+                       out1_,
                        1.,
                        CV_32FC3,
                        stream);
-    cv::cuda::multiply(gbr_order,
+    cv::cuda::multiply(gbr_order_,
                        cv::Scalar(a01_, a12_, a20_),
-                       out2,
+                       out2_,
                        1.,
                        CV_32FC3,
                        stream);
-    cv::cuda::multiply(brg_order,
+    cv::cuda::multiply(brg_order_,
                        cv::Scalar(a02_, a10_, a21_),
-                       out3,
+                       out3_,
                        1.,
                        CV_32FC3,
                        stream);
 
-    cv::cuda::GpuMat out_float1;
-    cv::cuda::GpuMat out_float2;
-    cv::cuda::add(out1, out2, out_float1, cv::noArray(), CV_32FC3, stream);
-    cv::cuda::add(out3,
+    cv::cuda::add(out1_, out2_, out_float1_, cv::noArray(), CV_32FC3, stream);
+    cv::cuda::add(out3_,
                   cv::Scalar(offset0_, offset1_, offset2_),
-                  out_float2,
+                  out_float2_,
                   cv::noArray(),
                   CV_32FC3,
                   stream);
 
-    cv::cuda::GpuMat out_float;
-    cv::cuda::add(out_float1, out_float2, out_float, cv::noArray(), CV_32FC3, stream);
+    cv::cuda::add(out_float1_, out_float2_, out_float_, cv::noArray(), CV_32FC3, stream);
 
-    cv::cuda::GpuMat out_before_gamma, out_after_gamma;
-    out_float.convertTo(out_before_gamma, CV_8UC3);
-    final_lut_->transform(out_before_gamma, out_after_gamma, stream);
+    const auto after_arithm = std::chrono::high_resolution_clock::now();
 
-    std::array<cv::cuda::GpuMat, 3> out_channels;
-    cv::cuda::split(out_after_gamma, out_channels.data(), stream);
+    out_float_.convertTo(out_before_gamma_, CV_8UC3);
+    final_lut_->transform(out_before_gamma_, out_after_gamma_, stream);
+
+    const auto after_gamma2 = std::chrono::high_resolution_clock::now();
+
+    cv::cuda::split(out_after_gamma_, out_channels_.data(), stream);
     for (int i = 0; i < 3; i++) {
-        out_channels[i].setTo(255, saturated_masks[i], stream);
+        out_channels_[i].setTo(255, saturated_masks_[i], stream);
     }
-    cv::cuda::merge(out_channels.data(), 3, out, stream);
+    cv::cuda::merge(out_channels_.data(), 3, out, stream);
+
+    const auto after_out = std::chrono::high_resolution_clock::now();
+
+    const auto counts = [](const auto& a, const auto& b) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                b - a).count();
+    };
+    ROS_DEBUG_STREAM(
+            "Gamma: " << counts(start, after_gamma) << std::endl
+         << "Splits: " << counts(after_gamma, after_splits) << std::endl
+         << "Arithm: " << counts(after_splits, after_arithm) << std::endl
+         << "Gamma2: " << counts(after_arithm, after_gamma2) << std::endl
+         << "Out: " << counts(after_gamma2, after_out));
 }
 
 } // namespace iarc7_vision

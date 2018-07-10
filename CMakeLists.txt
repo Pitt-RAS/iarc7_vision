@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(iarc7_vision)
 
+set(CMAKE_BUILD_TYPE Release)
+
 set("OpenCV_DIR" "/usr/local/share/OpenCV")
 set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE "" INTERNAL)
 

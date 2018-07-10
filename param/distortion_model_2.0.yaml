@@ -10,5 +10,5 @@ distortion_model:
     p2: 0.
     k3: -2.6e-01
 
-    out_width: 1280
-    out_height: 520
+    out_width: 640
+    out_height: 260

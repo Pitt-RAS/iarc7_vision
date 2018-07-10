@@ -33,6 +33,22 @@ class ColorCorrectionModel {
 
     cv::Ptr<cv::cuda::LookUpTable> gamma_lut_;
     cv::Ptr<cv::cuda::LookUpTable> final_lut_;
+
+    mutable cv::cuda::GpuMat in_post_gamma_;
+    mutable std::array<cv::cuda::GpuMat, 3> in_channels_;
+    mutable std::array<cv::cuda::GpuMat, 3> saturated_masks_;
+    mutable cv::cuda::GpuMat gbr_order_;
+    mutable cv::cuda::GpuMat brg_order_;
+    mutable cv::cuda::GpuMat out1_;
+    mutable cv::cuda::GpuMat out2_;
+    mutable cv::cuda::GpuMat out3_;
+    mutable cv::cuda::GpuMat out_float1_;
+    mutable cv::cuda::GpuMat out_float2_;
+    mutable cv::cuda::GpuMat out_float_;
+    mutable cv::cuda::GpuMat out_before_gamma_;
+    mutable cv::cuda::GpuMat out_after_gamma_;
+    mutable std::array<cv::cuda::GpuMat, 3> out_channels_;
+
 };
 
 } // namespace iarc7_vision

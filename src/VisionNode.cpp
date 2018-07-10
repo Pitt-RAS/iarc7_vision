@@ -453,11 +453,24 @@ int main(int argc, char **argv)
             optical_flow_debug_settings,
             "RGB"));
 
+    // Load the parameters specific to the vision node
+    double startup_timeout;
+    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
+
+    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
+            private_nh, "message_queue_item_limit");
+
     // Queue and callback for collecting images
     std::deque<sensor_msgs::Image::ConstPtr> message_queue;
     std::function<void(const sensor_msgs::Image::ConstPtr&)> image_msg_handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
             message_queue.push_back(message);
+
+            // Make sure this doesn't grow without bound, but this will still trigger
+            // the over-limit check in the main loop
+            while (message_queue.size() > message_queue_item_limit) {
+                message_queue.pop_front();
+            }
         };
 
     image_transport::ImageTransport image_transporter{nh};
@@ -467,13 +480,6 @@ int main(int argc, char **argv)
         image_msg_handler);
 
     ros::Publisher corrected_image_pub = nh.advertise<sensor_msgs::Image>("corrected_image", 1);
-
-    // Load the parameters specific to the vision node
-    double startup_timeout;
-    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
-
-    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
-            private_nh, "message_queue_item_limit");
 
     // Loop rate
     ros::Rate rate (100);
@@ -488,7 +494,7 @@ int main(int argc, char **argv)
         }
 
         if (ros::Time::now() > start_time + ros::Duration(startup_timeout)) {
-            ROS_ERROR("Vision node timed out on startup");
+            ROS_ERROR("Vision node timed out on startup waiting on images");
             return 1;
         }
 
@@ -530,8 +536,9 @@ int main(int argc, char **argv)
             message_queue.pop_front();
 
             auto cv_shared_ptr = cv_bridge::toCvShare(message);
-            cv::cuda::Stream cuda_stream;
+            cv::cuda::Stream cuda_stream = cv::cuda::Stream::Null();
 
+            const auto start = std::chrono::high_resolution_clock::now();
             cv::cuda::GpuMat image_distorted;
             image_distorted.upload(cv_shared_ptr->image, cuda_stream);
 
@@ -539,6 +546,7 @@ int main(int argc, char **argv)
             undistortion_model.undistort(image_distorted,
                                          image_undistorted,
                                          cuda_stream);
+            const auto distortion_time = std::chrono::high_resolution_clock::now();
 
             cv::cuda::GpuMat image_undistorted_rgb;
             if (color_conversion_code != 0) {
@@ -550,6 +558,8 @@ int main(int argc, char **argv)
             } else {
                 image_undistorted_rgb = image_undistorted;
             }
+
+            const auto color_time = std::chrono::high_resolution_clock::now();
 
             cv::cuda::GpuMat image_correct;
             color_correction_model.correct(image_undistorted_rgb,
@@ -570,7 +580,8 @@ int main(int argc, char **argv)
                 corrected_image_pub.publish(cv_image.toImageMsg());
             }
 
-            const auto start = std::chrono::high_resolution_clock::now();
+            const auto color_correct_time = std::chrono::high_resolution_clock::now();
+
             //gridline_estimator->update(image_correct, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
@@ -587,16 +598,18 @@ int main(int argc, char **argv)
                                            images_skipped);
             const auto flow_time = std::chrono::high_resolution_clock::now();
 
+            const auto count = [](const auto& a, const auto& b) {
+                return std::chrono::duration_cast<std::chrono::microseconds>(
+                        b - a).count();
+            };
+
             ROS_DEBUG_STREAM(
-                    "Grid: "
-                    << std::chrono::duration_cast<std::chrono::microseconds>(
-                        grid_time - start).count()
-                    << " Flow: "
-                    << std::chrono::duration_cast<std::chrono::microseconds>(
-                        flow_time - roomba_time).count()
-                    << " Roomba: "
-                    << std::chrono::duration_cast<std::chrono::microseconds>(
-                        roomba_time - grid_time).count());
+                    "Distort: " << count(start, distortion_time) << std::endl
+                 << "Color: " << count(distortion_time, color_time) << std::endl
+                 << "Convert: " << count(color_time, color_correct_time) << std::endl
+                 << "Grid: " << count(color_correct_time, grid_time) << std::endl
+                 << "Roombas: " << count(grid_time, roomba_time) << std::endl
+                 << "Optical Flow: " << count(roomba_time, flow_time));
 
             images_skipped = false;
         }

@@ -175,7 +175,6 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
                                           roomba_image_locations,
                                   const bool images_skipped)
 {
-
     have_valid_last_image_ = have_valid_last_image_ && !images_skipped;
 
     // start time for debugging time spent in updateFilteredPosition
