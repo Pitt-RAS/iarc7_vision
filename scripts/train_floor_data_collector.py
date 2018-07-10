@@ -10,8 +10,8 @@ tf_buffer = tf2_ros.Buffer()
 tf_listener = tf2_ros.TransformListener(tf_buffer)
 
 def image_callback(data):
-    out = HeightImage()
-    out.image = data
+    out = Image()
+    out.data = data
 
     # Lookup the height from the tf tree
     try:
@@ -27,7 +27,7 @@ def image_callback(data):
         rospy.logerr("Transform error: {}".format(msg))
         rospy.logerr(ex.message)
 
-    out.height = trans.transform.translation.z
+    out.header.seq = (int)trans.transform.translation.z*1000
     pub.publish(out)
 
 if __name__ == '__main__':

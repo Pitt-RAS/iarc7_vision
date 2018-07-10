@@ -39,15 +39,14 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
             continue
 
         if filter_applicator is None:
-            scale = 0.25
             target_size = (320, 240)
             filter_applicator = ImageFilterApplicator(filters, target_size)
         try:
-          image = bridge.imgmsg_to_cv2(msg.image, "rgb8")
+          image = bridge.imgmsg_to_cv2(msg.data, "rgb8")
         except CvBridgeError as e:
           print(e)
 
-        height = msg.height
+        height = msg.header.seq/1000.0
         min_height = 0.7
         if height > min_height:
             crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
@@ -101,7 +100,7 @@ def create_classifier_set(floor_vectors, not_floor_vectors):
 
 def train_classifier(vectors, labels):
     #clf = SVC(kernel="linear", C=25.0)
-    clf = SVC(gamma=2, C=1000.0)
+    clf = SVC(gamma=2, C=2.0)
     start_time = timer()
     clf.fit(vectors, labels)
     end_time = timer()
@@ -126,14 +125,14 @@ if __name__ == '__main__':
 
     rospack = rospkg.RosPack()
 
-    floors     = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/floor*'))
-    antifloors = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/antifloor*'))
+    floors     = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/drone_bags/floor*'))
+    antifloors = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/drone_bags/antifloor*'))
 
     floor_images     = rosbag.Bag(floors[-1], 'r')
     not_floor_images = rosbag.Bag(antifloors[-1], 'r')
 
-    filtered_floor_images, floor_split = filter_image_set(floor_images, filters, max_images=100)
-    filtered_not_floor_images, not_floor_split = filter_image_set(not_floor_images, filters, max_images=100)
+    filtered_floor_images, floor_split = filter_image_set(floor_images, filters, start_image=0, max_images=200)
+    filtered_not_floor_images, not_floor_split = filter_image_set(not_floor_images, filters, start_image =0, max_images=200)
 
     floor_vectors = get_feature_vectors(filtered_floor_images)
     not_floor_vectors = get_feature_vectors(filtered_not_floor_images)
@@ -141,22 +140,26 @@ if __name__ == '__main__':
 
     clf = train_classifier(vectors, labels)
 
-    score = clf.score(vectors, labels)
-    print('SCORE OF TRAINED SET: {}'.format(score))
+    floor_score = clf.score(floor_vectors, np.full((floor_vectors.shape[0]), 0.0))
+    not_floor_score = clf.score(not_floor_vectors, np.full((not_floor_vectors.shape[0]), 1.0))
+    print('SCORE OF FLOOR TEST SET: {}'.format(floor_score))
+    print('SCORE OF NOT FLOOR TEST SET: {}'.format(not_floor_score))
 
     test_filtered_floor_images, end_floor_image = filter_image_set(floor_images, filters, start_image=floor_split)
     test_filtered_not_floor_images, end_not_floor_image = filter_image_set(not_floor_images, filters, start_image=not_floor_split)
     test_floor_vectors = get_feature_vectors(test_filtered_floor_images)
     test_not_floor_vectors = get_feature_vectors(test_filtered_not_floor_images)
-    test_vectors, test_labels = create_classifier_set(test_floor_vectors, test_not_floor_vectors)
 
     start_time = timer()
-    score = clf.score(test_vectors, test_labels)
+    floor_score = clf.score(test_floor_vectors, np.full((test_floor_vectors.shape[0]), 0.0))
+    not_floor_score = clf.score(test_not_floor_vectors, np.full((test_not_floor_vectors.shape[0]), 1.0))
+
     end_time = timer()
     print ('Scored {} vectors in {} seconds vectors/sec: {}'.format(
-           test_vectors.shape[0],
+           test_floor_vectors.shape[0] + test_not_floor_vectors.shape[0],
            end_time-start_time,
-           test_vectors.shape[0]/(end_time-start_time)))
-    print('SCORE OF TEST SET: {}'.format(score))
+           (test_floor_vectors.shape[0] + test_not_floor_vectors.shape[0])/(end_time-start_time)))
+    print('SCORE OF FLOOR TEST SET: {}'.format(floor_score))
+    print('SCORE OF NOT FLOOR TEST SET: {}'.format(not_floor_score))
 
     pickle.dump(clf, open(rospack.get_path('iarc7_vision') + "/clf.params", "wb" ))
