@@ -53,6 +53,7 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       last_message_time_(),
       expected_input_size_(cv::Size(0, 0)),
       target_size_(),
+      fov_(),
       local_nh_("optical_flow_estimator"),
       debug_orientation_rate_pub_(
               local_nh_.advertise<geometry_msgs::Vector3Stamped>(
@@ -125,10 +126,25 @@ bool __attribute__((warn_unused_result))
         OpticalFlowEstimator::onSettingsChanged()
 {
     cv::Size new_target_size;
-    new_target_size.width = expected_input_size_.width
-                          * flow_estimator_settings_.scale_factor;
-    new_target_size.height = expected_input_size_.height
-                           * flow_estimator_settings_.scale_factor;
+    if(flow_estimator_settings_.crop) {
+        new_target_size.width = flow_estimator_settings_.crop_width
+                              * flow_estimator_settings_.scale_factor;
+        new_target_size.height = flow_estimator_settings_.crop_height
+                               * flow_estimator_settings_.scale_factor;
+
+        double cropped_diag = std::hypot(flow_estimator_settings_.crop_width/2,
+                                         flow_estimator_settings_.crop_height/2);
+
+        double focal_length = getFocalLength(expected_input_size_, flow_estimator_settings_.fov);
+        fov_ = 2.0 * std::atan2(cropped_diag, focal_length);
+    }
+    else {
+        new_target_size.width = expected_input_size_.width
+                              * flow_estimator_settings_.scale_factor;
+        new_target_size.height = expected_input_size_.height
+                               * flow_estimator_settings_.scale_factor;
+        fov_ = flow_estimator_settings_.fov;
+    }
 
     if (expected_input_size_ != cv::Size(0, 0)
      && (new_target_size.width == 0 || new_target_size.height == 0)) {
@@ -390,7 +406,7 @@ geometry_msgs::TwistWithCovarianceStamped
     // dividing distance to plane by this number gives the multiplier we want
     double current_meters_per_px = distance_to_plane
                          / getFocalLength(target_size_,
-                                          flow_estimator_settings_.fov);
+                                          fov_);
 
     // Calculate the average velocity in the level camera frame (i.e. camera
     // frame if our pitch and roll were zero)
@@ -1186,9 +1202,24 @@ void OpticalFlowEstimator::resizeAndConvertImages(const cv::cuda::GpuMat& image,
 {
     const ros::WallTime start = ros::WallTime::now();
 
-    cv::cuda::resize(image,
-                    scaled,
-                    target_size_);
+    if(flow_estimator_settings_.crop) {
+        cv::cuda::GpuMat cropped
+          = cv::cuda::GpuMat(
+                image,
+                cv::Rect((expected_input_size_.width - flow_estimator_settings_.crop_width)/2,
+                         (expected_input_size_.height - flow_estimator_settings_.crop_height)/2,
+                         flow_estimator_settings_.crop_width,
+                         flow_estimator_settings_.crop_height));
+
+        cv::cuda::resize(cropped,
+                        scaled,
+                        target_size_);
+    }
+    else {
+        cv::cuda::resize(image,
+                        scaled,
+                        target_size_);
+    }
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("post resize: " << ros::WallTime::now() - start);

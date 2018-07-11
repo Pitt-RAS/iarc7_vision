@@ -112,6 +112,18 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
             flow_settings.scale_factor));
 
     ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/crop",
+            flow_settings.crop));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/crop_width",
+            flow_settings.crop_width));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/crop_height",
+            flow_settings.crop_height));
+
+    ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/variance",
             flow_settings.variance));
 

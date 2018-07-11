@@ -32,6 +32,11 @@ optical_flow_estimator:
     # Image scale factor
     scale_factor: 0.25
 
+    # Image crop region
+    crop: false
+    crop_width: 0
+    crop_height: 0
+
     ###############################
     ########## DEBUGGING ##########
     ###############################

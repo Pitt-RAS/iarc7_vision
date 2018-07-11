@@ -30,7 +30,12 @@ optical_flow_estimator:
     min_dist: 10
 
     # Image scale factor
-    scale_factor: 0.3
+    scale_factor: 1.0
+
+    # Image crop region
+    crop: true
+    crop_width: 320
+    crop_height: 240
 
     ###############################
     ########## DEBUGGING ##########
