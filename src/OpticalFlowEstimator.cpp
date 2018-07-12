@@ -539,9 +539,35 @@ bool OpticalFlowEstimator::findAverageVector(
         cv::Point2f& average) const
 {
     auto in_roomba_perimeter = [&](const cv::Point2f& point) {
-        for(const auto& roomba : roomba_image_locations) {
-            if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
-                return true;
+        if(flow_estimator_settings_.crop) {
+            // Transform the point in the cropped and scaled region to
+            // a unitless point in the original image frame
+            double expected_width  = static_cast<double>(expected_input_size_.width);
+            double expected_height = static_cast<double>(expected_input_size_.height);
+            double crop_width      = static_cast<double>(flow_estimator_settings_.crop_width);
+            double crop_height     = static_cast<double>(flow_estimator_settings_.crop_height);
+            double image_width     = static_cast<double>(image_size.width);
+
+            cv::Point2f new_point;
+            new_point.x =
+              (point.x / image_width) * (crop_width / expected_width)
+              + ((expected_width - crop_width) / 2.0 / expected_width);
+
+            new_point.y =
+              (point.y / image_width) * (crop_width / expected_width)
+              + ((expected_height - crop_height) / 2.0 / expected_width);
+
+            for(const auto& roomba : roomba_image_locations) {
+                if(roomba.point_on_roomba(new_point.x, new_point.y)) {
+                    return true;
+                }
+            }
+        }
+        else {
+            for(const auto& roomba : roomba_image_locations) {
+                if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -610,12 +636,42 @@ bool OpticalFlowEstimator::findAverageVector(
 
     for(const auto& roomba : roomba_image_locations) {
         cv::Point2f p;
-        p.x = roomba.x * image_size.width;
-        p.y = roomba.y * image_size.width;
-        cv::circle(arrow_image,
-                   p,
-                   roomba.radius * image_size.width,
-                   cv::Scalar(0, 255, 0));
+
+        if(flow_estimator_settings_.crop) {
+            // Transform the point in the cropped and scaled region to
+            // a unitless point in the original image frame
+            double expected_width  = static_cast<double>(expected_input_size_.width);
+            double expected_height = static_cast<double>(expected_input_size_.height);
+            double crop_width      = static_cast<double>(flow_estimator_settings_.crop_width);
+            double crop_height     = static_cast<double>(flow_estimator_settings_.crop_height);
+
+            p.x = (roomba.x - ((expected_width - crop_width) / 2.0 / expected_width))
+                  * (expected_width / crop_width);
+            p.y = (roomba.y - ((expected_height - crop_height) / 2.0 / expected_width))
+                  * (expected_width / crop_width);
+            p.x *= image_size.width;
+            p.y *= image_size.width;
+
+            if(p.x >= 0 && p.x <= image_size.width
+              && p.y >=0 && p.y <= image_size.height) {
+                cv::circle(arrow_image,
+                           p,
+                           roomba.radius * (expected_width / crop_width) * image_size.width,
+                           cv::Scalar(0, 255, 0));
+            }
+        }
+        else {
+            p.x = roomba.x * image_size.width;
+            p.y = roomba.y * image_size.width;
+
+            if(p.x >= 0 && p.x <= image_size.width
+               && p.y >=0 && p.y <= image_size.height) {
+                cv::circle(arrow_image,
+                           p,
+                           roomba.radius * image_size.width,
+                           cv::Scalar(0, 255, 0));
+            }
+        }
     }
 
     cv::Rect usable_image_rect(image_size.width  * x_cutoff,

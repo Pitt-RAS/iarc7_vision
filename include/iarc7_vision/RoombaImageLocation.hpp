@@ -20,6 +20,11 @@ struct RoombaImageLocation
 
         return s_r <= radius;
     }
+
+    bool point_on_roomba(double s_x, double s_y) const {
+        double s_r = std::sqrt(std::pow(s_x - x, 2) + std::pow(s_y - y, 2));
+        return s_r <= radius;
+    }
 };
 
 }
