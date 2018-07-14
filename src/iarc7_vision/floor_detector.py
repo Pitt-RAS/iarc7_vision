@@ -74,16 +74,16 @@ def image_callback(data):
 
     # Convert prediction values to positions with the labels
     # based on the known location of the avaraging squares
-    height_pix_offset = (1.0 / prediction.shape[0] / 2.0) * resized_image.shape[0]
-    width_pix_offset  = (1.0 / prediction.shape[1] / 2.0) * resized_image.shape[1]
+    block_height = (settings.average_size - 1)*settings.stride + 1
+    block_width = block_height
 
     # Points are centered in prediction boxes
     points = []
     labels = []
     for i in range(0, prediction.shape[0]):
         for j in range(0, prediction.shape[1]):
-            new_point = (((float(i) / prediction.shape[0]) * resized_image.shape[0]) + height_pix_offset,
-                         ((float(j) / prediction.shape[1]) * resized_image.shape[1]) + width_pix_offset)
+            new_point = ((block_height/2) + (i*block_height)+(settings.kernel_size/2) + (i*(settings.kernel_size/2)),
+                         (block_width/2)  + (j*block_width)+(settings.kernel_size/2)  + (j*(settings.kernel_size/2)))
             points.append(new_point)
             labels.append(prediction[i, j])
     points = np.asarray(points)
@@ -102,19 +102,19 @@ def image_callback(data):
 
 def publish_debug(resized_image, points, prediction, line_clf, stamp):
 
-    block_height = (settings.average_size - 1)*settings.stride + settings.kernel_size
+    block_height = (settings.average_size - 1)*settings.stride + 1
     block_width = block_height
 
     resized_image = resized_image / 2
     for i in range(0, prediction.shape[0]):
         for j in range(0, prediction.shape[1]):
             if prediction[i, j] == 0:
-                resized_image[i*block_height:(i+1)*block_height,
-                              j*block_width:(j+1)*block_width,
+                resized_image[(i*block_height)+(settings.kernel_size/2) + (i*(settings.kernel_size/2)):(i*block_height)+(settings.kernel_size/2) + (i*(settings.kernel_size/2))+block_height,
+                              (j*block_width)+(settings.kernel_size/2)  + (j*(settings.kernel_size/2)):(j*block_width)+(settings.kernel_size/2)  + (j*(settings.kernel_size/2))+block_width,
                               1] = 200
             elif prediction[i, j] == 1:
-                resized_image[i*block_height:(i+1)*block_height,
-                              j*block_width:(j+1)*block_width,
+                resized_image[(i*block_height)+(settings.kernel_size/2) + (i*(settings.kernel_size/2)):(i*block_height)+(settings.kernel_size/2) + (i*(settings.kernel_size/2))+block_height,
+                              (j*block_width)+(settings.kernel_size/2)  + (j*(settings.kernel_size/2)):(j*block_width)+(settings.kernel_size/2)  + (j*(settings.kernel_size/2))+block_width,
                               0] = 200
     for p in points:
         resized_image[int(p[0]), int(p[1]), :] = 0
