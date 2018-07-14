@@ -1,0 +1,32 @@
+# Detector Settings
+revision_name: latest
+classifier_settings_postfix: sim
+
+# Debug settings
+publish_visualization: true
+# Boundary SVM's C parameters
+boundary_svm_c: 0.025
+
+# Training settings
+# Filter settings which are saved with classifier settings objects
+# Target size of resized image
+target_width: 320
+target_height: 240
+
+# Minimum detection height (used for scaling images)
+min_height: 0.7
+
+# Filter settings
+kernel_size: 5
+sigmas: [0.2, 0.4, 0.6]
+num_orientations: 6
+
+# Floor classifier parameters (RBF kernel)
+train_c: 25.0
+train_gamma: 2.0
+
+# Training settings
+floor_train_start_image: 0
+floor_train_images: 200
+antifloor_train_start_image: 0
+antifloor_train_images: 200

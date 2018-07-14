@@ -2,15 +2,15 @@
 from timeit import default_timer as timer
 import pickle
 import glob
+import os
 
+import rospy
 import rosbag
 import rospkg
 import cv2
 import numpy as np
 from cv_bridge import CvBridge, CvBridgeError
 import matplotlib.pyplot as plt
-from itertools import product, chain
-from cv_bridge import CvBridge, CvBridgeError
 import tensorflow as tf
 from sklearn.svm import SVC
 
@@ -18,6 +18,7 @@ from sensor_msgs.msg import Image
 
 from iarc7_vision.filterbank import get_RFS_filters_in_tensorflow_format
 from iarc7_vision.image_filter_applicator import ImageFilterApplicator
+from iarc7_vision.floor_detector import SettingsObject
 
 bridge = CvBridge()
 
@@ -27,7 +28,7 @@ def stretch_contrast(img):
 
     return (img-minimum)*(1.0/(maximum-minimum))
 
-def filter_image_set(images, filters, start_image=0, max_images=None):
+def filter_image_set(images, filters, target_size, min_height, start_image=0, max_images=None):
     filter_applicator = None
     filtered_images = []
     num_processed = 0
@@ -39,15 +40,14 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
             continue
 
         if filter_applicator is None:
-            target_size = (320, 240)
             filter_applicator = ImageFilterApplicator(filters, target_size)
         try:
-          image = bridge.imgmsg_to_cv2(msg.data, "rgb8")
+          image = bridge.imgmsg_to_cv2(msg, "rgb8")
         except CvBridgeError as e:
           print(e)
 
         height = msg.header.seq/1000.0
-        min_height = 0.7
+        height = 1.0
         if height > min_height:
             crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
             crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
@@ -72,7 +72,6 @@ def filter_image_set(images, filters, start_image=0, max_images=None):
     print ('Went through {} images'.format(num_seen))
 
     np_filtered_images = np.asarray(filtered_images)
-    print np_filtered_images.shape
     return np_filtered_images, num_seen
 
 def get_feature_vectors(images):
@@ -83,8 +82,7 @@ def get_feature_vectors(images):
             for k in range(0, shape[2]):
                 vectors.append(images[i, j, k, :])
     vectors = np.float32(np.asarray(vectors))
-    print('Feature vectors shape')
-    print vectors.shape
+
     return vectors
 
 def create_classifier_set(floor_vectors, not_floor_vectors):
@@ -94,13 +92,10 @@ def create_classifier_set(floor_vectors, not_floor_vectors):
     not_floor_labels = np.full((not_floor_vectors.shape[0]), 1.0)
     all_labels = np.append(floor_labels, not_floor_labels, axis=0)
 
-    print all_vectors.shape
-    print all_labels.shape
     return all_vectors, all_labels
 
 def train_classifier(vectors, labels):
-    #clf = SVC(kernel="linear", C=25.0)
-    clf = SVC(gamma=2, C=2.0)
+    clf = SVC(gamma=settings.train_gamma, C=settings.train_c)
     start_time = timer()
     clf.fit(vectors, labels)
     end_time = timer()
@@ -111,55 +106,124 @@ def train_classifier(vectors, labels):
     return clf
 
 if __name__ == '__main__':
+    rospy.init_node('floor_detector')
 
-    kernel_size = 5
-    sigmas = [0.2, 0.4, 0.6]
-    n_orientations = 6
+    settings = SettingsObject()
 
-    filters = get_RFS_filters_in_tensorflow_format(kernel_size,
-                                                   sigmas,
-                                                   n_orientations,
+    settings.kernel_size = rospy.get_param('~kernel_size')
+    settings.sigmas = rospy.get_param('~sigmas')
+    settings.n_orientations = rospy.get_param('~num_orientations')
+    settings.target_size = (rospy.get_param('~target_width'), rospy.get_param('~target_height'))
+    settings.min_height = rospy.get_param('~min_height')
+    settings.train_gamma = rospy.get_param('~train_gamma')
+    settings.train_c = rospy.get_param('~train_c')
+
+    filters = get_RFS_filters_in_tensorflow_format(settings.kernel_size,
+                                                   settings.sigmas,
+                                                   settings.n_orientations,
                                                    show_filters=False)
-    filters = filters[:, :, :, :]
-    print filters.shape
 
     rospack = rospkg.RosPack()
-
     floors     = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/drone_bags/floor*'))
     antifloors = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/drone_bags/antifloor*'))
-
     floor_images     = rosbag.Bag(floors[-1], 'r')
     not_floor_images = rosbag.Bag(antifloors[-1], 'r')
 
-    filtered_floor_images, floor_split = filter_image_set(floor_images, filters, start_image=0, max_images=200)
-    filtered_not_floor_images, not_floor_split = filter_image_set(not_floor_images, filters, start_image =0, max_images=200)
+    print('==============FLOOR BAG INFO==================')
+    print floor_images
+    print('===========ANTI FLOOR BAG INFO================')
+    print not_floor_images
+
+
+    print('==========FILTERING TRAINING SET==============')
+    filtered_floor_images, floor_split = \
+        filter_image_set(floor_images,
+                         filters,
+                         settings.target_size,
+                         settings.min_height,
+                         start_image=rospy.get_param('~floor_train_start_image'),
+                         max_images=rospy.get_param('~floor_train_images'))
+
+    filtered_not_floor_images, not_floor_split = \
+        filter_image_set(not_floor_images,
+                         filters,
+                         settings.target_size,
+                         settings.min_height,
+                         start_image=rospy.get_param('~antifloor_train_start_image'),
+                         max_images=rospy.get_param('~antifloor_train_images'))
 
     floor_vectors = get_feature_vectors(filtered_floor_images)
     not_floor_vectors = get_feature_vectors(filtered_not_floor_images)
-    vectors, labels = create_classifier_set(floor_vectors, not_floor_vectors)
 
+    vectors, labels = create_classifier_set(floor_vectors, not_floor_vectors)
     clf = train_classifier(vectors, labels)
 
+    start_time = timer()
     floor_score = clf.score(floor_vectors, np.full((floor_vectors.shape[0]), 0.0))
     not_floor_score = clf.score(not_floor_vectors, np.full((not_floor_vectors.shape[0]), 1.0))
+    end_time = timer()
+
+    print('==============TRAINING SET SCORE==================')
+    print ('Scored {} vectors in {} seconds vectors/sec: {}'.format(
+           floor_vectors.shape[0] + not_floor_vectors.shape[0],
+           end_time-start_time,
+           (floor_vectors.shape[0] + not_floor_vectors.shape[0])/(end_time-start_time)))
     print('SCORE OF FLOOR TEST SET: {}'.format(floor_score))
     print('SCORE OF NOT FLOOR TEST SET: {}'.format(not_floor_score))
+    print('==================================================')
 
-    test_filtered_floor_images, end_floor_image = filter_image_set(floor_images, filters, start_image=floor_split)
-    test_filtered_not_floor_images, end_not_floor_image = filter_image_set(not_floor_images, filters, start_image=not_floor_split)
+    print('==============FILTERING TEST SET==================')
+    test_filtered_floor_images, end_floor_image = \
+        filter_image_set(floor_images,
+                         filters,
+                         settings.target_size,
+                         settings.min_height,
+                         start_image=floor_split)
+
+    test_filtered_not_floor_images, end_not_floor_image = \
+        filter_image_set(not_floor_images,
+                         filters,
+                         settings.target_size,
+                         settings.min_height,
+                         start_image=not_floor_split)
+
     test_floor_vectors = get_feature_vectors(test_filtered_floor_images)
     test_not_floor_vectors = get_feature_vectors(test_filtered_not_floor_images)
 
     start_time = timer()
     floor_score = clf.score(test_floor_vectors, np.full((test_floor_vectors.shape[0]), 0.0))
     not_floor_score = clf.score(test_not_floor_vectors, np.full((test_not_floor_vectors.shape[0]), 1.0))
-
     end_time = timer()
+
+    print('==============TESTING SET SCORE==================')
     print ('Scored {} vectors in {} seconds vectors/sec: {}'.format(
            test_floor_vectors.shape[0] + test_not_floor_vectors.shape[0],
            end_time-start_time,
            (test_floor_vectors.shape[0] + test_not_floor_vectors.shape[0])/(end_time-start_time)))
     print('SCORE OF FLOOR TEST SET: {}'.format(floor_score))
     print('SCORE OF NOT FLOOR TEST SET: {}'.format(not_floor_score))
+    print('==================================================')
 
-    pickle.dump(clf, open(rospack.get_path('iarc7_vision') + "/clf.params", "wb" ))
+    # Find the latest revision of the settings
+
+    postfix = rospy.get_param('~classifier_settings_postfix')
+    settings_files = sorted(glob.glob(rospack.get_path('iarc7_vision') \
+                                   + '/classifiers/floor_classifier_params_r*_' \
+                                   + postfix \
+                                   + '.clf'))
+
+    last_revision_file = settings_files[-1]
+    last_revision_file_str = os.path.basename(last_revision_file)
+    revision_str = last_revision_file_str[len('floor_classifier_params_r'):-(len('.clf') + len(postfix) + len('_'))]
+    last_revision_num = int(revision_str)
+
+    saved_filepath = rospack.get_path('iarc7_vision') \
+                                   + '/classifiers/floor_classifier_params_r' \
+                                   + str(last_revision_num+1) \
+                                   + '_' \
+                                   + postfix \
+                                   + '.clf'
+    print('Saving to: ' + saved_filepath)
+
+    settings.clf = clf
+    pickle.dump(settings, open(saved_filepath, 'wb' ))
