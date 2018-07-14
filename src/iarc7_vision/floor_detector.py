@@ -105,6 +105,31 @@ def image_callback(data):
         publish_debug(resized_image, points, prediction, line_clf,
                       data.header.stamp)
 
+    if line_clf is None:
+        return
+
+    # Get a list of points that are on the antifloor side of the line
+    point_classifications = line_clf.predict(points)
+    point_classifications_grid = np.reshape(point_classifications, (shape[1], shape[2]))
+    label_classifications_grid = np.reshape(labels, (shape[1], shape[2]))
+
+    if np.sum(point_classifications) < min_anti_floor_patches:
+        return
+
+    anti_floor_side_anti_floor = point_classifications * labels
+
+    ratio = np.sum(anti_floor_side_anti_floor) / np.sum(point_classifications)
+    if ratio < min_anti_floor_appearance_ratio:
+        return
+
+    edge_mask = np.pad(np.zeros((shape[1]-2, shape[2]-2)), 1, 'constant', constant_values = 1).flatten()
+
+    anti_floor_side_anti_floor_edge = edge_mask * anti_floor_side_anti_floor
+    if np.sum(anti_floor_side_anti_floor_edge) < min_anti_floor_on_edge:
+        return
+
+    print('GOT A REAL EDGE')
+
 
 def publish_debug(resized_image, points, prediction, line_clf, stamp):
 
@@ -143,13 +168,13 @@ def publish_debug(resized_image, points, prediction, line_clf, stamp):
         # Check for cases where floating point precision will cause all kinds of
         # weird miscalculations
         # Is the line a well defined vertical line?
-        if coefficients[0, 0] <= 10**-8 and abs(coefficients[0, 1]) > 10**-8:
+        if coefficients[0, 0] <= 10**-12 and abs(coefficients[0, 1]) > 10**-12:
             # Find the x intercept
             x_int = int(-line_clf.intercept_[0] / coefficients[0, 1])
             cv2.line(resized_image, (x_int, 0),
                      (x_int, resized_image.shape[0]), (0, 0, 255))
         # Is the line a well defined not vertical line?
-        elif abs(coefficients[0, 0]) > 10**-8:
+        elif abs(coefficients[0, 0]) > 10**-12:
             p1 = (-1, (-line_clf.intercept_[0] / coefficients[0, 0]) +
                   (coefficients[0, 1] / coefficients[0, 0]))
             p2 = (resized_image.shape[1] + 1,
@@ -161,6 +186,7 @@ def publish_debug(resized_image, points, prediction, line_clf, stamp):
             cv2.line(resized_image, p1, p2, (0, 0, 255))
         # A well defined line was not found
         else:
+            print('SKIPPING')
             pass
 
     debug_msg = bridge.cv2_to_imgmsg(resized_image, encoding="rgb8")
@@ -212,6 +238,10 @@ if __name__ == '__main__':
     rospy.init_node('floor_detector')
 
     settings = load_classifier()
+
+    min_anti_floor_patches = rospy.get_param('~min_anti_floor_patches')
+    min_anti_floor_appearance_ratio = rospy.get_param('~min_anti_floor_appearance_ratio')
+    min_anti_floor_on_edge = rospy.get_param('~min_anti_floor_on_edge')
 
     while not rospy.is_shutdown() and rospy.Time.now() == 0:
         pass
