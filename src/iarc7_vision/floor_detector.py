@@ -26,21 +26,19 @@ def image_callback(data):
       rospy.logerr(e)
 
     # Lookup the height from the tf tree
-    # try:
-    #     trans = tf_buffer.lookup_transform(
-    #                 'map',
-    #                 'bottom_camera_rgb_optical_frame',
-    #                 data.header.stamp,
-    #                 rospy.Duration(0.01))
-    #     height = trans.transform.translation.z
-    # except (tf2_ros.LookupException,
-    #         tf2_ros.ConnectivityException,
-    #         tf2_ros.ExtrapolationException) as ex:
-    #     msg = "Train floor data collector: Exception when looking up transform"
-    #     rospy.logerr("Transform error: {}".format(msg))
-    #     rospy.logerr(ex.message)
-
-    height = 0.7
+    try:
+        trans = tf_buffer.lookup_transform(
+                    'map',
+                    'bottom_camera_rgb_optical_frame',
+                    data.header.stamp,
+                    rospy.Duration(0.01))
+        height = trans.transform.translation.z
+    except (tf2_ros.LookupException,
+            tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException) as ex:
+        msg = "Train floor data collector: Exception when looking up transform"
+        rospy.logerr("Transform error: {}".format(msg))
+        rospy.logerr(ex.message)
 
     if height < settings.min_height:
         return
@@ -94,15 +92,14 @@ def image_callback(data):
     # before trying to find the boundary line
     if np.sum(labels) > 0 and np.sum(labels) < len(labels):
         # Train an SVM on the spot to find the boundary line
-        clf_line = train_boundary_classifier(points, labels)
-        coef = None
+        line_clf = train_boundary_classifier(points, labels)
     else:
-        coef = None
+        line_clf = None
 
     if publish_visualization:
-        publish_debug(resized_image, points, prediction, coef, data.header.stamp)
+        publish_debug(resized_image, points, prediction, line_clf, data.header.stamp)
 
-def publish_debug(resized_image, points, prediction, coefficients, stamp):
+def publish_debug(resized_image, points, prediction, line_clf, stamp):
     block_height = resized_image.shape[0] / prediction.shape[0]
     block_width = resized_image.shape[1] / prediction.shape[1]
     resized_image = resized_image / 2
@@ -119,19 +116,20 @@ def publish_debug(resized_image, points, prediction, coefficients, stamp):
     for p in points:
         resized_image[int(p[0]), int(p[1]), :] = 0
 
-    if coefficients is not None:
+    if line_clf is not None:
+        coefficients = line_clf.coef_
         # Use the coefficients to characterize the line
         # Check for cases where floating point precision will cause all kinds of
         # weird miscalculations
         # Is the line a well defined vertical line?
         if coefficients[0, 0] <= 10 ** -8 and abs(coefficients[0, 1]) > 10 ** -8:
             # Find the x intercept
-            x_int = int(-clf2.intercept_[0] / coefficients[0, 1])
+            x_int = int(-line_clf.intercept_[0] / coefficients[0, 1])
             cv2.line(resized_image, (x_int, 0), (x_int, resized_image.shape[0]), (0, 0, 255))
         # Is the line a well defined not vertical line?
         elif abs(coefficients[0, 0]) > 10 ** -8:
-            p1 = (-1, (-clf2.intercept_[0] / coefficients[0, 0]) + (coefficients[0, 1]/coefficients[0, 0]))
-            p2 = (resized_image.shape[1]+1, (-clf2.intercept_[0] / coefficients[0, 0]) - ((resized_image.shape[1]+1) * coefficients[0, 1]/coefficients[0, 0]))
+            p1 = (-1, (-line_clf.intercept_[0] / coefficients[0, 0]) + (coefficients[0, 1]/coefficients[0, 0]))
+            p2 = (resized_image.shape[1]+1, (-line_clf.intercept_[0] / coefficients[0, 0]) - ((resized_image.shape[1]+1) * coefficients[0, 1]/coefficients[0, 0]))
             p1 = (int(p1[0]), int(p1[1]))
             p2 = (int(p2[0]), int(p2[1]))
             cv2.line(resized_image, p1, p2, (0, 0, 255))
@@ -202,6 +200,7 @@ if __name__ == '__main__':
     if publish_visualization:
         debug_visualization_pub = rospy.Publisher('/floor_detector/detections_image', Image, queue_size=1)
 
-    rospy.Subscriber("/bottom_camera/height_image", Image, image_callback, queue_size=1)
+    image_topic = rospy.get_param('~camera_topic')
+    rospy.Subscriber(image_topic, Image, image_callback, queue_size=1)
 
     rospy.spin()

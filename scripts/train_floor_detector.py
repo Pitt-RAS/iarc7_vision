@@ -46,8 +46,8 @@ def filter_image_set(images, filters, target_size, min_height, start_image=0, ma
         except CvBridgeError as e:
           print(e)
 
-        height = msg.header.seq/1000.0
-        height = 1.0
+        height = float(msg.header.frame_id)
+
         if height > min_height:
             crop_amount_width  = int(image.shape[1] - min(image.shape[1] / (height / min_height), image.shape[1]))/2
             crop_amount_height = int(image.shape[0] - min(image.shape[0] / (height / min_height), image.shape[0]))/2
@@ -124,8 +124,8 @@ if __name__ == '__main__':
                                                    show_filters=False)
 
     rospack = rospkg.RosPack()
-    floors     = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/drone_bags/floor*'))
-    antifloors = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/drone_bags/antifloor*'))
+    floors     = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/floor*'))
+    antifloors = sorted(glob.glob(rospack.get_path('iarc7_vision') + '/training_bags/antifloor*'))
     floor_images     = rosbag.Bag(floors[-1], 'r')
     not_floor_images = rosbag.Bag(antifloors[-1], 'r')
 

@@ -23,7 +23,7 @@ def image_callback(data):
         rospy.logerr("Transform error: {}".format(msg))
         rospy.logerr(ex.message)
 
-    data.header.seq = int(trans.transform.translation.z*1000)
+    data.header.frame_id = str(trans.transform.translation.z)
     pub.publish(data)
 
 if __name__ == '__main__':
@@ -34,6 +34,7 @@ if __name__ == '__main__':
 
     pub = rospy.Publisher("/bottom_camera/height_image", Image, queue_size=3)
 
-    rospy.Subscriber("/corrected_image", Image, image_callback)
+    image_topic = rospy.get_param('~camera_topic')
+    rospy.Subscriber(image_topic, Image, image_callback)
 
     rospy.spin()

@@ -2,6 +2,8 @@
 revision_name: latest
 classifier_settings_postfix: sim
 
+camera_topic: /bottom_camera/rgb/image_raw
+
 # Debug settings
 publish_visualization: true
 # Boundary SVM's C parameters
