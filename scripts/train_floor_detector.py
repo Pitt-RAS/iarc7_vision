@@ -28,7 +28,7 @@ def stretch_contrast(img):
 
     return (img-minimum)*(1.0/(maximum-minimum))
 
-def filter_image_set(images, filters, target_size, min_height, start_image=0, max_images=None):
+def filter_image_set(images, filters, target_size, min_height, stride, average_size, start_image=0, max_images=None):
     filter_applicator = None
     filtered_images = []
     num_processed = 0
@@ -40,7 +40,7 @@ def filter_image_set(images, filters, target_size, min_height, start_image=0, ma
             continue
 
         if filter_applicator is None:
-            filter_applicator = ImageFilterApplicator(filters, target_size)
+            filter_applicator = ImageFilterApplicator(filters, target_size, stride, average_size)
         try:
           image = bridge.imgmsg_to_cv2(msg, "rgb8")
         except CvBridgeError as e:
@@ -117,6 +117,8 @@ if __name__ == '__main__':
     settings.min_height = rospy.get_param('~min_height')
     settings.train_gamma = rospy.get_param('~train_gamma')
     settings.train_c = rospy.get_param('~train_c')
+    settings.average_size = rospy.get_param('~average_size')
+    settings.stride = rospy.get_param('~stride')
 
     filters = get_RFS_filters_in_tensorflow_format(settings.kernel_size,
                                                    settings.sigmas,
@@ -141,6 +143,8 @@ if __name__ == '__main__':
                          filters,
                          settings.target_size,
                          settings.min_height,
+                         settings.stride,
+                         settings.average_size,
                          start_image=rospy.get_param('~floor_train_start_image'),
                          max_images=rospy.get_param('~floor_train_images'))
 
@@ -149,6 +153,8 @@ if __name__ == '__main__':
                          filters,
                          settings.target_size,
                          settings.min_height,
+                         settings.stride,
+                         settings.average_size,
                          start_image=rospy.get_param('~antifloor_train_start_image'),
                          max_images=rospy.get_param('~antifloor_train_images'))
 
@@ -178,6 +184,8 @@ if __name__ == '__main__':
                          filters,
                          settings.target_size,
                          settings.min_height,
+                         settings.stride,
+                         settings.average_size,
                          start_image=floor_split)
 
     test_filtered_not_floor_images, end_not_floor_image = \
@@ -185,6 +193,8 @@ if __name__ == '__main__':
                          filters,
                          settings.target_size,
                          settings.min_height,
+                         settings.stride,
+                         settings.average_size,
                          start_image=not_floor_split)
 
     test_floor_vectors = get_feature_vectors(test_filtered_floor_images)
@@ -212,14 +222,17 @@ if __name__ == '__main__':
                                    + postfix \
                                    + '.clf'))
 
-    last_revision_file = settings_files[-1]
-    last_revision_file_str = os.path.basename(last_revision_file)
-    revision_str = last_revision_file_str[len('floor_classifier_params_r'):-(len('.clf') + len(postfix) + len('_'))]
-    last_revision_num = int(revision_str)
+    if len(settings_files) > 0:
+        last_revision_file = settings_files[-1]
+        last_revision_file_str = os.path.basename(last_revision_file)
+        revision_str = last_revision_file_str[len('floor_classifier_params_r'):-(len('.clf') + len(postfix) + len('_'))]
+        last_revision_num = int(revision_str)
+    else:
+        last_revision_num = 0
 
     saved_filepath = rospack.get_path('iarc7_vision') \
                                    + '/classifiers/floor_classifier_params_r' \
-                                   + str(last_revision_num+1) \
+                                   + str(last_revision_num+1).zfill(4) \
                                    + '_' \
                                    + postfix \
                                    + '.clf'

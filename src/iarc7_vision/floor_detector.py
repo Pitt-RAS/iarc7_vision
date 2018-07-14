@@ -31,7 +31,7 @@ def image_callback(data):
                     'map',
                     'bottom_camera_rgb_optical_frame',
                     data.header.stamp,
-                    rospy.Duration(0.01))
+                    rospy.Duration(0.10))
         height = trans.transform.translation.z
     except (tf2_ros.LookupException,
             tf2_ros.ConnectivityException,
@@ -39,6 +39,7 @@ def image_callback(data):
         msg = "Train floor data collector: Exception when looking up transform"
         rospy.logerr("Transform error: {}".format(msg))
         rospy.logerr(ex.message)
+        return
 
     if height < settings.min_height:
         return
@@ -100,8 +101,10 @@ def image_callback(data):
         publish_debug(resized_image, points, prediction, line_clf, data.header.stamp)
 
 def publish_debug(resized_image, points, prediction, line_clf, stamp):
-    block_height = resized_image.shape[0] / prediction.shape[0]
-    block_width = resized_image.shape[1] / prediction.shape[1]
+
+    block_height = (settings.average_size - 1)*settings.stride + settings.kernel_size
+    block_width = block_height
+
     resized_image = resized_image / 2
     for i in range(0, prediction.shape[0]):
         for j in range(0, prediction.shape[1]):
@@ -170,6 +173,7 @@ def load_classifier():
                    + str(revision) \
                    + '.clf'
 
+    rospy.loginfo('Floor detector settings file: {}'.format(filename))
     clf = pickle.load(open(filename, "rb" ))
     return clf
 
@@ -193,7 +197,7 @@ if __name__ == '__main__':
                                                    settings.n_orientations,
                                                    show_filters=False)
 
-    filter_applicator = ImageFilterApplicator(filters, settings.target_size)
+    filter_applicator = ImageFilterApplicator(filters, settings.target_size, settings.stride, settings.average_size)
 
     publish_visualization = rospy.get_param('~publish_visualization')
 

@@ -15,9 +15,11 @@ def stretch_contrast(img):
     return (img-minimum)*(1.0/(maximum-minimum))
 
 class ImageFilterApplicator:
-    def __init__(self, filterbank, incoming_resolution):
+    def __init__(self, filterbank, incoming_resolution, stride, average_size):
         self.filterbank = filterbank
         self.incoming_resolution = incoming_resolution
+        self.average_size = average_size
+        self.stride = stride
 
         self._construct_tensor_graph()
 
@@ -36,20 +38,19 @@ class ImageFilterApplicator:
         convolved = tf.nn.conv2d(gray_image,
                                  tf_filters,
                                  strides=[1,
-                                          3,
-                                          3,
+                                          self.stride,
+                                          self.stride,
                                           1],
-                                padding='SAME')
+                                padding='VALID')
 
         squared = tf.square(convolved)
 
-        # TODO square shapes need to change with height
         print('Pre average size: {}'.format(squared.shape))
-        average_size = 20 #squared.shape[1]/2
         self.averaged = tf.nn.avg_pool(squared,
-                                       (1, average_size, average_size, 1),
-                                       (1, average_size, average_size, 1),
+                                       (1, self.average_size, self.average_size, 1),
+                                       (1, self.average_size, self.average_size, 1),
                                        'VALID')
+        print('Post average size: {}'.format(self.averaged.shape))
 
         if output_graph:
             writer = tf.summary.FileWriter('.')

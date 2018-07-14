@@ -12,8 +12,8 @@ boundary_svm_c: 0.025
 # Training settings
 # Filter settings which are saved with classifier settings objects
 # Target size of resized image
-target_width: 320
-target_height: 240
+target_width: 152
+target_height: 122
 
 # Minimum detection height (used for scaling images)
 min_height: 0.7
@@ -22,6 +22,8 @@ min_height: 0.7
 kernel_size: 5
 sigmas: [0.2, 0.4, 0.6]
 num_orientations: 6
+stride: 3
+average_size: 10
 
 # Floor classifier parameters (RBF kernel)
 train_c: 25.0
