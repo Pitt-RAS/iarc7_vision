@@ -20,7 +20,23 @@ from iarc7_vision.image_filter_applicator import ImageFilterApplicator
 bridge = CvBridge()
 
 
+class DebugData(object):
+    def __init__(self):
+        self.resized_image = None
+        self.points = None
+        self.prediction = None
+        self.line_clf = None
+        self.center_point = None
+        self.failed_arena_edge = False
+
 def image_callback(data):
+    debug_data = DebugData()
+    find_boundary_line(data, debug_data)
+
+    if publish_visualization:
+        publish_debug(debug_data, data.header.stamp)
+
+def find_boundary_line(data, debug_data):
     try:
         image = bridge.imgmsg_to_cv2(data, "rgb8")
     except CvBridgeError as e:
@@ -53,6 +69,7 @@ def image_callback(data):
 
     resized_image = cv2.resize(
         cropped, settings.target_size, interpolation=cv2.INTER_LINEAR)
+    debug_data.resized_image = resized_image
 
     result = filter_applicator.apply_filters(
         np.asarray([np.float32(resized_image) / 255.0]), show_result=False)
@@ -72,6 +89,7 @@ def image_callback(data):
     prediction = settings.clf.predict(vectors)
 
     prediction = np.reshape(prediction, (shape[1], shape[2]))
+    debug_data.prediction = prediction
 
     # Convert prediction values to positions with the labels
     # based on the known location of the avaraging squares
@@ -91,6 +109,8 @@ def image_callback(data):
             points.append(new_point)
             labels.append(prediction[i, j])
     points = np.asarray(points)
+    debug_data.points = points
+
     labels = np.asarray(labels)
 
     # Make sure all the detections aren't of one class
@@ -101,37 +121,109 @@ def image_callback(data):
     else:
         line_clf = None
 
-    if publish_visualization:
-        publish_debug(resized_image, points, prediction, line_clf,
-                      data.header.stamp)
-
+    debug_data.line_clf = line_clf
     if line_clf is None:
         return
 
     # Get a list of points that are on the antifloor side of the line
     point_classifications = line_clf.predict(points)
-    point_classifications_grid = np.reshape(point_classifications, (shape[1], shape[2]))
-    label_classifications_grid = np.reshape(labels, (shape[1], shape[2]))
 
     if np.sum(point_classifications) < min_anti_floor_patches:
+        debug_data.failed_arena_edge = True
         return
 
     anti_floor_side_anti_floor = point_classifications * labels
 
     ratio = np.sum(anti_floor_side_anti_floor) / np.sum(point_classifications)
     if ratio < min_anti_floor_appearance_ratio:
+        debug_data.failed_arena_edge = True
         return
 
     edge_mask = np.pad(np.zeros((shape[1]-2, shape[2]-2)), 1, 'constant', constant_values = 1).flatten()
 
     anti_floor_side_anti_floor_edge = edge_mask * anti_floor_side_anti_floor
     if np.sum(anti_floor_side_anti_floor_edge) < min_anti_floor_on_edge:
+        debug_data.failed_arena_edge = True
         return
 
-    print('GOT A REAL EDGE')
+    # Set up the equations of the hyperplane equation
+    # c1*x + c2*y + d = 0
+    c1 = line_clf.coef_[0, 1]
+    c2 = line_clf.coef_[0, 0]
+    d = line_clf.intercept_[0]
+    #rospy.logerr('d: {}'.format(d))
 
+    # Test for the equation of the line that will be used
+    # (1) y = -(c1/c2)x - (d/c2) if abs(c1) < abs(img_height * c2)
+    # (2) x = -(d/c1) if abs(c1) >= abs(img_height * c2) (assumes that c2/c1 ~= 0)
 
-def publish_debug(resized_image, points, prediction, line_clf, stamp):
+    # If using equation (1)
+    if abs(c1) < abs(c2 * resized_image.shape[0]):
+        # Test all four sides to find the intersection points
+        #rospy.logerr('c1: {} c2: {}'.format(c1, c2))
+        points = []
+        a = -(c1/c2)
+        b = -(d/c2)
+
+        # Test intersection with top of viewport
+        top_intersect = -(b/a)
+        #rospy.logerr('b: {} a: {}'.format(b, a))
+        #rospy.logerr('top_intersect {}'.format(top_intersect))
+        if top_intersect >= 0 and top_intersect <= resized_image.shape[1]:
+            points.append((top_intersect, 0.0))
+
+        # Test intersection with bottom of viewport
+        bottom_intersect = (resized_image.shape[0] - b) / a
+        #rospy.logerr('bottom_intersect {}'.format(bottom_intersect))
+        if bottom_intersect >= 0 and bottom_intersect <= resized_image.shape[1]:
+            points.append((bottom_intersect, float(resized_image.shape[0])))
+
+        # Test intersection left side of viewport
+        left_intersect = b
+        #rospy.logerr('left_intersect {}'.format(left_intersect))
+        if left_intersect >= 0 and left_intersect <= resized_image.shape[0]:
+            points.append((0.0, left_intersect))
+
+        # Test intersection with right side of viewport
+        right_intersect = a * resized_image.shape[1] + b
+        #rospy.logerr('right_intersect {}'.format(right_intersect))
+        if right_intersect >= 0 and right_intersect <= resized_image.shape[0]:
+            points.append((float(resized_image.shape[1]), right_intersect))
+
+        # If there are 0 points then the line didn't intersect with the viewport
+        if len(points) == 0:
+            return
+
+        # If there are not two points at this point there was an error
+        if len(points) != 2:
+            rospy.logerr('Floor detector error calculating intersection points with equation 1')
+            return
+
+        p1 = points[0]
+        p2 = points[1]
+
+    # If using equation (2)
+    else:
+        x_intercept = -d/c1
+        if x_intercept < 0 or x_intercept > resized_image.shape[1]:
+            return
+        p1 = (x_intercept, 0.0)
+        p2 = (x_intercept -(c2/c1)*resized_image.shape[0], float(resized_image.shape[0]))
+
+    center_point = (p2[0] + (p1[0] - p2[0])/2.0, p2[1] + (p1[1] - p2[1])/2.0)
+    debug_data.center_point = center_point
+    #rospy.loginfo('p1: {} p2: {}'.format(p1, p2))
+    #rospy.loginfo('center_point: {}'.format(center_point))
+
+def publish_debug(data, stamp):
+    resized_image = data.resized_image
+    points = data.points
+    prediction = data.prediction
+    line_clf = data.line_clf
+    center_point = data.center_point
+
+    if resized_image is None or points is None or prediction is None:
+        return
 
     block_height = (settings.average_size - 1) * settings.stride + 1
     block_width = block_height
@@ -162,32 +254,42 @@ def publish_debug(resized_image, points, prediction, line_clf, stamp):
     for p in points:
         resized_image[int(p[0]), int(p[1]), :] = 0
 
-    if line_clf is not None:
-        coefficients = line_clf.coef_
-        # Use the coefficients to characterize the line
-        # Check for cases where floating point precision will cause all kinds of
-        # weird miscalculations
-        # Is the line a well defined vertical line?
-        if coefficients[0, 0] <= 10**-12 and abs(coefficients[0, 1]) > 10**-12:
-            # Find the x intercept
-            x_int = int(-line_clf.intercept_[0] / coefficients[0, 1])
-            cv2.line(resized_image, (x_int, 0),
-                     (x_int, resized_image.shape[0]), (0, 0, 255))
-        # Is the line a well defined not vertical line?
-        elif abs(coefficients[0, 0]) > 10**-12:
-            p1 = (-1, (-line_clf.intercept_[0] / coefficients[0, 0]) +
-                  (coefficients[0, 1] / coefficients[0, 0]))
-            p2 = (resized_image.shape[1] + 1,
-                  (-line_clf.intercept_[0] / coefficients[0, 0]) -
-                  ((resized_image.shape[1] + 1) * coefficients[0, 1] /
-                   coefficients[0, 0]))
-            p1 = (int(p1[0]), int(p1[1]))
-            p2 = (int(p2[0]), int(p2[1]))
-            cv2.line(resized_image, p1, p2, (0, 0, 255))
-        # A well defined line was not found
-        else:
-            print('SKIPPING')
-            pass
+    # Try to draw the line classifiers line, sometimes impossible due to
+    # precision problems
+    try:
+        if line_clf is not None:
+            coefficients = line_clf.coef_
+            # Use the coefficients to characterize the line
+            # Check for cases where floating point precision will cause all kinds of
+            # weird miscalculations
+            c1 = line_clf.coef_[0, 1]
+            c2 = line_clf.coef_[0, 0]
+            d = line_clf.intercept_[0]
+            # Is the line a well defined vertical line?
+            if abs(c1) < abs(c2 * resized_image.shape[0]):
+                p1 = (0, -d / c2)
+                p2 = (resized_image.shape[1],
+                      (-d / c2) - (resized_image.shape[1] * c1 / c2))
+                p1 = (int(p1[0]), int(p1[1]))
+                p2 = (int(p2[0]), int(p2[1]))
+                cv2.line(resized_image, p1, p2, (0, 0, 255))
+            else:
+                # Find the x intercept
+                x_int = int(-d / c1)
+                if x_int >= 0 and x_int <= resized_image.shape[1]:
+                    cv2.line(resized_image,
+                             (x_int, 0),
+                             (x_int, resized_image.shape[0]),
+                             (0, 0, 255))
+    except Exception as e:
+        pass
+
+    if data.failed_arena_edge:
+        cv2.putText(resized_image, 'No edge', (2, 15), cv2.FONT_HERSHEY_PLAIN, 1, (255,255,255))
+
+    if center_point is not None:
+        resized_image[int(center_point[1]), int(center_point[0]), 0] = 255
+        cv2.putText(resized_image, 'c: {0:.2f} {0:.2f}'.format(center_point[0], center_point[1]), (2, 30), cv2.FONT_HERSHEY_PLAIN, 1, (255,255,255))
 
     debug_msg = bridge.cv2_to_imgmsg(resized_image, encoding="rgb8")
     debug_msg.header.stamp = stamp
