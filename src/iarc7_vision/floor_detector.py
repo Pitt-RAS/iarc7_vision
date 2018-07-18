@@ -234,7 +234,7 @@ def find_boundary_line(data, debug_data):
 
     try:
         heading_trans = tf_buffer.lookup_transform(
-            'heading_quad', 'level_quad', data.header.stamp,
+            'level_quad', 'heading_quad', data.header.stamp,
             rospy.Duration(0.10))
     except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
             tf2_ros.ExtrapolationException) as ex:
