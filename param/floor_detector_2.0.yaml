@@ -9,6 +9,9 @@ publish_visualization: true
 # Boundary SVM's C parameters
 boundary_svm_c: 0.025
 
+# Rotation of optical frame from front of drone
+camera_rotation: -1.5707
+
 # Training settings
 # Filter settings which are saved with classifier settings objects
 # Target size of resized image

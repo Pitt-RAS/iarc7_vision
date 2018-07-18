@@ -2,6 +2,11 @@
 from timeit import default_timer as timer
 import pickle
 import glob
+import tf2_geometry_msgs
+from tf2_geometry_msgs import Vector3Stamped
+from geometry_msgs.msg import Point
+import math
+from tf import transformations
 
 import rospy
 import rospkg
@@ -16,6 +21,8 @@ from sensor_msgs.msg import Image
 
 from iarc7_vision.filterbank import get_RFS_filters_in_tensorflow_format
 from iarc7_vision.image_filter_applicator import ImageFilterApplicator
+
+from visualization_msgs.msg import Marker
 
 bridge = CvBridge()
 
@@ -66,6 +73,10 @@ def find_boundary_line(data, debug_data):
         height / settings.min_height), image.shape[0])) / 2
     cropped = image[crop_amount_height:image.shape[0] - crop_amount_height,
                     crop_amount_width:image.shape[1] - crop_amount_width]
+
+    focal_length = math.sqrt(image.shape[1]**2 + image.shape[0]**2) / (2 * math.tan(afov / 2))
+    new_afov = 2 * math.atan(math.sqrt(cropped.shape[1]**2 + cropped.shape[0]**2) / focal_length)
+    resize_fractions = np.asarray((float(settings.target_size[0]) / cropped.shape[1], float(settings.target_size[1]) / cropped.shape[0]))
 
     resized_image = cv2.resize(
         cropped, settings.target_size, interpolation=cv2.INTER_LINEAR)
@@ -127,6 +138,10 @@ def find_boundary_line(data, debug_data):
 
     # Get a list of points that are on the antifloor side of the line
     point_classifications = line_clf.predict(points)
+
+    if point_classifications.size - np.sum(point_classifications) < min_floor_patches:
+        debug_data.failed_arena_edge = True
+        return
 
     if np.sum(point_classifications) < min_anti_floor_patches:
         debug_data.failed_arena_edge = True
@@ -212,8 +227,156 @@ def find_boundary_line(data, debug_data):
 
     center_point = (p2[0] + (p1[0] - p2[0])/2.0, p2[1] + (p1[1] - p2[1])/2.0)
     debug_data.center_point = center_point
-    #rospy.loginfo('p1: {} p2: {}'.format(p1, p2))
-    #rospy.loginfo('center_point: {}'.format(center_point))
+
+    # Find a vector that describes the orientation of the line in the optical frame
+    direction = np.asarray(p1) - np.asarray(p2)
+    direction = direction / np.linalg.norm(direction)
+
+    try:
+        heading_trans = tf_buffer.lookup_transform(
+            'heading_quad', 'level_quad', data.header.stamp,
+            rospy.Duration(0.10))
+    except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException) as ex:
+        msg = "Train floor data collector: Exception when looking up transform for heading"
+        rospy.logerr("Transform error: {}".format(msg))
+        rospy.logerr(ex.message)
+        return
+
+    # Flip over the vector
+    flipped_over_vector = np.asarray([-direction[1], -direction[0]])
+
+    # Rotate the vector into the heading quad frame
+    rotation_matrix = np.asarray([[math.cos(camera_rotation), -math.sin(camera_rotation)],
+                                  [math.sin(camera_rotation), math.cos(camera_rotation)]])
+
+    heading_frame_vector = np.matmul(flipped_over_vector, rotation_matrix)
+
+    direction_vector = Vector3Stamped()
+    direction_vector.vector.x = heading_frame_vector[0]
+    direction_vector.vector.y = heading_frame_vector[1]
+
+    direction_quad = tf2_geometry_msgs.do_transform_vector3(direction_vector, heading_trans)
+
+    marker = Marker()
+    marker.header.frame_id = "level_quad"
+    marker.header.stamp = data.header.stamp
+    marker.type = Marker.ARROW
+    marker.action = Marker.ADD
+    marker.pose.position.x = 0
+    marker.pose.position.y = 0
+    marker.pose.position.z = 0
+
+    rot = math.atan(direction_quad.vector.y / direction_quad.vector.x)
+    quat = transformations.quaternion_about_axis(rot, [0, 0, 1])
+
+    marker.pose.orientation.x = quat[0]
+    marker.pose.orientation.y = quat[1]
+    marker.pose.orientation.z = quat[2]
+    marker.pose.orientation.w = quat[3]
+    marker.scale.x = 1
+    marker.scale.y = 0.1
+    marker.scale.z = 0.1
+    marker.color.a = 1.0 # Don't forget to set the alpha!
+    marker.color.r = 0.0
+    marker.color.g = 1.0
+    marker.color.b = 0.0
+    marker_pub.publish(marker)
+
+    # Get the position of the wall using the camera transform stuff
+    undistorted_pix_pos = center_point / resize_fractions
+    # Get the ray
+    pix_ray = [undistorted_pix_pos[0] - cropped.shape[1] / 2, undistorted_pix_pos[1] - cropped.shape[0] / 2, focal_length]
+    unit_pix_ray = pix_ray / np.linalg.norm(pix_ray)
+
+    camera_ray = Vector3Stamped()
+    camera_ray.vector.x = unit_pix_ray[0]
+    camera_ray.vector.y = unit_pix_ray[1]
+    camera_ray.vector.z = unit_pix_ray[2]
+
+    map_ray = tf2_geometry_msgs.do_transform_vector3(camera_ray, trans)
+
+    ray_scale = abs(trans.transform.translation.z / map_ray.vector.z)
+
+    # Map ray is now a vector that's orientated in the level_quad frame but it's
+    # origin is at the bottom_camera frame
+    map_ray.vector.x *= ray_scale
+    map_ray.vector.y *= ray_scale
+    map_ray.vector.z *= ray_scale
+
+    try:
+        camera_trans = tf_buffer.lookup_transform(
+            'bottom_camera_rgb_optical_frame', 'level_quad', data.header.stamp,
+            rospy.Duration(0.10))
+    except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException) as ex:
+        msg = "Train floor data collector: Exception when looking up transform for vector transformation"
+        rospy.logerr("Transform error: {}".format(msg))
+        rospy.logerr(ex.message)
+        return
+
+    # Find the final line position
+    wall_pos = Vector3Stamped()
+    wall_pos.vector.x = map_ray.vector.x + camera_trans.transform.translation.x
+    wall_pos.vector.y = map_ray.vector.y + camera_trans.transform.translation.y
+    wall_pos.vector.z = map_ray.vector.z + camera_trans.transform.translation.z
+
+    # Find the distance from the dividing line based on a point that will not be on the line
+    # Figure out which test point of the detections grid to use
+    # Assume the camera has discrete 90 degree rotations
+    if camera_rotation == 0:
+        test_point_coordinate = np.asarray((0, 0))
+    elif camera_rotation == -1.5707:
+        test_point_coordinate = np.asarray((0, resized.shape[0]))
+    else:
+        rospy.logerr('FLOOR DETECTOR CAN NOT USE CAMERA ROTATION')
+
+    line_side = line_clf.decision_function((test_point_coordinate, ))
+
+    marker = Marker()
+    marker.header.frame_id = 'level_quad'
+    marker.header.stamp = data.header.stamp
+    marker.type = Marker.LINE_STRIP
+    marker.action = Marker.ADD
+    marker.pose.position.x = 0
+    marker.pose.position.y = 0
+    marker.pose.position.z = 0
+    marker.pose.orientation.x = 0
+    marker.pose.orientation.y = 0
+    marker.pose.orientation.z = 0
+    marker.pose.orientation.w = 1
+    marker.scale.x = 0.1
+    marker.scale.y = 0.1
+    marker.scale.z = 0.1
+    marker.color.a = 1.0 # Don't forget to set the alpha!
+    marker.color.r = 1.0
+    marker.color.g = 0.0
+    marker.color.b = 0.0
+    line_pos_marker_pub.publish(marker)
+
+    # Check if vertical wall
+    LINE_LENGTH = 1
+    if math.pi / 4 >= rot and rot >= -math.pi / 4:
+        # If this is a front wall
+        if np.sign(line_side) == 1:
+            print('LEFT WALL')
+        else:
+            print('RIGHT WALL')
+        m_p1 = Point(-LINE_LENGTH, wall_pos.vector.y, wall_pos.vector.z)
+        m_p2 = Point(LINE_LENGTH, wall_pos.vector.y, wall_pos.vector.z)
+        marker.points = [m_p1, m_p2]
+    # if horizontal wall
+    elif rot > math.pi / 4 or -math.pi / 4 > rot:
+        if np.sign(line_side) == 1:
+            print('FRONT WALL')
+        else:
+            print('BACK WALL')
+        m_p1 = Point(wall_pos.vector.x, -LINE_LENGTH, wall_pos.vector.z)
+        m_p2 = Point(wall_pos.vector.x, LINE_LENGTH, wall_pos.vector.z)
+        marker.points = [m_p1, m_p2]
+
+    line_pos_marker_pub.publish(marker)
+
 
 def publish_debug(data, stamp):
     resized_image = data.resized_image
@@ -341,9 +504,13 @@ if __name__ == '__main__':
 
     settings = load_classifier()
 
+    min_floor_patches = rospy.get_param('~min_floor_patches')
     min_anti_floor_patches = rospy.get_param('~min_anti_floor_patches')
     min_anti_floor_appearance_ratio = rospy.get_param('~min_anti_floor_appearance_ratio')
     min_anti_floor_on_edge = rospy.get_param('~min_anti_floor_on_edge')
+
+    camera_rotation = rospy.get_param('~camera_rotation')
+    afov = rospy.get_param('~afov')
 
     while not rospy.is_shutdown() and rospy.Time.now() == 0:
         pass
@@ -365,6 +532,9 @@ if __name__ == '__main__':
     if publish_visualization:
         debug_visualization_pub = rospy.Publisher(
             '/floor_detector/detections_image', Image, queue_size=1)
+
+    marker_pub = rospy.Publisher('/floor_detector/line_direction', Marker, queue_size=1)
+    line_pos_marker_pub = rospy.Publisher('/floor_detector/line_position', Marker, queue_size=1)
 
     image_topic = rospy.get_param('~camera_topic')
     rospy.Subscriber(image_topic, Image, image_callback, queue_size=1)

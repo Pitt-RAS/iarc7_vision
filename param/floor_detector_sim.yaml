@@ -4,9 +4,15 @@ classifier_settings_postfix: sim
 
 camera_topic: /bottom_camera/rgb/image_raw
 
+min_floor_patches: 4
 min_anti_floor_patches: 8
 min_anti_floor_appearance_ratio: 0.8
 min_anti_floor_on_edge: 4
+
+# Rotation of optical frame from front of drone
+camera_rotation: 0
+
+afov: 1.00
 
 # Debug settings
 publish_visualization: true
