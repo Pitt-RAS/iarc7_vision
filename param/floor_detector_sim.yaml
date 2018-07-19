@@ -21,6 +21,7 @@ afov: 1.00
 
 # Debug settings
 publish_visualization: true
+
 # Boundary SVM's C parameters
 boundary_svm_c: 0.025
 
