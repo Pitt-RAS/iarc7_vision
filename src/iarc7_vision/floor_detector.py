@@ -3,10 +3,11 @@ from timeit import default_timer as timer
 import pickle
 import glob
 import tf2_geometry_msgs
-from tf2_geometry_msgs import Vector3Stamped
+from tf2_geometry_msgs import Vector3Stamped, PointStamped
 from geometry_msgs.msg import Point
 import math
 from tf import transformations
+from collections import deque
 
 import rospy
 import rospkg
@@ -24,6 +25,8 @@ from iarc7_vision.image_filter_applicator import ImageFilterApplicator
 
 from visualization_msgs.msg import Marker
 
+from iarc7_msgs.msg import Boundary
+
 bridge = CvBridge()
 
 
@@ -38,10 +41,97 @@ class DebugData(object):
 
 def image_callback(data):
     debug_data = DebugData()
-    find_boundary_line(data, debug_data)
+    detection = find_boundary_line(data, debug_data)
+
+    if detection is None:
+        detection = [0, 0, 0, 0, 0, data.header.stamp]
+
+    filter_detections(detection)
 
     if publish_visualization:
         publish_debug(debug_data, data.header.stamp)
+
+def filter_detections(detection):
+    global detections
+    detections.append(detection)
+
+    start_time = rospy.Time.now()
+    detections = [x for x in detections if x[5] > start_time - max_detection_lag]
+
+    if len(detections) > max_detections_queued:
+        detections.pop(0)
+
+    if(len(detections) >= min_boundary_detections):
+        # Sort all the detections
+        left_detections = []
+        right_detections = []
+        top_detections = []
+        bottom_detections = []
+
+        for d in detections:
+            if d[0] > 0:
+                left_detections.append(np.asarray((d[0], d[4])))
+            elif d[1] > 0:
+                right_detections.append(np.asarray((d[1], d[4])))
+            elif d[2] > 0:
+                top_detections.append(np.asarray((d[2], d[4])))
+            elif d[3] > 0:
+                bottom_detections.append(np.asarray((d[3], d[4])))
+
+        publish_detection(validate_detection(left_detections), Boundary.left)
+        publish_detection(validate_detection(right_detections), Boundary.right)
+        publish_detection(validate_detection(top_detections), Boundary.top)
+        publish_detection(validate_detection(bottom_detections), Boundary.bottom)
+
+def publish_detection(distance, b_type):
+    if distance is not None:
+        msg = Boundary()
+        msg.header.stamp = rospy.Time.now()
+        msg.boundary_type = b_type
+        msg.position = distance
+        detection_publisher.publish(msg)
+
+        marker = Marker()
+        marker.header.frame_id = 'map'
+        marker.header.stamp = rospy.Time.now()
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0
+        marker.pose.position.y = 0
+        marker.pose.position.z = 0
+        marker.pose.orientation.x = 0
+        marker.pose.orientation.y = 0
+        marker.pose.orientation.z = 0
+        marker.pose.orientation.w = 1
+        marker.scale.x = 0.05
+        marker.scale.y = 0.05
+        marker.scale.z = 0.05
+        marker.color.a = 1.0 # Don't forget to set the alpha!
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+
+        # Check if vertical wall
+        LINE_LENGTH = 100
+        if b_type == Boundary.left or b_type == Boundary.right:
+            m_p1 = Point(-LINE_LENGTH, distance, 0)
+            m_p2 = Point(LINE_LENGTH, distance, 0)
+        else:
+            m_p1 = Point(distance, -LINE_LENGTH, 0)
+            m_p2 = Point(distance, LINE_LENGTH, 0)
+        marker.points = [m_p1, m_p2]
+
+        final_line_pos_marker_pub.publish(marker)
+
+def validate_detection(detection):
+    if(len(detection) < min_boundary_detections):
+        return
+
+    distances = np.asarray(detection)[:, 1]
+    if np.var(distances) > max_boundary_variance:
+        return
+
+    return np.average(distances)
 
 def find_boundary_line(data, debug_data):
     try:
@@ -316,10 +406,10 @@ def find_boundary_line(data, debug_data):
         return
 
     # Find the final line position
-    wall_pos = Vector3Stamped()
-    wall_pos.vector.x = map_ray.vector.x + camera_trans.transform.translation.x
-    wall_pos.vector.y = map_ray.vector.y + camera_trans.transform.translation.y
-    wall_pos.vector.z = map_ray.vector.z + camera_trans.transform.translation.z
+    wall_pos = PointStamped()
+    wall_pos.point.x = map_ray.vector.x + camera_trans.transform.translation.x
+    wall_pos.point.y = map_ray.vector.y + camera_trans.transform.translation.y
+    wall_pos.point.z = map_ray.vector.z + camera_trans.transform.translation.z
 
     # Find the distance from the dividing line based on a point that will not be on the line
     # Figure out which test point of the detections grid to use
@@ -352,31 +442,45 @@ def find_boundary_line(data, debug_data):
     marker.color.r = 1.0
     marker.color.g = 0.0
     marker.color.b = 0.0
-    line_pos_marker_pub.publish(marker)
+
+    # Transform the detection point into the map frame
+    try:
+        drone_trans = tf_buffer.lookup_transform(
+            'map', 'level_quad', data.header.stamp,
+            rospy.Duration(0.10))
+    except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+            tf2_ros.ExtrapolationException) as ex:
+        msg = "Train floor data collector: Exception when looking up transform for vector transformation"
+        rospy.logerr("Transform error: {}".format(msg))
+        rospy.logerr(ex.message)
+        return
+
+    map_wall_pos = tf2_geometry_msgs.do_transform_point(wall_pos, drone_trans)
 
     # Check if vertical wall
     LINE_LENGTH = 1
     if math.pi / 4 >= rot and rot >= -math.pi / 4:
-        # If this is a front wall
+        # If left
         if np.sign(line_side) == 1:
-            print('LEFT WALL')
+            detection = [1, 0, 0, 0, map_wall_pos.point.y, data.header.stamp]
         else:
-            print('RIGHT WALL')
-        m_p1 = Point(-LINE_LENGTH, wall_pos.vector.y, wall_pos.vector.z)
-        m_p2 = Point(LINE_LENGTH, wall_pos.vector.y, wall_pos.vector.z)
+            detection = np.asarray([0, 1, 0, 0, map_wall_pos.point.y, data.header.stamp])
+        m_p1 = Point(-LINE_LENGTH, wall_pos.point.y, wall_pos.point.z)
+        m_p2 = Point(LINE_LENGTH, wall_pos.point.y, wall_pos.point.z)
         marker.points = [m_p1, m_p2]
     # if horizontal wall
     elif rot > math.pi / 4 or -math.pi / 4 > rot:
+        # If top
         if np.sign(line_side) == 1:
-            print('FRONT WALL')
+            detection = [0, 0, 1, 0, map_wall_pos.point.x, data.header.stamp]
         else:
-            print('BACK WALL')
-        m_p1 = Point(wall_pos.vector.x, -LINE_LENGTH, wall_pos.vector.z)
-        m_p2 = Point(wall_pos.vector.x, LINE_LENGTH, wall_pos.vector.z)
+            detection = [0, 0, 0, 1, map_wall_pos.point.x, data.header.stamp]
+        m_p1 = Point(wall_pos.point.x, -LINE_LENGTH, wall_pos.point.z)
+        m_p2 = Point(wall_pos.point.x, LINE_LENGTH, wall_pos.point.z)
         marker.points = [m_p1, m_p2]
 
     line_pos_marker_pub.publish(marker)
-
+    return detection
 
 def publish_debug(data, stamp):
     resized_image = data.resized_image
@@ -512,6 +616,12 @@ if __name__ == '__main__':
     camera_rotation = rospy.get_param('~camera_rotation')
     afov = rospy.get_param('~afov')
 
+    detections = deque()
+    min_boundary_detections = rospy.get_param('~min_boundary_detections')
+    max_detections_queued = rospy.get_param('~max_detections_queued')
+    max_detection_lag = rospy.Duration(rospy.get_param('~max_detection_lag'))
+    max_boundary_variance = rospy.get_param('~max_boundary_variance')
+
     while not rospy.is_shutdown() and rospy.Time.now() == 0:
         pass
 
@@ -535,6 +645,9 @@ if __name__ == '__main__':
 
     marker_pub = rospy.Publisher('/floor_detector/line_direction', Marker, queue_size=1)
     line_pos_marker_pub = rospy.Publisher('/floor_detector/line_position', Marker, queue_size=1)
+    final_line_pos_marker_pub = rospy.Publisher('/floor_detector/boundaries_marker', Marker, queue_size=1)
+
+    detection_publisher = rospy.Publisher('/floor_detector/boundaries', Boundary, queue_size=10)
 
     image_topic = rospy.get_param('~camera_topic')
     rospy.Subscriber(image_topic, Image, image_callback, queue_size=1)
