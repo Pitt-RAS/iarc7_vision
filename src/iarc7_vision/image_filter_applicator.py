@@ -56,7 +56,9 @@ class ImageFilterApplicator:
             writer = tf.summary.FileWriter('.')
             writer.add_graph(tf.get_default_graph())
 
-        self.sess = tf.Session()
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        self.sess = tf.Session(config=config)
 
     def apply_filters(self, image, show_result=False):
 
