@@ -6,7 +6,10 @@ namespace iarc7_vision {
 
 UndistortionModel::UndistortionModel(const ros::NodeHandle& nh,
                                      const cv::Size& image_size)
-    : image_size_(image_size)
+    : image_size_(image_size),
+      new_image_size_(
+            ros_utils::ParamUtils::getParam<int>(nh, "out_width"),
+            ros_utils::ParamUtils::getParam<int>(nh, "out_height"))
 {
     cv::Mat camera_matrix(3, 3, CV_32FC1);
     camera_matrix.at<float>(0, 0) =
@@ -30,11 +33,8 @@ UndistortionModel::UndistortionModel(const ros::NodeHandle& nh,
     dist.at<float>(3, 0) = ros_utils::ParamUtils::getParam<double>(nh, "p2");
     dist.at<float>(4, 0) = ros_utils::ParamUtils::getParam<double>(nh, "k3");
 
-    cv::Size new_image_size(
-            ros_utils::ParamUtils::getParam<int>(nh, "out_width"),
-            ros_utils::ParamUtils::getParam<int>(nh, "out_height"));
     cv::Mat new_camera_matrix = cv::getOptimalNewCameraMatrix(
-            camera_matrix, dist, image_size_, 0, new_image_size, 0, true);
+            camera_matrix, dist, image_size_, 0, new_image_size_, 0, true);
 
     cv::Mat map1_cpu;
     cv::Mat map2_cpu;
@@ -42,7 +42,7 @@ UndistortionModel::UndistortionModel(const ros::NodeHandle& nh,
                                 dist,
                                 cv::Mat(),
                                 new_camera_matrix,
-                                new_image_size,
+                                new_image_size_,
                                 CV_32FC1,
                                 map1_cpu,
                                 map2_cpu);
