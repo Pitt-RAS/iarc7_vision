@@ -55,12 +55,13 @@ def filter_detections(detection):
     global detections
     detections.append(detection)
 
-    start_time = rospy.Time.now()
+    start_time = detection[5]
+
     detections = [x for x in detections if x[5] > start_time - max_detection_lag]
 
     if len(detections) > max_detections_queued:
         detections.pop(0)
-
+    #print len(detections), min_boundary_detections
     if(len(detections) >= min_boundary_detections):
         # Sort all the detections
         left_detections = []
@@ -78,15 +79,17 @@ def filter_detections(detection):
             elif d[3] > 0:
                 bottom_detections.append(np.asarray((d[3], d[4])))
 
-        publish_detection(validate_detection(left_detections), Boundary.left)
-        publish_detection(validate_detection(right_detections), Boundary.right)
-        publish_detection(validate_detection(top_detections), Boundary.top)
-        publish_detection(validate_detection(bottom_detections), Boundary.bottom)
+        #print len(left_detections), len(right_detections), len(top_detections), len(bottom_detections)
 
-def publish_detection(distance, b_type):
+        publish_detection(validate_detection(left_detections), Boundary.left, detection[5])
+        publish_detection(validate_detection(right_detections), Boundary.right, detection[5])
+        publish_detection(validate_detection(top_detections), Boundary.top, detection[5])
+        publish_detection(validate_detection(bottom_detections), Boundary.bottom, detection[5])
+
+def publish_detection(distance, b_type, stamp):
     if distance is not None:
         msg = Boundary()
-        msg.header.stamp = rospy.Time.now()
+        msg.header.stamp = stamp
         msg.boundary_type = b_type
         msg.position = distance
         detection_publisher.publish(msg)
@@ -120,16 +123,17 @@ def publish_detection(distance, b_type):
             m_p1 = Point(distance, -LINE_LENGTH, 0)
             m_p2 = Point(distance, LINE_LENGTH, 0)
         marker.points = [m_p1, m_p2]
-
         final_line_pos_marker_pub.publish(marker)
 
 def validate_detection(detection):
     if(len(detection) < min_boundary_detections):
+        #print('Not enough detections {} {}'.format(len(detection), min_boundary_detections))
         return
 
     distances = np.asarray(detection)[:, 1]
     if np.var(distances) > max_boundary_variance:
         return
+    #print('Variance {}'.format(np.var(distances)))
 
     return np.average(distances)
 
@@ -230,6 +234,13 @@ def find_boundary_line(data, debug_data):
     point_classifications = line_clf.predict(points)
 
     if point_classifications.size - np.sum(point_classifications) < min_floor_patches:
+        debug_data.failed_arena_edge = True
+        return
+
+    floor_side_floor = (np.ones(point_classifications.shape) - point_classifications) * (np.ones(point_classifications.shape) - labels)
+
+    ratio = np.sum(floor_side_floor) / (point_classifications.shape[0] - np.sum(point_classifications))
+    if ratio < min_floor_appearance_ratio:
         debug_data.failed_arena_edge = True
         return
 
@@ -417,7 +428,7 @@ def find_boundary_line(data, debug_data):
     if camera_rotation == 0:
         test_point_coordinate = np.asarray((0, 0))
     elif camera_rotation == -1.5707:
-        test_point_coordinate = np.asarray((0, resized.shape[0]))
+        test_point_coordinate = np.asarray((0, resized_image.shape[0]))
     else:
         rospy.logerr('FLOOR DETECTOR CAN NOT USE CAMERA ROTATION')
 
@@ -609,6 +620,7 @@ if __name__ == '__main__':
     settings = load_classifier()
 
     min_floor_patches = rospy.get_param('~min_floor_patches')
+    min_floor_appearance_ratio = rospy.get_param('~min_floor_appearance_ratio')
     min_anti_floor_patches = rospy.get_param('~min_anti_floor_patches')
     min_anti_floor_appearance_ratio = rospy.get_param('~min_anti_floor_appearance_ratio')
     min_anti_floor_on_edge = rospy.get_param('~min_anti_floor_on_edge')
@@ -620,7 +632,7 @@ if __name__ == '__main__':
     min_boundary_detections = rospy.get_param('~min_boundary_detections')
     max_detections_queued = rospy.get_param('~max_detections_queued')
     max_detection_lag = rospy.Duration(rospy.get_param('~max_detection_lag'))
-    max_boundary_variance = rospy.get_param('~max_boundary_variance')
+    max_boundary_variance = rospy.get_param('~max_boundary_std_dev')**2
 
     while not rospy.is_shutdown() and rospy.Time.now() == 0:
         pass
