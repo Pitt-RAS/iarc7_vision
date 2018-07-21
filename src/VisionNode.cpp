@@ -585,8 +585,11 @@ int main(int argc, char **argv)
                 image_correct.download(corrected_image_cpu, cuda_stream);
                 cuda_stream.waitForCompletion();
 
+                std_msgs::Header header;
+                header.stamp = message->header.stamp;
+
                 cv_bridge::CvImage cv_image {
-                    std_msgs::Header(),
+                    header,
                     sensor_msgs::image_encodings::RGB8,
                     corrected_image_cpu
                 };
