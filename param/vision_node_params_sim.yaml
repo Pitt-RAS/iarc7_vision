@@ -70,6 +70,8 @@ roomba_estimator:
     # Measued in meters
     roomba_height: 0.065
 
+    detection_image_width: 300
+
     hsv_slice_h_green_min: 47
     hsv_slice_h_green_max: 67
     hsv_slice_h_red1_min: 0
