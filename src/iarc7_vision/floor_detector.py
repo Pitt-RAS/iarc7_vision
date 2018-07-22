@@ -348,8 +348,8 @@ def find_boundary_line(data, debug_data):
     flipped_over_vector = np.asarray([-direction[1], -direction[0]])
 
     # Rotate the vector into the heading quad frame
-    rotation_matrix = np.asarray([[math.cos(camera_rotation), -math.sin(camera_rotation)],
-                                  [math.sin(camera_rotation), math.cos(camera_rotation)]])
+    rotation_matrix = np.asarray([[math.cos(-camera_rotation), -math.sin(-camera_rotation)],
+                                  [math.sin(-camera_rotation), math.cos(-camera_rotation)]])
 
     heading_frame_vector = np.matmul(flipped_over_vector, rotation_matrix)
 
@@ -428,7 +428,7 @@ def find_boundary_line(data, debug_data):
     if camera_rotation == 0:
         test_point_coordinate = np.asarray((0, 0))
     elif camera_rotation == -1.5707:
-        test_point_coordinate = np.asarray((0, resized_image.shape[0]))
+        test_point_coordinate = np.asarray((resized_image.shape[1], 0))
     else:
         rospy.logerr('FLOOR DETECTOR CAN NOT USE CAMERA ROTATION')
 
@@ -474,8 +474,10 @@ def find_boundary_line(data, debug_data):
         # If left
         if np.sign(line_side) == 1:
             detection = [1, 0, 0, 0, map_wall_pos.point.y, data.header.stamp]
+            rospy.logwarn('LEFT WALL')
         else:
             detection = np.asarray([0, 1, 0, 0, map_wall_pos.point.y, data.header.stamp])
+            rospy.logwarn('RIGHT WALL')
         m_p1 = Point(-LINE_LENGTH, wall_pos.point.y, wall_pos.point.z)
         m_p2 = Point(LINE_LENGTH, wall_pos.point.y, wall_pos.point.z)
         marker.points = [m_p1, m_p2]
@@ -484,8 +486,10 @@ def find_boundary_line(data, debug_data):
         # If top
         if np.sign(line_side) == 1:
             detection = [0, 0, 1, 0, map_wall_pos.point.x, data.header.stamp]
+            rospy.logwarn('TOP WALL')
         else:
             detection = [0, 0, 0, 1, map_wall_pos.point.x, data.header.stamp]
+            rospy.logwarn('BOTTOM WALL')
         m_p1 = Point(wall_pos.point.x, -LINE_LENGTH, wall_pos.point.z)
         m_p2 = Point(wall_pos.point.x, LINE_LENGTH, wall_pos.point.z)
         marker.points = [m_p1, m_p2]
