@@ -52,6 +52,13 @@ class ImageFilterApplicator:
                                        'VALID')
         print('Post average size: {}'.format(self.averaged.shape))
 
+        # Average red
+        test = 3 * self.average_size
+        self.average_rgb = tf.nn.avg_pool(self.placeholder_image,
+                                         (1, test, test, 1),
+                                         (1, test, test, 1),
+                                          padding='VALID')
+
         if output_graph:
             writer = tf.summary.FileWriter('.')
             writer.add_graph(tf.get_default_graph())
@@ -62,12 +69,20 @@ class ImageFilterApplicator:
 
     def apply_filters(self, image, show_result=False):
 
-        result = self.sess.run(self.averaged, feed_dict={self.placeholder_image: image})
+        result = self.sess.run([self.averaged,
+                                self.average_rgb],
+                                feed_dict={self.placeholder_image: image})
+        #result = np.asarray(result)
+        #result = result.flatten(axis=0)
+        #print result[0].shape
+        #print result[1].shape
+        all_results = np.append(result[0], result[1], axis=3)
+        #print all_results.shape
 
         if show_result:
             imgs = []
-            for i in range(0, self.filterbank.shape[3]):
-                imgs.append(np.uint8(255.0 * stretch_contrast(result[0, :, :, i])))
+            for i in range(0, all_results.shape[3]):
+                imgs.append(np.uint8(255.0 * all_results[0, :, :, i]))
             im_show_m(imgs)
-            cv2.waitKey(1)
-        return result
+            cv2.waitKey()
+        return all_results

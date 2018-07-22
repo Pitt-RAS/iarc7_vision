@@ -43,7 +43,7 @@ stride: 3
 average_size: 5
 
 # Floor classifier parameters (RBF kernel)
-train_c: 25.0
+train_c: 0.9
 train_gamma: 2.0
 
 # Training settings
