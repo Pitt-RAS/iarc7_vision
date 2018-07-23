@@ -68,13 +68,13 @@ roomba_estimator:
 
     detection_image_width: 300
 
-    hsv_slice_h_green_min: 47
+    hsv_slice_h_green_min: 30
     hsv_slice_h_green_max: 90
     hsv_slice_h_red1_min: 0
     hsv_slice_h_red1_max: 30
     hsv_slice_h_red2_min: 150
     hsv_slice_h_red2_max: 180
-    hsv_slice_s_min: 30
+    hsv_slice_s_min: 35
     hsv_slice_s_max: 255
     hsv_slice_v_min: 15
     hsv_slice_v_max: 255
