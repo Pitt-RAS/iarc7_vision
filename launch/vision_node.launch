@@ -1,5 +1,5 @@
 <launch>
-    <arg name="platform" default="1.0" />
+    <arg name="platform" default="sim" />
     <arg name="bond_id_namespace" default="safety_bonds" />
 
     <node pkg="iarc7_vision" type="iarc7_vision_node" name="iarc7_vision_node">

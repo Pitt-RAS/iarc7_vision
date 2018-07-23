@@ -1,0 +1,53 @@
+# Detector Settings
+revision_name: latest
+classifier_settings_postfix: '2.0'
+
+camera_topic: /corrected_image
+
+min_floor_patches: 16
+min_floor_appearance_ratio: 0.7
+min_anti_floor_patches: 16
+min_anti_floor_appearance_ratio: 0.7
+min_anti_floor_on_edge: 10
+
+min_boundary_detections: 4
+max_detections_queued: 40
+max_detection_lag: 2.0
+max_boundary_std_dev: 0.15
+
+# Rotation of optical frame from front of drone
+camera_rotation: -1.5707
+
+afov: 1.70
+
+# Debug settings
+publish_visualization: true
+
+# Boundary SVM's C parameters
+boundary_svm_c: 0.025
+
+# Training settings
+# Filter settings which are saved with classifier settings objects
+# Target size of resized image
+target_width: 152
+target_height: 122
+
+# Minimum detection height (used for scaling images)
+min_height: 0.7
+
+# Filter settings
+kernel_size: 5
+sigmas: [0.2, 0.4, 0.6]
+num_orientations: 6
+stride: 3
+average_size: 5
+
+# Floor classifier parameters (RBF kernel)
+train_c: 0.9
+train_gamma: 2.0
+
+# Training settings
+floor_train_start_image: 0
+floor_train_images: 200
+antifloor_train_start_image: 0
+antifloor_train_images: 200

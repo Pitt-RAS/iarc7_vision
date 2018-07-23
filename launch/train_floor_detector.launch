@@ -1,0 +1,9 @@
+<launch>
+    <arg name="platform" default="sim" />
+
+    <node pkg="iarc7_vision"
+        type="train_floor_detector.py"
+        name="train_floor_detector">
+        <rosparam command="load" file="$(find iarc7_vision)/param/floor_detector_$(arg platform).yaml" />
+    </node>
+</launch>
