@@ -36,10 +36,20 @@ def callback(msg):
         marker.action = Marker.ADD
 
         marker.scale.x = 0.05
-        marker.scale.y = roomba.box_uncertainty
+
+        if roomba.box_uncertainty < 0.3:
+            marker.scale.y = roomba.box_uncertainty
+        else:
+            marker.scale.y = 0.3
+
         marker.scale.z = 0.0
 
-        if roomba.flip_certainty > 0.5:
+        if roomba.box_uncertainty > 0.3:
+            marker.color.r = 1
+            marker.color.g = 0
+            marker.color.b = 1
+            marker.color.a = 1
+        elif roomba.flip_certainty > 0.5:
             marker.color.r = 0
             marker.color.g = 1
             marker.color.b = 1

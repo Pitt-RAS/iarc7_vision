@@ -32,6 +32,11 @@ optical_flow_estimator:
     # Image scale factor
     scale_factor: 0.25
 
+    # Image crop region
+    crop: false
+    crop_width: 0
+    crop_height: 0
+
     ###############################
     ########## DEBUGGING ##########
     ###############################
@@ -50,7 +55,7 @@ optical_flow_estimator:
 
     # Debug settings for the optical flow estimator
     # Publish image with the velocity vectors drawn on it
-    debug_vectors_image: false
+    debug_vectors_image: true
 
     # Debug histogram of flow vectors
     debug_hist: true

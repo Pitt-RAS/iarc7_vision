@@ -1,7 +1,7 @@
 # Settings for the optical flow estimator
 optical_flow_estimator:
     # fov of the camera
-    fov: 1.08
+    fov: 1.70
 
     # Minimum altitude to run the detector
     min_estimation_altitude: 0.3
@@ -30,7 +30,12 @@ optical_flow_estimator:
     min_dist: 10
 
     # Image scale factor
-    scale_factor: 0.5
+    scale_factor: 1.0
+
+    # Image crop region
+    crop: true
+    crop_width: 320
+    crop_height: 240
 
     ###############################
     ########## DEBUGGING ##########

@@ -1,10 +1,10 @@
+#include <chrono>
 #include <cv_bridge/cv_bridge.h>
 
 #include <sensor_msgs/Image.h>
 #include <std_msgs/Header.h>
 
 #include "iarc7_vision/cv_utils.hpp"
-
 #include "iarc7_vision/RoombaBlobDetector.hpp"
 
 #pragma GCC diagnostic push
@@ -18,8 +18,25 @@ namespace iarc7_vision
 {
 
 RoombaBlobDetector::RoombaBlobDetector(const RoombaEstimatorSettings& settings,
-                                       ros::NodeHandle& ph)
-    : settings_(settings)
+                                       ros::NodeHandle& ph,
+                                       const cv::Size& image_size)
+    : settings_(settings),
+      image_size_(image_size),
+      structuring_element_(cv::getStructuringElement(
+              cv::MORPH_RECT,
+              cv::Size(settings_.morphology_size, settings_.morphology_size))),
+      morphology_open_(cv::cuda::createMorphologyFilter(
+              cv::MORPH_OPEN,
+              CV_8UC1,
+              structuring_element_,
+              cv::Point(-1, -1),
+              settings_.morphology_iterations)),
+      morphology_close_(cv::cuda::createMorphologyFilter(
+              cv::MORPH_CLOSE,
+              CV_8UC1,
+              structuring_element_,
+              cv::Point(-1, -1),
+              settings_.morphology_iterations))
 {
     if (settings_.debug_hsv_slice) {
         debug_hsv_slice_pub_ = ph.advertise<sensor_msgs::Image>("hsv_slice",
@@ -33,72 +50,68 @@ RoombaBlobDetector::RoombaBlobDetector(const RoombaEstimatorSettings& settings,
 }
 
 void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
-                                        cv::cuda::GpuMat& dst)
+                                        cv::cuda::GpuMat& dst) const
 {
-    cv::cuda::GpuMat hsv_image;
-    cv::cuda::cvtColor(image, hsv_image, cv::COLOR_RGB2HSV);
-    cv::cuda::GpuMat hsv_channels[3];
-    cv::cuda::split(hsv_image, hsv_channels);
+    const auto start_time = std::chrono::high_resolution_clock::now();
+
+    cv::cuda::cvtColor(image, hsv_image_, cv::COLOR_RGB2HSV);
+    cv::cuda::split(hsv_image_, hsv_channels_.data());
 
     dst.create(image.rows, image.cols, CV_8U);
     dst.setTo(cv::Scalar(0, 0, 0, 0));
 
-    cv::cuda::GpuMat range_mask;
-
     // Green slice
-    cv_utils::inRange(hsv_image,
+    cv_utils::inRange(hsv_image_,
                       cv::Scalar(settings_.hsv_slice_h_green_min,
                                  settings_.hsv_slice_s_min,
                                  settings_.hsv_slice_v_min),
                       cv::Scalar(settings_.hsv_slice_h_green_max,
                                  settings_.hsv_slice_s_max,
                                  settings_.hsv_slice_v_max),
-                      range_mask);
-    cv::cuda::bitwise_or(dst, range_mask, dst);
+                      range_mask_);
+    cv::cuda::bitwise_or(dst, range_mask_, dst);
     // Upper red slice
-    cv_utils::inRange(hsv_image,
+    cv_utils::inRange(hsv_image_,
                       cv::Scalar(settings_.hsv_slice_h_red1_min,
                                  settings_.hsv_slice_s_min,
                                  settings_.hsv_slice_v_min),
                       cv::Scalar(settings_.hsv_slice_h_red1_max,
                                  settings_.hsv_slice_s_max,
                                  settings_.hsv_slice_v_max),
-                      range_mask);
-    cv::cuda::bitwise_or(dst, range_mask, dst);
+                      range_mask_);
+    cv::cuda::bitwise_or(dst, range_mask_, dst);
     // Lower red slice
-    cv_utils::inRange(hsv_image,
+    cv_utils::inRange(hsv_image_,
                       cv::Scalar(settings_.hsv_slice_h_red2_min,
                                  settings_.hsv_slice_s_min,
                                  settings_.hsv_slice_v_min),
                       cv::Scalar(settings_.hsv_slice_h_red2_max,
                                  settings_.hsv_slice_s_max,
                                  settings_.hsv_slice_v_max),
-                      range_mask);
-    cv::cuda::bitwise_or(dst, range_mask, dst);
+                      range_mask_);
+    cv::cuda::bitwise_or(dst, range_mask_, dst);
 
-    cv::Mat structuring_element = cv::getStructuringElement(
-            cv::MORPH_RECT,
-            cv::Size(settings_.morphology_size, settings_.morphology_size));
-    cv::Ptr<cv::cuda::Filter> morphology_open = cv::cuda::createMorphologyFilter(
-            cv::MORPH_OPEN,
-            CV_8UC1,
-            structuring_element,
-            cv::Point(-1, -1),
-            settings_.morphology_iterations);
-    morphology_open->apply(dst, dst);
-    cv::Ptr<cv::cuda::Filter> morphology_close = cv::cuda::createMorphologyFilter(
-            cv::MORPH_CLOSE,
-            CV_8UC1,
-            structuring_element,
-            cv::Point(-1, -1),
-            settings_.morphology_iterations);
-    morphology_close->apply(dst, dst);
+    const auto slice_time = std::chrono::high_resolution_clock::now();
+
+    morphology_open_->apply(dst, dst);
+    morphology_close_->apply(dst, dst);
+
+    const auto morph_time = std::chrono::high_resolution_clock::now();
+
+    const auto count = [](const auto& a, const auto& b) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                b - a).count();
+    };
+    ROS_DEBUG_STREAM(
+            "Slice: " << count(start_time, slice_time) << std::endl
+         << "Morph: " << count(slice_time, morph_time) << std::endl);
 
     ROS_ASSERT(dst.channels() == 1);
 }
 
-void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
-                                   std::vector<cv::RotatedRect>& boundRect)
+void RoombaBlobDetector::boundMask(
+        const cv::cuda::GpuMat& mask,
+        std::vector<cv::RotatedRect>& boundRect) const
 {
     cv::Mat mask_cpu;
     mask.download(mask_cpu);
@@ -210,9 +223,10 @@ void RoombaBlobDetector::boundMask(const cv::cuda::GpuMat& mask,
     }
 }
 
-void RoombaBlobDetector::checkCorners(const cv::cuda::GpuMat& image,
-                                      std::vector<cv::RotatedRect>& rects,
-                                      std::vector<double>& flip_certainties)
+void RoombaBlobDetector::checkCorners(
+        const cv::cuda::GpuMat& image,
+        std::vector<cv::RotatedRect>& rects,
+        std::vector<double>& flip_certainties) const
 {
     ROS_ASSERT(flip_certainties.empty());
     flip_certainties.reserve(rects.size());
@@ -307,10 +321,16 @@ void RoombaBlobDetector::checkCorners(const cv::cuda::GpuMat& image,
 
 void RoombaBlobDetector::detect(const cv::cuda::GpuMat& image,
                                 std::vector<cv::RotatedRect>& bounding_rects,
-                                std::vector<double>& flip_certainties)
+                                std::vector<double>& flip_certainties) const
 {
+    ROS_ASSERT(image.size() == image_size_);
+
+    const auto start_time = std::chrono::high_resolution_clock::now();
+
     cv::cuda::GpuMat mask;
     thresholdFrame(image, mask);
+
+    const auto threshold_time = std::chrono::high_resolution_clock::now();
 
     if (settings_.debug_hsv_slice) {
         cv::Mat mask_cpu;
@@ -327,6 +347,16 @@ void RoombaBlobDetector::detect(const cv::cuda::GpuMat& image,
 
     boundMask(mask, bounding_rects);
     checkCorners(image, bounding_rects, flip_certainties);
+
+    const auto final_time = std::chrono::high_resolution_clock::now();
+
+    const auto count = [](const auto& a, const auto& b) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                b - a).count();
+    };
+    ROS_DEBUG_STREAM(
+            "Threshold: " << count(start_time, threshold_time) << std::endl
+         << "Final: " << count(threshold_time, final_time) << std::endl);
 }
 
 } // namespace iarc7_vision

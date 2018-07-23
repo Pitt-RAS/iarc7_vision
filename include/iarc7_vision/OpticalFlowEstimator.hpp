@@ -37,6 +37,9 @@ struct OpticalFlowEstimatorSettings {
     double quality_level;
     int min_dist;
     double scale_factor;
+    bool crop;
+    int crop_width;
+    int crop_height;
     double variance;
     double variance_scale;
     double x_cutoff_region_velocity_measurement;
@@ -288,6 +291,7 @@ class OpticalFlowEstimator {
     /// Processed image size settings
     cv::Size expected_input_size_;
     cv::Size target_size_;
+    double fov_;
 
     /// Publishers
     ros::NodeHandle local_nh_;

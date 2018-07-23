@@ -1,0 +1,14 @@
+distortion_model:
+    f_x: 1.3711e+3
+    c_x: 640
+    f_y: 1.3711e+3
+    c_y: 360
+
+    k1: -10.5e-01
+    k2: 8.78e-01
+    p1: 0.
+    p2: 0.
+    k3: -2.6e-01
+
+    out_width: 848
+    out_height: 344

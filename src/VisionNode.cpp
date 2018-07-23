@@ -14,15 +14,18 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
 #include <sensor_msgs/image_encodings.h>
+#include <sensor_msgs/Image.h>
 
 #include "iarc7_safety/SafetyClient.hpp"
 #include <iarc7_vision/VisionNodeConfig.h>
 #include <ros_utils/ParamUtils.hpp>
 
+#include "iarc7_vision/ColorCorrectionModel.hpp"
 #include "iarc7_vision/GridLineEstimator.hpp"
 #include "iarc7_vision/OpticalFlowEstimator.hpp"
 #include "iarc7_vision/RoombaEstimator.hpp"
 #include "iarc7_vision/RoombaImageLocation.hpp"
+#include "iarc7_vision/UndistortionModel.hpp"
 
 void getLineExtractorSettings(const ros::NodeHandle& private_nh,
                               iarc7_vision::LineExtractorSettings& line_settings)
@@ -107,6 +110,18 @@ void getOpticalFlowEstimatorSettings(const ros::NodeHandle& private_nh,
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/scale_factor",
             flow_settings.scale_factor));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/crop",
+            flow_settings.crop));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/crop_width",
+            flow_settings.crop_width));
+
+    ROS_ASSERT(private_nh.getParam(
+            "optical_flow_estimator/crop_height",
+            flow_settings.crop_height));
 
     ROS_ASSERT(private_nh.getParam(
             "optical_flow_estimator/variance",
@@ -376,6 +391,18 @@ int main(int argc, char **argv)
         = ros_utils::ParamUtils::getParam<std::string>(
                 private_nh, "image_format");
 
+    int color_conversion_code;
+    if (expected_image_format == "RGB") {
+        color_conversion_code = 0;
+    } else if (expected_image_format == "RGBA") {
+        color_conversion_code = CV_RGBA2RGB;
+    } else if (expected_image_format == "BGR") {
+        color_conversion_code = CV_BGR2RGB;
+    } else {
+        ROS_ERROR("Invalid color conversion code");
+        return 1;
+    }
+
     // Create settings objects
     iarc7_vision::LineExtractorSettings line_extractor_settings;
     getLineExtractorSettings(private_nh, line_extractor_settings);
@@ -427,22 +454,34 @@ int main(int argc, char **argv)
     }
 
     // Create vision processing objects
-    iarc7_vision::RoombaEstimator roomba_estimator;
     gridline_estimator.reset(new iarc7_vision::GridLineEstimator(
             line_extractor_settings,
             grid_estimator_settings,
             grid_line_debug_settings,
-            expected_image_format));
+            "RGB"));
     optical_flow_estimator.reset(new iarc7_vision::OpticalFlowEstimator(
             optical_flow_estimator_settings,
             optical_flow_debug_settings,
-            expected_image_format));
+            "RGB"));
+
+    // Load the parameters specific to the vision node
+    double startup_timeout;
+    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
+
+    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
+            private_nh, "message_queue_item_limit");
 
     // Queue and callback for collecting images
     std::deque<sensor_msgs::Image::ConstPtr> message_queue;
     std::function<void(const sensor_msgs::Image::ConstPtr&)> image_msg_handler =
         [&](const sensor_msgs::Image::ConstPtr& message) {
             message_queue.push_back(message);
+
+            // Make sure this doesn't grow without bound, but this will still trigger
+            // the over-limit check in the main loop
+            while (message_queue.size() > message_queue_item_limit) {
+                message_queue.pop_front();
+            }
         };
 
     image_transport::ImageTransport image_transporter{nh};
@@ -451,12 +490,7 @@ int main(int argc, char **argv)
         100,
         image_msg_handler);
 
-    // Load the parameters specific to the vision node
-    double startup_timeout;
-    ROS_ASSERT(private_nh.getParam("startup_timeout", startup_timeout));
-
-    size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
-            private_nh, "message_queue_item_limit");
+    ros::Publisher corrected_image_pub = nh.advertise<sensor_msgs::Image>("corrected_image", 1);
 
     // Loop rate
     ros::Rate rate (100);
@@ -471,13 +505,23 @@ int main(int argc, char **argv)
         }
 
         if (ros::Time::now() > start_time + ros::Duration(startup_timeout)) {
-            ROS_ERROR("Vision node timed out on startup");
+            ROS_ERROR("Vision node timed out on startup waiting on images");
             return 1;
         }
 
         ros::spinOnce();
         rate.sleep();
     }
+
+    const cv::Size input_size(message_queue.front()->width,
+                              message_queue.front()->height);
+    const iarc7_vision::UndistortionModel undistortion_model(
+            ros::NodeHandle("~/distortion_model"),
+            input_size);
+    iarc7_vision::RoombaEstimator roomba_estimator(
+            undistortion_model.getUndistortedSize());
+    const iarc7_vision::ColorCorrectionModel color_correction_model(
+            ros::NodeHandle("~/color_correction_model"));
 
     // Form a connection with the node monitor. If no connection can be made
     // assert because we don't know what's going on with the other nodes.
@@ -487,7 +531,6 @@ int main(int argc, char **argv)
                    "vision_node: Could not form bond with safety client");
 
     message_queue.clear();
-
 
     bool images_skipped = false;
     // Main loop
@@ -507,35 +550,83 @@ int main(int argc, char **argv)
             message_queue.pop_front();
 
             auto cv_shared_ptr = cv_bridge::toCvShare(message);
-            cv::cuda::GpuMat image(cv_shared_ptr->image);
+            cv::cuda::Stream cuda_stream = cv::cuda::Stream::Null();
 
             const auto start = std::chrono::high_resolution_clock::now();
-            //gridline_estimator->update(image, message->header.stamp);
+            cv::cuda::GpuMat image_distorted;
+            image_distorted.upload(cv_shared_ptr->image, cuda_stream);
+
+            cv::cuda::GpuMat image_undistorted;
+            undistortion_model.undistort(image_distorted,
+                                         image_undistorted,
+                                         cuda_stream);
+            const auto distortion_time = std::chrono::high_resolution_clock::now();
+
+            cv::cuda::GpuMat image_undistorted_rgb;
+            if (color_conversion_code != 0) {
+                cv::cuda::cvtColor(image_undistorted,
+                                   image_undistorted_rgb,
+                                   color_conversion_code,
+                                   0,
+                                   cuda_stream);
+            } else {
+                image_undistorted_rgb = image_undistorted;
+            }
+
+            const auto color_time = std::chrono::high_resolution_clock::now();
+
+            cv::cuda::GpuMat image_correct;
+            color_correction_model.correct(image_undistorted_rgb,
+                                           image_correct,
+                                           cuda_stream);
+
+            {
+                cv::Mat corrected_image_cpu;
+                image_correct.download(corrected_image_cpu, cuda_stream);
+                cuda_stream.waitForCompletion();
+
+                std_msgs::Header header;
+                header.stamp = message->header.stamp;
+
+                cv_bridge::CvImage cv_image {
+                    header,
+                    sensor_msgs::image_encodings::RGB8,
+                    corrected_image_cpu
+                };
+
+                corrected_image_pub.publish(cv_image.toImageMsg());
+            }
+
+            const auto color_correct_time = std::chrono::high_resolution_clock::now();
+
+            //gridline_estimator->update(image_correct, message->header.stamp);
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
             std::vector<iarc7_vision::RoombaImageLocation>
                                                       roomba_image_locations;
-            roomba_estimator.update(image,
+            roomba_estimator.update(image_correct,
                                     message->header.stamp,
                                     roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
 
-            optical_flow_estimator->update(image,
+            optical_flow_estimator->update(image_correct,
                                            message->header.stamp,
                                            roomba_image_locations,
                                            images_skipped);
             const auto flow_time = std::chrono::high_resolution_clock::now();
 
+            const auto count = [](const auto& a, const auto& b) {
+                return std::chrono::duration_cast<std::chrono::microseconds>(
+                        b - a).count();
+            };
+
             ROS_DEBUG_STREAM(
-                    "Grid: "
-                    << std::chrono::duration_cast<std::chrono::microseconds>(
-                        grid_time - start).count()
-                    << " Flow: "
-                    << std::chrono::duration_cast<std::chrono::microseconds>(
-                        flow_time - roomba_time).count()
-                    << " Roomba: "
-                    << std::chrono::duration_cast<std::chrono::microseconds>(
-                        roomba_time - grid_time).count());
+                    "Distort: " << count(start, distortion_time) << std::endl
+                 << "Color: " << count(distortion_time, color_time) << std::endl
+                 << "Convert: " << count(color_time, color_correct_time) << std::endl
+                 << "Grid: " << count(color_correct_time, grid_time) << std::endl
+                 << "Roombas: " << count(grid_time, roomba_time) << std::endl
+                 << "Optical Flow: " << count(roomba_time, flow_time));
 
             images_skipped = false;
         }

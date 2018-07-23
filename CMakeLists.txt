@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(iarc7_vision)
 
+set(CMAKE_BUILD_TYPE Release)
+
 set("OpenCV_DIR" "/usr/local/share/OpenCV")
 set(CUDA_USE_STATIC_CUDA_RUNTIME OFF CACHE "" INTERNAL)
 
@@ -169,7 +171,9 @@ add_executable(iarc7_vision_node
     src/OpticalFlowEstimator.cpp
     src/RoombaBlobDetector.cpp
     src/RoombaEstimator.cpp
-    src/cv_utils.cpp)
+    src/cv_utils.cpp
+    src/UndistortionModel.cpp
+    src/ColorCorrectionModel.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above

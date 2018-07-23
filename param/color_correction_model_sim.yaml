@@ -1,0 +1,15 @@
+color_correction_model:
+    a00: 1
+    a01: 0
+    a02: 0
+    a10: 0
+    a11: 1
+    a12: 0
+    a20: 0
+    a21: 0
+    a22: 1
+    offset0: 0
+    offset1: 0
+    offset2: 0
+    gamma: 1
+    final_gamma: 1

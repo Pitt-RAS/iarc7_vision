@@ -29,7 +29,7 @@
 namespace iarc7_vision
 {
 
-RoombaEstimator::RoombaEstimator()
+RoombaEstimator::RoombaEstimator(const cv::Size& image_size)
     : nh_(),
       private_nh_("~/roomba_estimator"),
       dynamic_reconfigure_server_(private_nh_),
@@ -43,7 +43,12 @@ RoombaEstimator::RoombaEstimator()
       roomba_pub_(nh_.advertise<iarc7_msgs::RoombaDetectionFrame>(
                   "detected_roombas", 100)),
       settings_(getSettings(private_nh_)),
-      blob_detector_(settings_, private_nh_)
+      input_size_(image_size),
+      detection_size_(settings_.detection_image_width,
+                      input_size_.height
+                    * settings_.detection_image_width / input_size_.width),
+      blob_detector_(std::make_unique<const RoombaBlobDetector>(
+                  settings_, private_nh_, detection_size_))
 {
     dynamic_reconfigure_server_.setCallback(
             dynamic_reconfigure_settings_callback_);
@@ -89,6 +94,8 @@ void RoombaEstimator::getDynamicSettings(
         iarc7_vision::RoombaEstimatorConfig& config)
 {
     if (!dynamic_reconfigure_called_) {
+        config.detection_image_width = settings_.detection_image_width;
+
         config.hsv_slice_h_green_min = settings_.hsv_slice_h_green_min;
         config.hsv_slice_h_green_max = settings_.hsv_slice_h_green_max;
         config.hsv_slice_h_red1_min  = settings_.hsv_slice_h_red1_min;
@@ -108,6 +115,8 @@ void RoombaEstimator::getDynamicSettings(
 
         dynamic_reconfigure_called_ = true;
     } else {
+        settings_.detection_image_width = config.detection_image_width;
+
         settings_.hsv_slice_h_green_min = config.hsv_slice_h_green_min;
         settings_.hsv_slice_h_green_max = config.hsv_slice_h_green_max;
         settings_.hsv_slice_h_red1_min = config.hsv_slice_h_red1_min;
@@ -124,6 +133,12 @@ void RoombaEstimator::getDynamicSettings(
 
         settings_.morphology_size = config.morphology_size;
         settings_.morphology_iterations = config.morphology_iterations;
+
+        detection_size_ = cv::Size(settings_.detection_image_width,
+                        input_size_.height
+                      * settings_.detection_image_width / input_size_.width);
+        blob_detector_ = std::make_unique<const RoombaBlobDetector>(
+                    settings_, private_nh_, detection_size_);
     }
 }
 
@@ -137,10 +152,10 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
                settings.x));
 
     RoombaEstimatorSettings settings;
-    IARC7_VISION_RES_LOAD(template_pixels_per_meter);
     IARC7_VISION_RES_LOAD(roomba_plate_width);
     IARC7_VISION_RES_LOAD(roomba_plate_height);
     IARC7_VISION_RES_LOAD(roomba_height);
+    IARC7_VISION_RES_LOAD(detection_image_width);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_max);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red1_min);
@@ -356,6 +371,10 @@ void RoombaEstimator::update(
         const ros::Time& time,
         std::vector<RoombaImageLocation>& roomba_image_locations)
 {
+    ROS_ASSERT(image.size() == input_size_);
+
+    const auto start_time = std::chrono::high_resolution_clock::now();
+
     // Validation
     if(image.empty()) {
         iarc7_msgs::RoombaDetectionFrame result;
@@ -409,18 +428,21 @@ void RoombaEstimator::update(
     tf2::doTransform(c, c, camera_to_map_tf_);
     distance *= (height - settings_.roomba_height) / -c.vector.z;
 
-    double desired_width = settings_.template_pixels_per_meter * distance;
-    double factor = desired_width / image.cols;
+    const auto boilerplate_time = std::chrono::high_resolution_clock::now();
 
     cv::cuda::GpuMat image_scaled;
-    cv::cuda::resize(image, image_scaled, cv::Size(), factor, factor);
+    cv::cuda::resize(image, image_scaled, detection_size_);
+
+    const auto resize_time = std::chrono::high_resolution_clock::now();
 
     //////////////////////////////////////////////////////////////////////////
     /// Run blob detection
     //////////////////////////////////////////////////////////////////////////
-    blob_detector_.detect(image_scaled,
-                          bounding_rects,
-                          flip_certainties);
+    blob_detector_->detect(image_scaled,
+                           bounding_rects,
+                           flip_certainties);
+
+    const auto blob_time = std::chrono::high_resolution_clock::now();
 
     std::vector<std::array<double, 4>> position_covariances;
     calcBoxUncertainties(image_scaled.size(),
@@ -446,6 +468,16 @@ void RoombaEstimator::update(
     roomba_frame.camera_id = "bottom_camera";
 
     for (unsigned int i = 0; i < bounding_rects.size(); i++) {
+        if (box_uncertainties[i] < 0) {
+            if (settings_.debug_detected_rects) {
+                // Draw yellow rect for bad detection
+                cv_utils::drawRotatedRect(detected_rect_image,
+                                          bounding_rects[i],
+                                          cv::Scalar(255, 255, 0));
+            }
+            continue;
+        }
+
         cv::Point2f pos = bounding_rects[i].center;
         double angle = bounding_rects[i].angle * M_PI / 180;
 
@@ -480,10 +512,10 @@ void RoombaEstimator::update(
             cv::Point2f p;
             p.x = roomba_image_location.x * image_scaled.cols;
             p.y = roomba_image_location.y * image_scaled.cols;
-            cv::circle(detected_rect_image,
-                       p,
-                       roomba_image_location.radius * image_scaled.cols,
-                       cv::Scalar(0, 255, 0));
+            //cv::circle(detected_rect_image,
+            //           p,
+            //           roomba_image_location.radius * image_scaled.cols,
+            //           cv::Scalar(0, 255, 0));
         }
     }
 
@@ -501,6 +533,18 @@ void RoombaEstimator::update(
 
     // publish
     roomba_pub_.publish(roomba_frame);
+
+    const auto final_time = std::chrono::high_resolution_clock::now();
+
+    const auto count = [](const auto& a, const auto& b) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                b - a).count();
+    };
+    ROS_DEBUG_STREAM(
+            "Boilerplate: " << count(start_time, boilerplate_time) << std::endl
+         << "Resize: " << count(boilerplate_time, resize_time) << std::endl
+         << "Detect: " << count(resize_time, blob_time) << std::endl
+         << "Final: " << count(blob_time, final_time) << std::endl);
 }
 
 } // namespace iarc7_vision

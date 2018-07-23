@@ -1,0 +1,15 @@
+color_correction_model:
+    a00: 5.23
+    a10: -1.54
+    a20: -0.08
+    a01: -1.60
+    a11: 3.32
+    a21: -2.22
+    a02: -3.65
+    a12: -0.03
+    a22: 14.17
+    offset0: 30.6
+    offset1: 12.75
+    offset2: -84.15
+    gamma: 0.779
+    final_gamma: 2.2

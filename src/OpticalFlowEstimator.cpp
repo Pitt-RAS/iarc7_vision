@@ -53,6 +53,7 @@ OpticalFlowEstimator::OpticalFlowEstimator(
       last_message_time_(),
       expected_input_size_(cv::Size(0, 0)),
       target_size_(),
+      fov_(),
       local_nh_("optical_flow_estimator"),
       debug_orientation_rate_pub_(
               local_nh_.advertise<geometry_msgs::Vector3Stamped>(
@@ -125,10 +126,25 @@ bool __attribute__((warn_unused_result))
         OpticalFlowEstimator::onSettingsChanged()
 {
     cv::Size new_target_size;
-    new_target_size.width = expected_input_size_.width
-                          * flow_estimator_settings_.scale_factor;
-    new_target_size.height = expected_input_size_.height
-                           * flow_estimator_settings_.scale_factor;
+    if(flow_estimator_settings_.crop) {
+        new_target_size.width = flow_estimator_settings_.crop_width
+                              * flow_estimator_settings_.scale_factor;
+        new_target_size.height = flow_estimator_settings_.crop_height
+                               * flow_estimator_settings_.scale_factor;
+
+        double cropped_diag = std::hypot(flow_estimator_settings_.crop_width/2,
+                                         flow_estimator_settings_.crop_height/2);
+
+        double focal_length = getFocalLength(expected_input_size_, flow_estimator_settings_.fov);
+        fov_ = 2.0 * std::atan2(cropped_diag, focal_length);
+    }
+    else {
+        new_target_size.width = expected_input_size_.width
+                              * flow_estimator_settings_.scale_factor;
+        new_target_size.height = expected_input_size_.height
+                               * flow_estimator_settings_.scale_factor;
+        fov_ = flow_estimator_settings_.fov;
+    }
 
     if (expected_input_size_ != cv::Size(0, 0)
      && (new_target_size.width == 0 || new_target_size.height == 0)) {
@@ -175,7 +191,6 @@ void OpticalFlowEstimator::update(const cv::cuda::GpuMat& curr_image,
                                           roomba_image_locations,
                                   const bool images_skipped)
 {
-
     have_valid_last_image_ = have_valid_last_image_ && !images_skipped;
 
     // start time for debugging time spent in updateFilteredPosition
@@ -391,7 +406,7 @@ geometry_msgs::TwistWithCovarianceStamped
     // dividing distance to plane by this number gives the multiplier we want
     double current_meters_per_px = distance_to_plane
                          / getFocalLength(target_size_,
-                                          flow_estimator_settings_.fov);
+                                          fov_);
 
     // Calculate the average velocity in the level camera frame (i.e. camera
     // frame if our pitch and roll were zero)
@@ -524,9 +539,35 @@ bool OpticalFlowEstimator::findAverageVector(
         cv::Point2f& average) const
 {
     auto in_roomba_perimeter = [&](const cv::Point2f& point) {
-        for(const auto& roomba : roomba_image_locations) {
-            if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
-                return true;
+        if(flow_estimator_settings_.crop) {
+            // Transform the point in the cropped and scaled region to
+            // a unitless point in the original image frame
+            double expected_width  = static_cast<double>(expected_input_size_.width);
+            double expected_height = static_cast<double>(expected_input_size_.height);
+            double crop_width      = static_cast<double>(flow_estimator_settings_.crop_width);
+            double crop_height     = static_cast<double>(flow_estimator_settings_.crop_height);
+            double image_width     = static_cast<double>(image_size.width);
+
+            cv::Point2f new_point;
+            new_point.x =
+              (point.x / image_width) * (crop_width / expected_width)
+              + ((expected_width - crop_width) / 2.0 / expected_width);
+
+            new_point.y =
+              (point.y / image_width) * (crop_width / expected_width)
+              + ((expected_height - crop_height) / 2.0 / expected_width);
+
+            for(const auto& roomba : roomba_image_locations) {
+                if(roomba.point_on_roomba(new_point.x, new_point.y)) {
+                    return true;
+                }
+            }
+        }
+        else {
+            for(const auto& roomba : roomba_image_locations) {
+                if(roomba.point_on_roomba(point.x, point.y, image_size.width)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -595,12 +636,42 @@ bool OpticalFlowEstimator::findAverageVector(
 
     for(const auto& roomba : roomba_image_locations) {
         cv::Point2f p;
-        p.x = roomba.x * image_size.width;
-        p.y = roomba.y * image_size.width;
-        cv::circle(arrow_image,
-                   p,
-                   roomba.radius * image_size.width,
-                   cv::Scalar(0, 255, 0));
+
+        if(flow_estimator_settings_.crop) {
+            // Transform the point in the cropped and scaled region to
+            // a unitless point in the original image frame
+            double expected_width  = static_cast<double>(expected_input_size_.width);
+            double expected_height = static_cast<double>(expected_input_size_.height);
+            double crop_width      = static_cast<double>(flow_estimator_settings_.crop_width);
+            double crop_height     = static_cast<double>(flow_estimator_settings_.crop_height);
+
+            p.x = (roomba.x - ((expected_width - crop_width) / 2.0 / expected_width))
+                  * (expected_width / crop_width);
+            p.y = (roomba.y - ((expected_height - crop_height) / 2.0 / expected_width))
+                  * (expected_width / crop_width);
+            p.x *= image_size.width;
+            p.y *= image_size.width;
+
+            if(p.x >= 0 && p.x <= image_size.width
+              && p.y >=0 && p.y <= image_size.height) {
+                cv::circle(arrow_image,
+                           p,
+                           roomba.radius * (expected_width / crop_width) * image_size.width,
+                           cv::Scalar(0, 255, 0));
+            }
+        }
+        else {
+            p.x = roomba.x * image_size.width;
+            p.y = roomba.y * image_size.width;
+
+            if(p.x >= 0 && p.x <= image_size.width
+               && p.y >=0 && p.y <= image_size.height) {
+                cv::circle(arrow_image,
+                           p,
+                           roomba.radius * image_size.width,
+                           cv::Scalar(0, 255, 0));
+            }
+        }
     }
 
     cv::Rect usable_image_rect(image_size.width  * x_cutoff,
@@ -1187,9 +1258,24 @@ void OpticalFlowEstimator::resizeAndConvertImages(const cv::cuda::GpuMat& image,
 {
     const ros::WallTime start = ros::WallTime::now();
 
-    cv::cuda::resize(image,
-                    scaled,
-                    target_size_);
+    if(flow_estimator_settings_.crop) {
+        cv::cuda::GpuMat cropped
+          = cv::cuda::GpuMat(
+                image,
+                cv::Rect((expected_input_size_.width - flow_estimator_settings_.crop_width)/2,
+                         (expected_input_size_.height - flow_estimator_settings_.crop_height)/2,
+                         flow_estimator_settings_.crop_width,
+                         flow_estimator_settings_.crop_height));
+
+        cv::cuda::resize(cropped,
+                        scaled,
+                        target_size_);
+    }
+    else {
+        cv::cuda::resize(image,
+                        scaled,
+                        target_size_);
+    }
 
     if (debug_settings_.debug_times) {
         ROS_WARN_STREAM("post resize: " << ros::WallTime::now() - start);
