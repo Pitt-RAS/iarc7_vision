@@ -563,8 +563,9 @@ def publish_debug(data, stamp):
                              (x_int, 0),
                              (x_int, resized_image.shape[0]),
                              (0, 0, 255))
-    except Exception as e:
-        pass
+    except ZeroDivisionError as e:
+        rospy.logerr('Caught ZeroDivisionError in floor detector')
+        return
 
     if data.failed_arena_edge:
         cv2.putText(resized_image, 'No edge', (2, 15), cv2.FONT_HERSHEY_PLAIN, 1, (255,255,255))
@@ -638,8 +639,9 @@ if __name__ == '__main__':
     max_detection_lag = rospy.Duration(rospy.get_param('~max_detection_lag'))
     max_boundary_variance = rospy.get_param('~max_boundary_std_dev')**2
 
+    rate = rospy.Rate(10)
     while not rospy.is_shutdown() and rospy.Time.now() == 0:
-        pass
+        rate.sleep()
 
     tf_buffer = tf2_ros.Buffer()
     tf_listener = tf2_ros.TransformListener(tf_buffer)
