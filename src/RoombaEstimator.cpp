@@ -277,9 +277,13 @@ void RoombaEstimator::calcBoxUncertainties(
               + std::abs(plate_height_meters - settings_.roomba_plate_height)
                             / settings_.roomba_plate_height;
 
-        const double uncertainty = settings_.uncertainty_scale * relative_error;
-
-        box_uncertainties.push_back(uncertainty);
+        if (relative_error > 0.3) {
+            // Mark detection invalid
+            box_uncertainties.push_back(-1);
+        } else {
+            const double uncertainty = settings_.uncertainty_scale * relative_error;
+            box_uncertainties.push_back(uncertainty);
+        }
     }
 }
 
