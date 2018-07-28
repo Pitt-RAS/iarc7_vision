@@ -17,10 +17,15 @@ from visualization_msgs.msg import Marker, MarkerArray
 count = 0
 
 def callback(msg):
+    if msg.camera_id not in frame_pubs:
+        frame_pubs[msg.camera_id] = rospy.Publisher(
+                '/roomba_detection_frame_marker/{}'.format(msg.camera_id),
+                PolygonStamped,
+                queue_size=5)
     frame = PolygonStamped()
     frame.header = msg.header
     frame.polygon = msg.detection_region
-    frame_pub.publish(frame)
+    frame_pubs[msg.camera_id].publish(frame)
 
     marker_arr = MarkerArray()
     for roomba in msg.roombas:
@@ -81,9 +86,7 @@ def callback(msg):
 
 if __name__ == '__main__':
     rospy.init_node('republish_roomba_detections')
-    frame_pub = rospy.Publisher('/roomba_detection_frame_marker',
-                                PolygonStamped,
-                                queue_size=5)
+    frame_pubs = {}
     vis_pub = rospy.Publisher('/roomba_detection_markers',
                               MarkerArray,
                               queue_size=5)
