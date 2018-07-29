@@ -524,7 +524,13 @@ int main(int argc, char **argv)
         }
 
         if (ros::Time::now() > start_time + ros::Duration(startup_timeout)) {
-            ROS_ERROR("Vision node timed out on startup waiting on images");
+            if (message_queue.empty()) {
+                ROS_ERROR("Vision node timed out on startup waiting on images from leopard");
+            } else if (message_queue_r200.empty()) {
+                ROS_ERROR("Vision node timed out on startup waiting on images from r200");
+            } else {
+                ROS_ERROR("Vision node timed out on startup from both cameras");
+            }
             return 1;
         }
 
@@ -566,7 +572,6 @@ int main(int argc, char **argv)
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
                 message_queue.clear();
-                continue;
             }
 
             if (message_queue_r200.size() > message_queue_item_limit - 1) {
@@ -575,7 +580,6 @@ int main(int argc, char **argv)
                         message_queue_r200.size());
                 message_queue_r200.clear();
                 images_skipped = true;
-                continue;
             }
 
             if(!message_queue.empty()) {

@@ -1,7 +1,11 @@
 # Settings for the optical flow estimator
 optical_flow_estimator:
     # fov of the camera
-    fov: 1.70
+
+    # Leopard:
+    # fov: 1.70
+    # R200:
+    fov: 1.08
 
     # Minimum altitude to run the detector
     min_estimation_altitude: 0.3
