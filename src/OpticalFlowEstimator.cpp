@@ -519,7 +519,7 @@ geometry_msgs::TwistWithCovarianceStamped
         geometry_msgs::TwistWithCovarianceStamped twist_level_quad = twist;
         twist_level_quad.twist.twist.linear.x = level_quad_vel.x();
         twist_level_quad.twist.twist.linear.y = level_quad_vel.y();
-        debug_level_quad_raw_pub_.publish(twist_camera_rel);
+        debug_level_quad_raw_pub_.publish(twist_level_quad);
     }
 
     return twist;
