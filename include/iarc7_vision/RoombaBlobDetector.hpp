@@ -40,6 +40,8 @@ class RoombaBlobDetector {
     /// @param[in]      image  Image to examine
     /// @param[in,out]  rects  Detection rects for roombas in image
     void checkCorners(const cv::cuda::GpuMat& image,
+                      const cv::Scalar& mean,
+                      const cv::Scalar& stddev,
                       std::vector<cv::RotatedRect>& rects,
                       std::vector<double>& flip_certainties) const;
 
@@ -49,7 +51,9 @@ class RoombaBlobDetector {
     /// @param[in]   image  rgb8 input image
     /// @param[out]  dst    mono8 output mask, nonzero pixels are top plates
     void thresholdFrame(const cv::cuda::GpuMat& image,
-                        cv::cuda::GpuMat& dst) const;
+                        cv::cuda::GpuMat& dst,
+                        cv::Scalar& mean,
+                        cv::Scalar& stddev) const;
 
     const RoombaEstimatorSettings& settings_;
 
@@ -66,6 +70,11 @@ class RoombaBlobDetector {
     const cv::Mat structuring_element_;
     const cv::Ptr<cv::cuda::Filter> morphology_open_;
     const cv::Ptr<cv::cuda::Filter> morphology_close_;
+
+    mutable cv::cuda::GpuMat float_sat_;
+    mutable cv::cuda::GpuMat normalized_sat_;
+    mutable cv::cuda::GpuMat normalized_sat2_;
+    mutable cv::cuda::GpuMat normalized_sat2_8bit_;
 };
 
 }

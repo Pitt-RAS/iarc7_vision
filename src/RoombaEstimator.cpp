@@ -98,14 +98,18 @@ void RoombaEstimator::getDynamicSettings(
 
         config.hsv_slice_h_green_min = settings_.hsv_slice_h_green_min;
         config.hsv_slice_h_green_max = settings_.hsv_slice_h_green_max;
+        config.hsv_slice_s_green_min       = settings_.hsv_slice_s_green_min;
+        config.hsv_slice_s_green_max       = settings_.hsv_slice_s_green_max;
+        config.hsv_slice_v_green_min       = settings_.hsv_slice_v_green_min;
+        config.hsv_slice_v_green_max       = settings_.hsv_slice_v_green_max;
         config.hsv_slice_h_red1_min  = settings_.hsv_slice_h_red1_min;
         config.hsv_slice_h_red1_max  = settings_.hsv_slice_h_red1_max;
+        config.hsv_slice_s_red_min       = settings_.hsv_slice_s_red_min;
+        config.hsv_slice_s_red_max       = settings_.hsv_slice_s_red_max;
+        config.hsv_slice_v_red_min       = settings_.hsv_slice_v_red_min;
+        config.hsv_slice_v_red_max       = settings_.hsv_slice_v_red_max;
         config.hsv_slice_h_red2_min  = settings_.hsv_slice_h_red2_min;
         config.hsv_slice_h_red2_max  = settings_.hsv_slice_h_red2_max;
-        config.hsv_slice_s_min       = settings_.hsv_slice_s_min;
-        config.hsv_slice_s_max       = settings_.hsv_slice_s_max;
-        config.hsv_slice_v_min       = settings_.hsv_slice_v_min;
-        config.hsv_slice_v_max       = settings_.hsv_slice_v_max;
 
         config.min_roomba_blob_size  = settings_.min_roomba_blob_size;
         config.max_roomba_blob_size  = settings_.max_roomba_blob_size;
@@ -121,14 +125,18 @@ void RoombaEstimator::getDynamicSettings(
 
         settings_.hsv_slice_h_green_min = config.hsv_slice_h_green_min;
         settings_.hsv_slice_h_green_max = config.hsv_slice_h_green_max;
+        settings_.hsv_slice_s_green_min = config.hsv_slice_s_green_min;
+        settings_.hsv_slice_s_green_max = config.hsv_slice_s_green_max;
+        settings_.hsv_slice_v_green_min = config.hsv_slice_v_green_min;
+        settings_.hsv_slice_v_green_max = config.hsv_slice_v_green_max;
         settings_.hsv_slice_h_red1_min = config.hsv_slice_h_red1_min;
         settings_.hsv_slice_h_red1_max = config.hsv_slice_h_red1_max;
+        settings_.hsv_slice_s_red_min = config.hsv_slice_s_red_min;
+        settings_.hsv_slice_s_red_max = config.hsv_slice_s_red_max;
+        settings_.hsv_slice_v_red_min = config.hsv_slice_v_red_min;
+        settings_.hsv_slice_v_red_max = config.hsv_slice_v_red_max;
         settings_.hsv_slice_h_red2_min = config.hsv_slice_h_red2_min;
         settings_.hsv_slice_h_red2_max = config.hsv_slice_h_red2_max;
-        settings_.hsv_slice_s_min = config.hsv_slice_s_min;
-        settings_.hsv_slice_s_max = config.hsv_slice_s_max;
-        settings_.hsv_slice_v_min = config.hsv_slice_v_min;
-        settings_.hsv_slice_v_max = config.hsv_slice_v_max;
 
         settings_.min_roomba_blob_size = config.min_roomba_blob_size;
         settings_.max_roomba_blob_size = config.max_roomba_blob_size;
@@ -162,14 +170,18 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     IARC7_VISION_RES_LOAD(detection_image_width);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_green_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_green_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_green_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_green_max);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red1_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red1_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_red_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_red_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_red_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_red_max);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red2_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red2_max);
-    IARC7_VISION_RES_LOAD(hsv_slice_s_min);
-    IARC7_VISION_RES_LOAD(hsv_slice_s_max);
-    IARC7_VISION_RES_LOAD(hsv_slice_v_min);
-    IARC7_VISION_RES_LOAD(hsv_slice_v_max);
     IARC7_VISION_RES_LOAD(min_roomba_blob_size);
     IARC7_VISION_RES_LOAD(max_roomba_blob_size);
     IARC7_VISION_RES_LOAD(morphology_size);
