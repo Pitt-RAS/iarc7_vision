@@ -29,6 +29,8 @@ struct RoombaEstimatorSettings {
     int morphology_size;
     int morphology_iterations;
 
+    double max_relative_error;
+
     double uncertainty_scale;
 
     double bottom_camera_aov;

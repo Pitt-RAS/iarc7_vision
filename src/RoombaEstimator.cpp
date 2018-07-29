@@ -113,6 +113,8 @@ void RoombaEstimator::getDynamicSettings(
         config.morphology_size = settings_.morphology_size;
         config.morphology_iterations = settings_.morphology_iterations;
 
+        config.max_relative_error = settings_.max_relative_error;
+
         dynamic_reconfigure_called_ = true;
     } else {
         settings_.detection_image_width = config.detection_image_width;
@@ -133,6 +135,8 @@ void RoombaEstimator::getDynamicSettings(
 
         settings_.morphology_size = config.morphology_size;
         settings_.morphology_iterations = config.morphology_iterations;
+
+        settings_.max_relative_error = config.max_relative_error;
 
         detection_size_ = cv::Size(settings_.detection_image_width,
                         input_size_.height
@@ -171,6 +175,7 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     IARC7_VISION_RES_LOAD(morphology_size);
     IARC7_VISION_RES_LOAD(morphology_iterations);
     IARC7_VISION_RES_LOAD(morphology_size);
+    IARC7_VISION_RES_LOAD(max_relative_error);
     IARC7_VISION_RES_LOAD(uncertainty_scale);
     IARC7_VISION_RES_LOAD(bottom_camera_aov);
     IARC7_VISION_RES_LOAD(debug_hsv_slice);
@@ -277,7 +282,7 @@ void RoombaEstimator::calcBoxUncertainties(
               + std::abs(plate_height_meters - settings_.roomba_plate_height)
                             / settings_.roomba_plate_height;
 
-        if (relative_error > 0.3) {
+        if (relative_error > settings_.max_relative_error) {
             // Mark detection invalid
             box_uncertainties.push_back(-1);
         } else {
@@ -351,8 +356,8 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
     // Roomba radius is hard coded to 0.2m
     // It was adjusted to 0.3m because of errors with the below equations
     // The radius is a value from 0-1 which maps across the diagnol of the image
-    double size_relative_diagonal = 0.3 
-                                    / (2.0 * ray_scale 
+    double size_relative_diagonal = 0.3
+                                    / (2.0 * ray_scale
                                        * std::tan(settings_.bottom_camera_aov
                                                   * M_PI / 180.0
                                                   / 2.0));
