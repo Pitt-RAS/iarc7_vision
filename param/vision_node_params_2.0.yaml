@@ -89,7 +89,7 @@ roomba_estimator:
     morphology_size: 3
     morphology_iterations: 1
 
-    max_relative_error: 0.5
+    max_relative_error: 1.0
 
     # Multiplier on difference between observed and actual plate diagonal to
     # get angle estimate stddev
