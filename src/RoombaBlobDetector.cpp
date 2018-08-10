@@ -279,43 +279,43 @@ void RoombaBlobDetector::checkCorners(
 
                 cv::Mat range_mask;
 
-                // Normalize saturation
-                //std::array<cv::Mat, 3> channels;
-                //cv::split(patch_sum_mat, channels.data());
-                //patch_sum_mat.convertTo(channels[1], CV_32FC1);
-                //cv::add(channels[1], -mean, channels[1], cv::noArray(), CV_32FC1);
-                //cv::multiply(channels[1], 42.5 / stddev, channels[1]);
-                //cv::add(channels[1], 128, channels[1]);
-                //channels[1].convertTo(channels[1], CV_8UC1);
-                //cv::merge(channels.data(), 3, patch_sum_mat);
+
+                // Note:  extra linear transformations on saturation limits
+                // threshold against the normalized saturation instead of original
 
                 // Green slice
                 cv::inRange(patch_sum_mat,
                             cv::Scalar(settings_.hsv_slice_h_green_min,
-                                       (settings_.hsv_slice_s_green_min - 128) * stddev.val[0]/42.5 + mean.val[0],
+                                       (settings_.hsv_slice_s_green_min - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
                                        settings_.hsv_slice_v_green_min),
                             cv::Scalar(settings_.hsv_slice_h_green_max,
-                                       (settings_.hsv_slice_s_green_max - 128) * stddev.val[0]/42.5 + mean.val[0],
+                                       (settings_.hsv_slice_s_green_max - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
                                        settings_.hsv_slice_v_green_max),
                             range_mask);
                 cv::bitwise_or(patch_good_mat, range_mask, patch_good_mat);
                 // Upper red slice
                 cv::inRange(patch_sum_mat,
                             cv::Scalar(settings_.hsv_slice_h_red1_min,
-                                       (settings_.hsv_slice_s_red_min - 128) * stddev.val[0]/42.5 + mean.val[0],
+                                       (settings_.hsv_slice_s_red_min - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
                                        settings_.hsv_slice_v_red_min),
                             cv::Scalar(settings_.hsv_slice_h_red1_max,
-                                       (settings_.hsv_slice_s_red_max - 128) * stddev.val[0]/42.5 + mean.val[0],
+                                       (settings_.hsv_slice_s_red_max - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
                                        settings_.hsv_slice_v_red_max),
                             range_mask);
                 cv::bitwise_or(patch_good_mat, range_mask, patch_good_mat);
                 // Lower red slice
                 cv::inRange(patch_sum_mat,
                             cv::Scalar(settings_.hsv_slice_h_red2_min,
-                                       (settings_.hsv_slice_s_red_min - 128) * stddev.val[0]/42.5 + mean.val[0],
+                                       (settings_.hsv_slice_s_red_min - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
                                        settings_.hsv_slice_v_red_min),
                             cv::Scalar(settings_.hsv_slice_h_red2_max,
-                                       (settings_.hsv_slice_s_red_max - 128) * stddev.val[0]/42.5 + mean.val[0],
+                                       (settings_.hsv_slice_s_red_max - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
                                        settings_.hsv_slice_v_red_max),
                             range_mask);
                 cv::bitwise_or(patch_good_mat, range_mask, patch_good_mat);
