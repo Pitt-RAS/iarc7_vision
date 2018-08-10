@@ -1,8 +1,8 @@
 distortion_model:
     f_x: 1
-    c_x: 640
+    c_x: 320
     f_y: 1
-    c_y: 480
+    c_y: 240
 
     k1: 0
     k2: 0
@@ -10,5 +10,5 @@ distortion_model:
     p2: 0
     k3: 0
 
-    out_width: 1280
-    out_height: 960
+    out_width: 640
+    out_height: 480

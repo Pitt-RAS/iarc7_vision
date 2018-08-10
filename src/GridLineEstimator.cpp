@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <boost/format.hpp>
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <iterator>
@@ -29,6 +30,8 @@
 #include <iarc7_msgs/Float64Stamped.h>
 #include <visualization_msgs/Marker.h>
 
+#include "iarc7_vision/cv_utils.hpp"
+
 #define IARC7_VISION_GLE_PARAM_LOAD(x) \
     ROS_ASSERT(private_nh.getParam( \
                #x, \
@@ -40,6 +43,12 @@ static iarc7_vision::LineExtractorSettings getLineExtractorSettings(
 
     iarc7_vision::LineExtractorSettings settings;
     IARC7_VISION_GLE_PARAM_LOAD(pixels_per_meter);
+    IARC7_VISION_GLE_PARAM_LOAD(line_h_min);
+    IARC7_VISION_GLE_PARAM_LOAD(line_s_min);
+    IARC7_VISION_GLE_PARAM_LOAD(line_v_min);
+    IARC7_VISION_GLE_PARAM_LOAD(line_h_max);
+    IARC7_VISION_GLE_PARAM_LOAD(line_s_max);
+    IARC7_VISION_GLE_PARAM_LOAD(line_v_max);
     IARC7_VISION_GLE_PARAM_LOAD(canny_high_threshold);
     IARC7_VISION_GLE_PARAM_LOAD(canny_sobel_size);
     IARC7_VISION_GLE_PARAM_LOAD(hough_rho_resolution);
@@ -215,6 +224,12 @@ void GridLineEstimator::getDynamicSettings(iarc7_vision::GridEstimatorConfig& co
         // Overwrite line extractor settings from dynamic reconfigure
         // with the ones from the param server
         config.pixels_per_meter       = line_extractor_settings_.pixels_per_meter;
+        config.line_h_min             = line_extractor_settings_.line_h_min;
+        config.line_s_min             = line_extractor_settings_.line_s_min;
+        config.line_v_min             = line_extractor_settings_.line_v_min;
+        config.line_h_max             = line_extractor_settings_.line_h_max;
+        config.line_s_max             = line_extractor_settings_.line_s_max;
+        config.line_v_max             = line_extractor_settings_.line_v_max;
         config.canny_high_threshold   = line_extractor_settings_.canny_high_threshold;
         config.canny_threshold_ratio  = line_extractor_settings_.canny_high_threshold
                                             / line_extractor_settings_.canny_low_threshold;
@@ -227,6 +242,12 @@ void GridLineEstimator::getDynamicSettings(iarc7_vision::GridEstimatorConfig& co
         dynamic_reconfigure_called_ = true;
     } else {
         line_extractor_settings_.pixels_per_meter = config.pixels_per_meter;
+        line_extractor_settings_.line_h_min = config.line_h_min;
+        line_extractor_settings_.line_s_min = config.line_s_min;
+        line_extractor_settings_.line_v_min = config.line_v_min;
+        line_extractor_settings_.line_h_max = config.line_h_max;
+        line_extractor_settings_.line_s_max = config.line_s_max;
+        line_extractor_settings_.line_v_max = config.line_v_max;
         line_extractor_settings_.canny_high_threshold = config.canny_high_threshold;
 
         line_extractor_settings_.canny_low_threshold =
@@ -262,8 +283,10 @@ bool __attribute__((warn_unused_result))
     return true;
 }
 
-void GridLineEstimator::update(const cv::cuda::GpuMat& image,
-                               const ros::Time& time)
+void GridLineEstimator::update(
+        const cv::cuda::GpuMat& image,
+        const ros::Time& time,
+        const std::vector<RoombaImageLocation>& roomba_image_locations)
 {
     if (time <= last_update_time_) {
         ROS_ERROR("Tried to process message with stamp before previous update");
@@ -291,7 +314,7 @@ void GridLineEstimator::update(const cv::cuda::GpuMat& image,
     if (last_filtered_position_(2)
             >= grid_estimator_settings_.min_extraction_altitude) {
         try {
-            processImage(image, time);
+            processImage(image, time, roomba_image_locations);
         } catch (const std::exception& ex) {
             ROS_ERROR_STREAM("Caught exception processing image: "
                           << ex.what());
@@ -343,9 +366,12 @@ double GridLineEstimator::getFocalLength(const cv::Size& img_size, double fov)
          / std::tan(fov / 2.0);
 }
 
-void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
-                                 const cv::cuda::GpuMat& image,
-                                 double height) const
+void GridLineEstimator::getLines(
+        std::vector<cv::Vec2f>& lines,
+        std::vector<int32_t>& votes,
+        const cv::cuda::GpuMat& image,
+        double height,
+        const std::vector<RoombaImageLocation>& roomba_image_locations) const
 {
     // m/px = camera_height / focal_length;
     double current_meters_per_px = height
@@ -366,16 +392,59 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
     ROS_DEBUG("Scale factor %f", scale_factor);
 
+    const cv::Size new_size{
+        static_cast<int>(image.size().width * scale_factor),
+        static_cast<int>(image.size().height * scale_factor)
+    };
+
     cv::cuda::resize(image,
                      gpu_image_sized,
-                     cv::Size(),
-                     scale_factor,
-                     scale_factor);
-    cv::cuda::cvtColor(gpu_image_sized, gpu_image_hsv, hsv_conversion_constant_);
+                     new_size);
+    cv::cuda::cvtColor(gpu_image_sized,
+                       gpu_image_hsv,
+                       hsv_conversion_constant_);
 
-    cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
+    const auto t0 = std::chrono::high_resolution_clock::now();
+    cv::cuda::GpuMat roomba_mask = roombaMask(new_size,
+                                              roomba_image_locations);
 
-    gpu_canny_edge_detector_->detect(gpu_image_hsv_channels[2], gpu_image_edges);
+    cv::cuda::GpuMat gpu_image_sliced;
+    cv_utils::inRange(gpu_image_hsv,
+            cv::Scalar(
+                line_extractor_settings_.line_h_min,
+                line_extractor_settings_.line_s_min,
+                line_extractor_settings_.line_v_min),
+            cv::Scalar(
+                line_extractor_settings_.line_h_max,
+                line_extractor_settings_.line_s_max,
+                line_extractor_settings_.line_v_max),
+            gpu_image_sliced);
+
+    cv::Ptr<cv::cuda::Filter> box_filter = cv::cuda::createBoxFilter(
+            CV_8UC1, CV_8UC1, cv::Size(3, 3));
+
+    cv::cuda::GpuMat line_pixels_eroded = gpu_image_sliced.clone();
+    for (size_t i = 0; i < 2; i++) {
+        cv::cuda::GpuMat gpu_image_filtered;
+        box_filter->apply(line_pixels_eroded, gpu_image_filtered);
+
+        cv::cuda::GpuMat line_pixels_thresholded;
+        cv::cuda::threshold(gpu_image_filtered,
+                            line_pixels_thresholded,
+                            3.5/9 * 255,
+                            255,
+                            cv::THRESH_BINARY);
+
+        cv::cuda::bitwise_and(line_pixels_thresholded,
+                              gpu_image_sliced,
+                              line_pixels_eroded);
+    }
+
+    cv::cuda::bitwise_and(line_pixels_eroded, roomba_mask, gpu_image_edges);
+
+    //cv::cuda::split(gpu_image_hsv, gpu_image_hsv_channels);
+
+    //gpu_canny_edge_detector_->detect(gpu_image_hsv_channels[2], gpu_image_edges);
 
     double hough_threshold = gpu_image_edges.size().height
                            * line_extractor_settings_.hough_thresh_fraction;
@@ -384,7 +453,15 @@ void GridLineEstimator::getLines(std::vector<cv::Vec2f>& lines,
 
     gpu_hough_lines_detector_->detect(gpu_image_edges, gpu_lines);
 
-    gpu_hough_lines_detector_->downloadResults(gpu_lines, lines);
+    std::vector<cv::Vec2f> unfiltered_lines;
+    std::vector<int32_t> unfiltered_votes;
+    gpu_hough_lines_detector_->downloadResults(gpu_lines,
+                                               unfiltered_lines,
+                                               unfiltered_votes);
+
+    nonmaxSuppress(unfiltered_lines, unfiltered_votes, lines, votes);
+    const auto t1 = std::chrono::high_resolution_clock::now();
+    ROS_ERROR_STREAM("TIME DRAWING ROOMBA: " << std::chrono::duration_cast<std::chrono::microseconds>(t1-t0).count());
 
     // rescale lines back to original image size
     for (cv::Vec2f& line : lines) {
@@ -825,14 +902,121 @@ double GridLineEstimator::gridLoss(const std::vector<double>& wrapped_dists,
     return result;
 }
 
-void GridLineEstimator::processImage(const cv::cuda::GpuMat& image,
-                                     const ros::Time& time) const
+void GridLineEstimator::nonmaxSuppress(
+        const std::vector<cv::Vec2f>& unfiltered_lines,
+        const std::vector<int32_t>& unfiltered_votes,
+        std::vector<cv::Vec2f>& lines,
+        std::vector<int32_t>& votes) const
+{
+    ROS_ASSERT(lines.empty());
+    ROS_ASSERT(votes.empty());
+    ROS_ASSERT(unfiltered_lines.size() == unfiltered_votes.size());
+
+    ROS_DEBUG_STREAM("HAVE " << unfiltered_lines.size() << " LINES");
+
+    // Find dominated points
+    std::vector<bool> should_delete(unfiltered_lines.size(), false);
+    std::vector<int> transfer_to(unfiltered_lines.size(), -1);
+    for (size_t i = 0; i < unfiltered_lines.size(); i++) {
+        const cv::Vec2f& line1 = unfiltered_lines[i];
+        const int32_t votes1 = unfiltered_votes[i];
+        for (size_t j = i + 1; j < unfiltered_lines.size(); j++) {
+            const cv::Vec2f& line2 = unfiltered_lines[j];
+            const int32_t votes2 = unfiltered_votes[j];
+
+            const bool close =
+                (std::abs(line1[0] - line2[0])
+                        < (line_extractor_settings_.pixels_per_meter
+                         * grid_estimator_settings_.grid_line_thickness
+                         * 3))
+             || (std::abs(line1[1] - line2[1])
+                        < (10 * M_PI / 180));
+
+            if (!close) continue;
+
+            ROS_DEBUG("Found similar pair %zu %zu", i, j);
+
+            if (votes1 > votes2) {
+                if (!should_delete[j]) {
+                    ROS_DEBUG_STREAM("DELETED " << j);
+                    should_delete[j] = true;
+                    transfer_to[j] = i;
+                }
+            } else {
+                // If votes[i] and votes[j] are equal, delete i.
+                // This is unambiguous because i < j always holds
+                if (!should_delete[i]) {
+                    ROS_DEBUG_STREAM("DELETED " << i);
+                    should_delete[i] = true;
+                    transfer_to[i] = j;
+                }
+            }
+        }
+    }
+
+    // Collect vote totals
+    std::vector<int32_t> final_votes = unfiltered_votes;
+    for (size_t i = 0; i < unfiltered_lines.size(); i++) {
+        size_t j = i;
+
+        size_t iterations = 0;
+        while (transfer_to[j] != -1) {
+            j = transfer_to[j];
+
+            iterations++;
+            if (iterations > unfiltered_lines.size()) {
+                throw std::runtime_error(
+                        "Exceeded expected iterations in nonmaxSuppress");
+            }
+        }
+
+        if (i != j) {
+            final_votes[j] += final_votes[i];
+            final_votes[i] = 0;
+        }
+    }
+
+    // Sanity checks
+    int32_t total_votes = 0;
+    for (const auto& x : final_votes) {
+        total_votes += x;
+    }
+
+    for (const auto& x : unfiltered_votes) {
+        total_votes -= x;
+    }
+
+    if (total_votes != 0) {
+        throw std::runtime_error("Invalid counts in nonmaxSuppress");
+    }
+
+    // Populate final lines
+    for (size_t i = 0; i < unfiltered_lines.size(); i++) {
+        if (should_delete[i]) {
+            ROS_DEBUG_STREAM("REJECTING LINE " << i);
+            if (final_votes[i] != 0) {
+                throw std::runtime_error(
+                        "Invalid final count in nonmaxSuppress");
+            }
+        } else {
+            ROS_DEBUG_STREAM("KEEPING LINE " << i);
+            lines.push_back(unfiltered_lines[i]);
+            votes.push_back(final_votes[i]);
+        }
+    }
+}
+
+void GridLineEstimator::processImage(
+        const cv::cuda::GpuMat& image,
+        const ros::Time& time,
+        const std::vector<RoombaImageLocation>& roomba_image_locations) const
 {
     const double height = last_filtered_position_(2);
 
     // Extract lines from image
     std::vector<cv::Vec2f> lines;
-    getLines(lines, image, height);
+    std::vector<int32_t> votes;
+    getLines(lines, votes, image, height, roomba_image_locations);
     ROS_DEBUG("Number of lines extracted: %lu", lines.size());
 
     // Don't process further if we don't have any lines
@@ -1070,6 +1254,24 @@ void GridLineEstimator::publishYaw(double yaw, const ros::Time& time) const
     yaw_pub_.publish(msg);
 }
 
+cv::cuda::GpuMat GridLineEstimator::roombaMask(
+        const cv::Size& size,
+        const std::vector<RoombaImageLocation>& roomba_image_locations) const
+{
+    cv::Mat mask(size, CV_8UC1, 255);
+    for (const auto& roomba_image_location : roomba_image_locations) {
+        const cv::Point center{
+            static_cast<int>(roomba_image_location.x * size.width),
+            static_cast<int>(roomba_image_location.y * size.width)
+        };
+        const int radius = roomba_image_location.radius * size.width;
+        cv::circle(mask, center, radius, cv::Scalar(0), -1);
+    }
+
+    cv::cuda::GpuMat result(mask);
+    return result;
+}
+
 void GridLineEstimator::splitLinesByOrientation(
         double theta,
         const std::vector<Eigen::Vector3d>& pl_normals,
@@ -1093,9 +1295,9 @@ void GridLineEstimator::splitLinesByOrientation(
         } else if (std::abs(dist_to_line - M_PI/2) < angle_thresh) {
             perp_line_normals.push_back(pl_normal);
         } else {
-            ROS_WARN("Throwing out line with angle %f when we're at angle %f",
-                     std::atan(-pl_normal(0)/pl_normal(1)),
-                     theta);
+            ROS_DEBUG("Throwing out line with angle %f when we're at angle %f",
+                      std::atan(-pl_normal(0)/pl_normal(1)),
+                      theta);
         }
     }
 

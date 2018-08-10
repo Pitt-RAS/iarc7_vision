@@ -46,11 +46,11 @@ grid_estimator:
     debug_direction: false
 
     # Should we spit out an edge image for each frame on the `edges` topic?
-    debug_edges: false
+    debug_edges: true
 
     # Should we spit out a copy of the input with lines drawn on top on the
     # `lines` topic?
-    debug_lines: false
+    debug_lines: true
 
     # Should we spit out markers for the transformed lines?
     debug_line_markers: true

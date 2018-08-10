@@ -2,11 +2,17 @@
 
 grid_estimator:
     # Pixels per meter to scale image to
-    pixels_per_meter: 250
+    pixels_per_meter: 100
+    line_h_min: 0
+    line_s_min: 0
+    line_v_min: 128
+    line_h_max: 180
+    line_s_max: 128
+    line_v_max: 255
     canny_high_threshold: 50000.0
     canny_threshold_ratio: 2
     canny_sobel_size: 7
-    hough_rho_resolution: 1.0
+    hough_rho_resolution: 4.0
     hough_theta_resolution: 0.02
     hough_thresh_fraction: 0.35
-    fov: 1.88
+    fov: 1.08

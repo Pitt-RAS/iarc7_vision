@@ -454,15 +454,17 @@ int main(int argc, char **argv)
 
             const auto color_correct_time = std::chrono::high_resolution_clock::now();
 
-            gridline_estimator->update(image_correct, message->header.stamp);
-            const auto grid_time = std::chrono::high_resolution_clock::now();
-
             std::vector<iarc7_vision::RoombaImageLocation>
                                                       roomba_image_locations;
             roomba_estimator.update(image_correct,
                                     message->header.stamp,
                                     roomba_image_locations);
             const auto roomba_time = std::chrono::high_resolution_clock::now();
+
+            gridline_estimator.update(image_correct,
+                                      message->header.stamp,
+                                      roomba_image_locations);
+            const auto grid_time = std::chrono::high_resolution_clock::now();
 
             optical_flow_estimator->update(image_correct,
                                            message->header.stamp,
@@ -479,9 +481,9 @@ int main(int argc, char **argv)
                     "Distort: " << count(start, distortion_time) << std::endl
                  << "Color: " << count(distortion_time, color_time) << std::endl
                  << "Convert: " << count(color_time, color_correct_time) << std::endl
-                 << "Grid: " << count(color_correct_time, grid_time) << std::endl
-                 << "Roombas: " << count(grid_time, roomba_time) << std::endl
-                 << "Optical Flow: " << count(roomba_time, flow_time));
+                 << "Roombas: " << count(color_correct_time, roomba_time) << std::endl
+                 << "Grid: " << count(roomba_time, grid_time) << std::endl
+                 << "Optical Flow: " << count(grid_time, flow_time));
 
             images_skipped = false;
         }

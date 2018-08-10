@@ -21,11 +21,20 @@
 #include <tf2_ros/transform_listener.h>
 
 #include "iarc7_vision/GridEstimatorConfig.h"
+#include "iarc7_vision/RoombaImageLocation.hpp"
 
 namespace iarc7_vision {
 
 struct LineExtractorSettings {
     double pixels_per_meter;
+
+    int line_h_min;
+    int line_s_min;
+    int line_v_min;
+    int line_h_max;
+    int line_s_max;
+    int line_v_max;
+
     double canny_low_threshold;
     double canny_high_threshold;
     int canny_sobel_size;
@@ -60,7 +69,9 @@ class GridLineEstimator {
   public:
     GridLineEstimator(const std::string& expected_image_format);
 
-    void update(const cv::cuda::GpuMat& image, const ros::Time& time);
+    void update(const cv::cuda::GpuMat& image,
+                const ros::Time& time,
+                const std::vector<RoombaImageLocation>& roomba_image_locations);
     bool __attribute__((warn_unused_result)) waitUntilReady(
             const ros::Duration& timeout);
 
@@ -86,9 +97,12 @@ class GridLineEstimator {
     /// @param[in]  height Approximate altitude of the camera, in meters
     ///
     /// TODO: change units of height parameter to pixels
-    void getLines(std::vector<cv::Vec2f>& lines,
-                  const cv::cuda::GpuMat& image,
-                  double height) const;
+    void getLines(
+        std::vector<cv::Vec2f>& lines,
+        std::vector<int32_t>& votes,
+        const cv::cuda::GpuMat& image,
+        double height,
+        const std::vector<RoombaImageLocation>& roomba_image_locations) const;
 
     /// Computes the normal vectors of the planes defined by the given lines
     /// seen by the camera.
@@ -186,12 +200,21 @@ class GridLineEstimator {
     double gridLoss(const std::vector<double>& wrapped_dists,
                     double dist) const;
 
+    void nonmaxSuppress(
+        const std::vector<cv::Vec2f>& unfiltered_lines,
+        const std::vector<int32_t>& unfiltered_votes,
+        std::vector<cv::Vec2f>& lines,
+        std::vector<int32_t>& votes) const;
+
     /// MUST be called when either of the settings objects passed into the
     /// constructor have their variables changed
     bool __attribute__((warn_unused_result)) onSettingsChanged();
 
     /// Extract grid position from the image and publish if possible
-    void processImage(const cv::cuda::GpuMat& image, const ros::Time& time) const;
+    void processImage(
+        const cv::cuda::GpuMat& image,
+        const ros::Time& time,
+        const std::vector<RoombaImageLocation>& roomba_image_locations) const;
 
     /// Process lines extracted from the image
     void processLines(double height,
@@ -215,6 +238,10 @@ class GridLineEstimator {
 
     /// Publish the given yaw estimate with the given timestamp
     void publishYaw(double yaw, const ros::Time& time) const;
+
+    cv::cuda::GpuMat roombaMask(
+            const cv::Size& size,
+            const std::vector<RoombaImageLocation>& roomba_image_locations) const;
 
     /// Takes a list of plane normals and splits them into two clusters based
     /// on which are parallel or perpendicular to the theta vector.  The theta
