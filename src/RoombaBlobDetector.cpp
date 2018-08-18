@@ -50,12 +50,24 @@ RoombaBlobDetector::RoombaBlobDetector(const RoombaEstimatorSettings& settings,
 }
 
 void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
-                                        cv::cuda::GpuMat& dst) const
+                                        cv::cuda::GpuMat& dst,
+                                        cv::Scalar& mean,
+                                        cv::Scalar& stddev) const
 {
     const auto start_time = std::chrono::high_resolution_clock::now();
 
     cv::cuda::cvtColor(image, hsv_image_, cv::COLOR_RGB2HSV);
     cv::cuda::split(hsv_image_, hsv_channels_.data());
+
+    // Normalize saturation
+    cv::cuda::meanStdDev(hsv_channels_[1], mean, stddev);
+    hsv_channels_[1].convertTo(float_sat_, CV_32FC1);
+    cv::cuda::add(float_sat_, -mean, normalized_sat_, cv::noArray(), CV_32FC1);
+    cv::cuda::multiply(normalized_sat_, 42.5 / stddev, normalized_sat2_);
+    cv::cuda::add(normalized_sat2_, 128, normalized_sat2_8bit_);
+    normalized_sat2_8bit_.convertTo(hsv_channels_[1], CV_8UC1);
+
+    cv::cuda::merge(hsv_channels_.data(), 3, hsv_image_);
 
     dst.create(image.rows, image.cols, CV_8U);
     dst.setTo(cv::Scalar(0, 0, 0, 0));
@@ -63,31 +75,31 @@ void RoombaBlobDetector::thresholdFrame(const cv::cuda::GpuMat& image,
     // Green slice
     cv_utils::inRange(hsv_image_,
                       cv::Scalar(settings_.hsv_slice_h_green_min,
-                                 settings_.hsv_slice_s_min,
-                                 settings_.hsv_slice_v_min),
+                                 settings_.hsv_slice_s_green_min,
+                                 settings_.hsv_slice_v_green_min),
                       cv::Scalar(settings_.hsv_slice_h_green_max,
-                                 settings_.hsv_slice_s_max,
-                                 settings_.hsv_slice_v_max),
+                                 settings_.hsv_slice_s_green_max,
+                                 settings_.hsv_slice_v_green_max),
                       range_mask_);
     cv::cuda::bitwise_or(dst, range_mask_, dst);
     // Upper red slice
     cv_utils::inRange(hsv_image_,
                       cv::Scalar(settings_.hsv_slice_h_red1_min,
-                                 settings_.hsv_slice_s_min,
-                                 settings_.hsv_slice_v_min),
+                                 settings_.hsv_slice_s_red_min,
+                                 settings_.hsv_slice_v_red_min),
                       cv::Scalar(settings_.hsv_slice_h_red1_max,
-                                 settings_.hsv_slice_s_max,
-                                 settings_.hsv_slice_v_max),
+                                 settings_.hsv_slice_s_red_max,
+                                 settings_.hsv_slice_v_red_max),
                       range_mask_);
     cv::cuda::bitwise_or(dst, range_mask_, dst);
     // Lower red slice
     cv_utils::inRange(hsv_image_,
                       cv::Scalar(settings_.hsv_slice_h_red2_min,
-                                 settings_.hsv_slice_s_min,
-                                 settings_.hsv_slice_v_min),
+                                 settings_.hsv_slice_s_red_min,
+                                 settings_.hsv_slice_v_red_min),
                       cv::Scalar(settings_.hsv_slice_h_red2_max,
-                                 settings_.hsv_slice_s_max,
-                                 settings_.hsv_slice_v_max),
+                                 settings_.hsv_slice_s_red_max,
+                                 settings_.hsv_slice_v_red_max),
                       range_mask_);
     cv::cuda::bitwise_or(dst, range_mask_, dst);
 
@@ -225,6 +237,8 @@ void RoombaBlobDetector::boundMask(
 
 void RoombaBlobDetector::checkCorners(
         const cv::cuda::GpuMat& image,
+        const cv::Scalar& mean,
+        const cv::Scalar& stddev,
         std::vector<cv::RotatedRect>& rects,
         std::vector<double>& flip_certainties) const
 {
@@ -265,34 +279,44 @@ void RoombaBlobDetector::checkCorners(
 
                 cv::Mat range_mask;
 
+
+                // Note:  extra linear transformations on saturation limits
+                // threshold against the normalized saturation instead of original
+
                 // Green slice
                 cv::inRange(patch_sum_mat,
                             cv::Scalar(settings_.hsv_slice_h_green_min,
-                                       settings_.hsv_slice_s_min,
-                                       settings_.hsv_slice_v_min),
+                                       (settings_.hsv_slice_s_green_min - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
+                                       settings_.hsv_slice_v_green_min),
                             cv::Scalar(settings_.hsv_slice_h_green_max,
-                                       settings_.hsv_slice_s_max,
-                                       settings_.hsv_slice_v_max),
+                                       (settings_.hsv_slice_s_green_max - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
+                                       settings_.hsv_slice_v_green_max),
                             range_mask);
                 cv::bitwise_or(patch_good_mat, range_mask, patch_good_mat);
                 // Upper red slice
                 cv::inRange(patch_sum_mat,
                             cv::Scalar(settings_.hsv_slice_h_red1_min,
-                                       settings_.hsv_slice_s_min,
-                                       settings_.hsv_slice_v_min),
+                                       (settings_.hsv_slice_s_red_min - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
+                                       settings_.hsv_slice_v_red_min),
                             cv::Scalar(settings_.hsv_slice_h_red1_max,
-                                       settings_.hsv_slice_s_max,
-                                       settings_.hsv_slice_v_max),
+                                       (settings_.hsv_slice_s_red_max - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
+                                       settings_.hsv_slice_v_red_max),
                             range_mask);
                 cv::bitwise_or(patch_good_mat, range_mask, patch_good_mat);
                 // Lower red slice
                 cv::inRange(patch_sum_mat,
                             cv::Scalar(settings_.hsv_slice_h_red2_min,
-                                       settings_.hsv_slice_s_min,
-                                       settings_.hsv_slice_v_min),
+                                       (settings_.hsv_slice_s_red_min - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
+                                       settings_.hsv_slice_v_red_min),
                             cv::Scalar(settings_.hsv_slice_h_red2_max,
-                                       settings_.hsv_slice_s_max,
-                                       settings_.hsv_slice_v_max),
+                                       (settings_.hsv_slice_s_red_max - 128)
+                                      * stddev.val[0]/42.5 + mean.val[0],
+                                       settings_.hsv_slice_v_red_max),
                             range_mask);
                 cv::bitwise_or(patch_good_mat, range_mask, patch_good_mat);
 
@@ -328,7 +352,8 @@ void RoombaBlobDetector::detect(const cv::cuda::GpuMat& image,
     const auto start_time = std::chrono::high_resolution_clock::now();
 
     cv::cuda::GpuMat mask;
-    thresholdFrame(image, mask);
+    cv::Scalar mean, stddev;
+    thresholdFrame(image, mask, mean, stddev);
 
     const auto threshold_time = std::chrono::high_resolution_clock::now();
 
@@ -346,7 +371,7 @@ void RoombaBlobDetector::detect(const cv::cuda::GpuMat& image,
     }
 
     boundMask(mask, bounding_rects);
-    checkCorners(image, bounding_rects, flip_certainties);
+    checkCorners(image, mean, stddev, bounding_rects, flip_certainties);
 
     const auto final_time = std::chrono::high_resolution_clock::now();
 

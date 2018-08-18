@@ -17,17 +17,23 @@ struct RoombaEstimatorSettings {
 
     int hsv_slice_h_green_min;
     int hsv_slice_h_green_max;
+    int hsv_slice_s_green_min;
+    int hsv_slice_s_green_max;
+    int hsv_slice_v_green_min;
+    int hsv_slice_v_green_max;
     int hsv_slice_h_red1_min;
     int hsv_slice_h_red1_max;
+    int hsv_slice_s_red_min;
+    int hsv_slice_s_red_max;
+    int hsv_slice_v_red_min;
+    int hsv_slice_v_red_max;
     int hsv_slice_h_red2_min;
     int hsv_slice_h_red2_max;
-    int hsv_slice_s_min;
-    int hsv_slice_s_max;
-    int hsv_slice_v_min;
-    int hsv_slice_v_max;
 
     int morphology_size;
     int morphology_iterations;
+
+    double max_relative_error;
 
     double uncertainty_scale;
 

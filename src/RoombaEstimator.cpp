@@ -98,14 +98,18 @@ void RoombaEstimator::getDynamicSettings(
 
         config.hsv_slice_h_green_min = settings_.hsv_slice_h_green_min;
         config.hsv_slice_h_green_max = settings_.hsv_slice_h_green_max;
+        config.hsv_slice_s_green_min       = settings_.hsv_slice_s_green_min;
+        config.hsv_slice_s_green_max       = settings_.hsv_slice_s_green_max;
+        config.hsv_slice_v_green_min       = settings_.hsv_slice_v_green_min;
+        config.hsv_slice_v_green_max       = settings_.hsv_slice_v_green_max;
         config.hsv_slice_h_red1_min  = settings_.hsv_slice_h_red1_min;
         config.hsv_slice_h_red1_max  = settings_.hsv_slice_h_red1_max;
+        config.hsv_slice_s_red_min       = settings_.hsv_slice_s_red_min;
+        config.hsv_slice_s_red_max       = settings_.hsv_slice_s_red_max;
+        config.hsv_slice_v_red_min       = settings_.hsv_slice_v_red_min;
+        config.hsv_slice_v_red_max       = settings_.hsv_slice_v_red_max;
         config.hsv_slice_h_red2_min  = settings_.hsv_slice_h_red2_min;
         config.hsv_slice_h_red2_max  = settings_.hsv_slice_h_red2_max;
-        config.hsv_slice_s_min       = settings_.hsv_slice_s_min;
-        config.hsv_slice_s_max       = settings_.hsv_slice_s_max;
-        config.hsv_slice_v_min       = settings_.hsv_slice_v_min;
-        config.hsv_slice_v_max       = settings_.hsv_slice_v_max;
 
         config.min_roomba_blob_size  = settings_.min_roomba_blob_size;
         config.max_roomba_blob_size  = settings_.max_roomba_blob_size;
@@ -113,26 +117,34 @@ void RoombaEstimator::getDynamicSettings(
         config.morphology_size = settings_.morphology_size;
         config.morphology_iterations = settings_.morphology_iterations;
 
+        config.max_relative_error = settings_.max_relative_error;
+
         dynamic_reconfigure_called_ = true;
     } else {
         settings_.detection_image_width = config.detection_image_width;
 
         settings_.hsv_slice_h_green_min = config.hsv_slice_h_green_min;
         settings_.hsv_slice_h_green_max = config.hsv_slice_h_green_max;
+        settings_.hsv_slice_s_green_min = config.hsv_slice_s_green_min;
+        settings_.hsv_slice_s_green_max = config.hsv_slice_s_green_max;
+        settings_.hsv_slice_v_green_min = config.hsv_slice_v_green_min;
+        settings_.hsv_slice_v_green_max = config.hsv_slice_v_green_max;
         settings_.hsv_slice_h_red1_min = config.hsv_slice_h_red1_min;
         settings_.hsv_slice_h_red1_max = config.hsv_slice_h_red1_max;
+        settings_.hsv_slice_s_red_min = config.hsv_slice_s_red_min;
+        settings_.hsv_slice_s_red_max = config.hsv_slice_s_red_max;
+        settings_.hsv_slice_v_red_min = config.hsv_slice_v_red_min;
+        settings_.hsv_slice_v_red_max = config.hsv_slice_v_red_max;
         settings_.hsv_slice_h_red2_min = config.hsv_slice_h_red2_min;
         settings_.hsv_slice_h_red2_max = config.hsv_slice_h_red2_max;
-        settings_.hsv_slice_s_min = config.hsv_slice_s_min;
-        settings_.hsv_slice_s_max = config.hsv_slice_s_max;
-        settings_.hsv_slice_v_min = config.hsv_slice_v_min;
-        settings_.hsv_slice_v_max = config.hsv_slice_v_max;
 
         settings_.min_roomba_blob_size = config.min_roomba_blob_size;
         settings_.max_roomba_blob_size = config.max_roomba_blob_size;
 
         settings_.morphology_size = config.morphology_size;
         settings_.morphology_iterations = config.morphology_iterations;
+
+        settings_.max_relative_error = config.max_relative_error;
 
         detection_size_ = cv::Size(settings_.detection_image_width,
                         input_size_.height
@@ -158,19 +170,24 @@ RoombaEstimatorSettings RoombaEstimator::getSettings(
     IARC7_VISION_RES_LOAD(detection_image_width);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_green_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_green_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_green_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_green_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_green_max);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red1_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red1_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_red_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_s_red_max);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_red_min);
+    IARC7_VISION_RES_LOAD(hsv_slice_v_red_max);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red2_min);
     IARC7_VISION_RES_LOAD(hsv_slice_h_red2_max);
-    IARC7_VISION_RES_LOAD(hsv_slice_s_min);
-    IARC7_VISION_RES_LOAD(hsv_slice_s_max);
-    IARC7_VISION_RES_LOAD(hsv_slice_v_min);
-    IARC7_VISION_RES_LOAD(hsv_slice_v_max);
     IARC7_VISION_RES_LOAD(min_roomba_blob_size);
     IARC7_VISION_RES_LOAD(max_roomba_blob_size);
     IARC7_VISION_RES_LOAD(morphology_size);
     IARC7_VISION_RES_LOAD(morphology_iterations);
     IARC7_VISION_RES_LOAD(morphology_size);
+    IARC7_VISION_RES_LOAD(max_relative_error);
     IARC7_VISION_RES_LOAD(uncertainty_scale);
     IARC7_VISION_RES_LOAD(bottom_camera_aov);
     IARC7_VISION_RES_LOAD(debug_hsv_slice);
@@ -277,9 +294,13 @@ void RoombaEstimator::calcBoxUncertainties(
               + std::abs(plate_height_meters - settings_.roomba_plate_height)
                             / settings_.roomba_plate_height;
 
-        const double uncertainty = settings_.uncertainty_scale * relative_error;
-
-        box_uncertainties.push_back(uncertainty);
+        if (relative_error > settings_.max_relative_error) {
+            // Mark detection invalid
+            box_uncertainties.push_back(-1);
+        } else {
+            const double uncertainty = settings_.uncertainty_scale * relative_error;
+            box_uncertainties.push_back(uncertainty);
+        }
     }
 }
 
@@ -347,8 +368,8 @@ void RoombaEstimator::calcPose(const cv::Point2f& pos,
     // Roomba radius is hard coded to 0.2m
     // It was adjusted to 0.3m because of errors with the below equations
     // The radius is a value from 0-1 which maps across the diagnol of the image
-    double size_relative_diagonal = 0.3 
-                                    / (2.0 * ray_scale 
+    double size_relative_diagonal = 0.3
+                                    / (2.0 * ray_scale
                                        * std::tan(settings_.bottom_camera_aov
                                                   * M_PI / 180.0
                                                   / 2.0));

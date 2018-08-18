@@ -484,11 +484,30 @@ int main(int argc, char **argv)
             }
         };
 
+    // Queue and callback for collecting images
+    std::deque<sensor_msgs::Image::ConstPtr> message_queue_r200;
+    std::function<void(const sensor_msgs::Image::ConstPtr&)> image_msg_handler_r200 =
+        [&](const sensor_msgs::Image::ConstPtr& message) {
+            message_queue_r200.push_back(message);
+
+            // Make sure this doesn't grow without bound, but this will still trigger
+            // the over-limit check in the main loop
+            while (message_queue_r200.size() > message_queue_item_limit) {
+                message_queue_r200.pop_front();
+            }
+        };
+
     image_transport::ImageTransport image_transporter{nh};
     image_transport::Subscriber sub = image_transporter.subscribe(
         "/bottom_image_raw/image_raw",
         100,
         image_msg_handler);
+
+    image_transport::ImageTransport image_transporter_r200{nh};
+    image_transport::Subscriber sub_r200 = image_transporter_r200.subscribe(
+        "/bottom_image_raw_r200/image_raw",
+        100,
+        image_msg_handler_r200);
 
     ros::Publisher corrected_image_pub = nh.advertise<sensor_msgs::Image>("corrected_image", 1);
 
@@ -499,13 +518,19 @@ int main(int argc, char **argv)
     ros::Time start_time = ros::Time::now();
     ROS_ASSERT(gridline_estimator->waitUntilReady(ros::Duration(startup_timeout)));
     ROS_ASSERT(optical_flow_estimator->waitUntilReady(ros::Duration(startup_timeout)));
-    while (message_queue.empty()) {
+    while (message_queue.empty() || message_queue_r200.empty()) {
         if (!ros::ok()) {
             return 1;
         }
 
         if (ros::Time::now() > start_time + ros::Duration(startup_timeout)) {
-            ROS_ERROR("Vision node timed out on startup waiting on images");
+            if (message_queue.empty()) {
+                ROS_ERROR("Vision node timed out on startup waiting on images from leopard");
+            } else if (message_queue_r200.empty()) {
+                ROS_ERROR("Vision node timed out on startup waiting on images from r200");
+            } else {
+                ROS_ERROR("Vision node timed out on startup from both cameras");
+            }
             return 1;
         }
 
@@ -531,104 +556,133 @@ int main(int argc, char **argv)
                    "vision_node: Could not form bond with safety client");
 
     message_queue.clear();
+    message_queue_r200.clear();
 
     bool images_skipped = false;
+
+    std::vector<iarc7_vision::RoombaImageLocation>
+                                              roomba_image_locations;
+
     // Main loop
     while (ros::ok())
     {
-        if (!message_queue.empty() && ros::ok()) {
+        if ((!message_queue.empty() || !message_queue_r200.empty()) && ros::ok()) {
             if (message_queue.size() > message_queue_item_limit - 1) {
                 ROS_ERROR(
                         "Image queue has too many messages, clearing: %lu images",
                         message_queue.size());
                 message_queue.clear();
+            }
+
+            if (message_queue_r200.size() > message_queue_item_limit - 1) {
+                ROS_ERROR(
+                        "Image queue r200 has too many messages, clearing: %lu images",
+                        message_queue_r200.size());
+                message_queue_r200.clear();
                 images_skipped = true;
-                continue;
             }
 
-            sensor_msgs::Image::ConstPtr message = message_queue.front();
-            message_queue.pop_front();
+            if(!message_queue.empty()) {
+                sensor_msgs::Image::ConstPtr message = message_queue.front();
+                message_queue.pop_front();
 
-            auto cv_shared_ptr = cv_bridge::toCvShare(message);
-            cv::cuda::Stream cuda_stream = cv::cuda::Stream::Null();
+                auto cv_shared_ptr = cv_bridge::toCvShare(message);
+                cv::cuda::Stream cuda_stream = cv::cuda::Stream::Null();
 
-            const auto start = std::chrono::high_resolution_clock::now();
-            cv::cuda::GpuMat image_distorted;
-            image_distorted.upload(cv_shared_ptr->image, cuda_stream);
+                const auto start = std::chrono::high_resolution_clock::now();
+                cv::cuda::GpuMat image_distorted;
+                image_distorted.upload(cv_shared_ptr->image, cuda_stream);
 
-            cv::cuda::GpuMat image_undistorted;
-            undistortion_model.undistort(image_distorted,
-                                         image_undistorted,
-                                         cuda_stream);
-            const auto distortion_time = std::chrono::high_resolution_clock::now();
+                cv::cuda::GpuMat image_undistorted;
+                undistortion_model.undistort(image_distorted,
+                                             image_undistorted,
+                                             cuda_stream);
+                const auto distortion_time = std::chrono::high_resolution_clock::now();
 
-            cv::cuda::GpuMat image_undistorted_rgb;
-            if (color_conversion_code != 0) {
-                cv::cuda::cvtColor(image_undistorted,
-                                   image_undistorted_rgb,
-                                   color_conversion_code,
-                                   0,
-                                   cuda_stream);
-            } else {
-                image_undistorted_rgb = image_undistorted;
-            }
+                cv::cuda::GpuMat image_undistorted_rgb;
+                if (color_conversion_code != 0) {
+                    cv::cuda::cvtColor(image_undistorted,
+                                       image_undistorted_rgb,
+                                       color_conversion_code,
+                                       0,
+                                       cuda_stream);
+                } else {
+                    image_undistorted_rgb = image_undistorted;
+                }
 
-            const auto color_time = std::chrono::high_resolution_clock::now();
+                const auto color_time = std::chrono::high_resolution_clock::now();
 
-            cv::cuda::GpuMat image_correct;
-            color_correction_model.correct(image_undistorted_rgb,
-                                           image_correct,
-                                           cuda_stream);
+                cv::cuda::GpuMat image_correct;
+                color_correction_model.correct(image_undistorted_rgb,
+                                               image_correct,
+                                               cuda_stream);
 
-            {
-                cv::Mat corrected_image_cpu;
-                image_correct.download(corrected_image_cpu, cuda_stream);
-                cuda_stream.waitForCompletion();
+                {
+                    cv::Mat corrected_image_cpu;
+                    image_correct.download(corrected_image_cpu, cuda_stream);
+                    cuda_stream.waitForCompletion();
 
-                std_msgs::Header header;
-                header.stamp = message->header.stamp;
+                    std_msgs::Header header;
+                    header.stamp = message->header.stamp;
 
-                cv_bridge::CvImage cv_image {
-                    header,
-                    sensor_msgs::image_encodings::RGB8,
-                    corrected_image_cpu
+                    cv_bridge::CvImage cv_image {
+                        header,
+                        sensor_msgs::image_encodings::RGB8,
+                        corrected_image_cpu
+                    };
+
+                    corrected_image_pub.publish(cv_image.toImageMsg());
+                }
+
+                const auto color_correct_time = std::chrono::high_resolution_clock::now();
+
+                //gridline_estimator->update(image_correct, message->header.stamp);
+                const auto grid_time = std::chrono::high_resolution_clock::now();
+
+                roomba_image_locations.clear();
+                roomba_estimator.update(image_correct,
+                                        message->header.stamp,
+                                        roomba_image_locations);
+                const auto roomba_time = std::chrono::high_resolution_clock::now();
+
+                const auto count = [](const auto& a, const auto& b) {
+                    return std::chrono::duration_cast<std::chrono::microseconds>(
+                            b - a).count();
                 };
 
-                corrected_image_pub.publish(cv_image.toImageMsg());
+                ROS_DEBUG_STREAM(
+                        "Distort: " << count(start, distortion_time) << std::endl
+                     << "Color: " << count(distortion_time, color_time) << std::endl
+                     << "Convert: " << count(color_time, color_correct_time) << std::endl
+                     << "Grid: " << count(color_correct_time, grid_time) << std::endl
+                     << "Roombas: " << count(grid_time, roomba_time) << std::endl);
             }
 
-            const auto color_correct_time = std::chrono::high_resolution_clock::now();
+            if(!message_queue_r200.empty()) {
+                sensor_msgs::Image::ConstPtr message = message_queue_r200.front();
+                message_queue_r200.pop_front();
 
-            //gridline_estimator->update(image_correct, message->header.stamp);
-            const auto grid_time = std::chrono::high_resolution_clock::now();
+                auto cv_shared_ptr = cv_bridge::toCvShare(message);
 
-            std::vector<iarc7_vision::RoombaImageLocation>
-                                                      roomba_image_locations;
-            roomba_estimator.update(image_correct,
-                                    message->header.stamp,
-                                    roomba_image_locations);
-            const auto roomba_time = std::chrono::high_resolution_clock::now();
+                const auto start = std::chrono::high_resolution_clock::now();
+                cv::cuda::GpuMat image_r200;
+                image_r200.upload(cv_shared_ptr->image);
 
-            optical_flow_estimator->update(image_correct,
-                                           message->header.stamp,
-                                           roomba_image_locations,
-                                           images_skipped);
-            const auto flow_time = std::chrono::high_resolution_clock::now();
+                optical_flow_estimator->update(image_r200,
+                                               message->header.stamp,
+                                               roomba_image_locations,
+                                               images_skipped);
+                const auto flow_time = std::chrono::high_resolution_clock::now();
 
-            const auto count = [](const auto& a, const auto& b) {
-                return std::chrono::duration_cast<std::chrono::microseconds>(
-                        b - a).count();
-            };
+                const auto count = [](const auto& a, const auto& b) {
+                    return std::chrono::duration_cast<std::chrono::microseconds>(
+                            b - a).count();
+                };
 
-            ROS_DEBUG_STREAM(
-                    "Distort: " << count(start, distortion_time) << std::endl
-                 << "Color: " << count(distortion_time, color_time) << std::endl
-                 << "Convert: " << count(color_time, color_correct_time) << std::endl
-                 << "Grid: " << count(color_correct_time, grid_time) << std::endl
-                 << "Roombas: " << count(grid_time, roomba_time) << std::endl
-                 << "Optical Flow: " << count(roomba_time, flow_time));
+                images_skipped = false;
 
-            images_skipped = false;
+                ROS_DEBUG_STREAM("Optical Flow: " << count(start, flow_time));
+            }
         }
         else {
             rate.sleep();

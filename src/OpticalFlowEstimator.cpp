@@ -519,7 +519,7 @@ geometry_msgs::TwistWithCovarianceStamped
         geometry_msgs::TwistWithCovarianceStamped twist_level_quad = twist;
         twist_level_quad.twist.twist.linear.x = level_quad_vel.x();
         twist_level_quad.twist.twist.linear.y = level_quad_vel.y();
-        debug_level_quad_raw_pub_.publish(twist_camera_rel);
+        debug_level_quad_raw_pub_.publish(twist_level_quad);
     }
 
     return twist;
@@ -1299,7 +1299,7 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
     bool success = transform_wrapper_.getTransformAtTime(
             filtered_position_transform_stamped,
             "map",
-            "bottom_camera_rgb_optical_frame",
+            "bottom_camera_r200_rgb_optical_frame",
             time,
             timeout);
 
@@ -1310,7 +1310,7 @@ bool OpticalFlowEstimator::updateFilteredPosition(const ros::Time& time,
     success = transform_wrapper_.getTransformAtTime(
             camera_to_level_quad_tf_stamped,
             "level_quad",
-            "bottom_camera_rgb_optical_frame",
+            "bottom_camera_r200_rgb_optical_frame",
             time,
             timeout);
 
