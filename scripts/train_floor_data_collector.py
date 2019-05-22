@@ -16,7 +16,7 @@ def image_callback(data):
                     'map',
                     'bottom_camera_rgb_optical_frame',
                     data.header.stamp,
-                    rospy.Duration(0.01))
+                    rospy.Duration(0.2))
     except (tf2_ros.LookupException,
             tf2_ros.ConnectivityException,
             tf2_ros.ExtrapolationException) as ex:
