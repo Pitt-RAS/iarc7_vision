@@ -16,8 +16,11 @@ class UndistortionModel {
 
     void undistort(const cv::cuda::GpuMat& in, cv::cuda::GpuMat& out, cv::cuda::Stream& stream) const;
 
+    cv::Size getUndistortedSize() const { return new_image_size_; }
+
   private:
     const cv::Size image_size_;
+    const cv::Size new_image_size_;
 
     cv::cuda::GpuMat map1_;
     cv::cuda::GpuMat map2_;

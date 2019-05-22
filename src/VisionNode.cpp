@@ -454,7 +454,6 @@ int main(int argc, char **argv)
     }
 
     // Create vision processing objects
-    iarc7_vision::RoombaEstimator roomba_estimator;
     gridline_estimator.reset(new iarc7_vision::GridLineEstimator(
             line_extractor_settings,
             grid_estimator_settings,
@@ -514,10 +513,13 @@ int main(int argc, char **argv)
         rate.sleep();
     }
 
+    const cv::Size input_size(message_queue.front()->width,
+                              message_queue.front()->height);
     const iarc7_vision::UndistortionModel undistortion_model(
             ros::NodeHandle("~/distortion_model"),
-            cv::Size(message_queue.front()->width,
-                     message_queue.front()->height));
+            input_size);
+    iarc7_vision::RoombaEstimator roomba_estimator(
+            undistortion_model.getUndistortedSize());
     const iarc7_vision::ColorCorrectionModel color_correction_model(
             ros::NodeHandle("~/color_correction_model"));
 

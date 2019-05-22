@@ -30,7 +30,7 @@ namespace iarc7_vision
 /// positions using tf, and publishes to /detected_roombas
 class RoombaEstimator {
     public:
-        RoombaEstimator();
+        RoombaEstimator(const cv::Size& image_size);
 
         /// Processes current frame and publishes detections
         ///
@@ -110,7 +110,10 @@ class RoombaEstimator {
         ros::Publisher roomba_pub_;
 
         RoombaEstimatorSettings settings_;
-        RoombaBlobDetector blob_detector_;
+
+        const cv::Size input_size_;
+        cv::Size detection_size_;
+        std::unique_ptr<const RoombaBlobDetector> blob_detector_;
 
         ros::Publisher debug_detected_rects_pub_;
 };
