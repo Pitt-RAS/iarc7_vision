@@ -411,6 +411,24 @@ int main(int argc, char **argv)
     iarc7_vision::GridLineDebugSettings grid_line_debug_settings;
     getGridDebugSettings(private_nh, grid_line_debug_settings);
 
+<<<<<<< Updated upstream
+||||||| merged common ancestors
+    iarc7_vision::GridLineEstimator gridline_estimator(
+            line_extractor_settings,
+            grid_estimator_settings,
+            grid_line_debug_settings,
+            expected_image_format);
+
+    // Create OpticalFlowEstimator settings objects
+=======
+    //iarc7_vision::GridLineEstimator gridline_estimator(
+    //        line_extractor_settings,
+    //        grid_estimator_settings,
+    //        grid_line_debug_settings,
+    //        expected_image_format);
+
+    // Create OpticalFlowEstimator settings objects
+>>>>>>> Stashed changes
     iarc7_vision::OpticalFlowEstimatorSettings optical_flow_estimator_settings;
     getOpticalFlowEstimatorSettings(private_nh, optical_flow_estimator_settings);
     iarc7_vision::OpticalFlowDebugSettings optical_flow_debug_settings;
@@ -432,7 +450,21 @@ int main(int argc, char **argv)
                                line_extractor_settings,
                                optical_flow_estimator_settings,
                                dynamic_reconfigure_called);
+<<<<<<< Updated upstream
             dynamic_reconfigure_called = true;
+||||||| merged common ancestors
+            ROS_ASSERT(gridline_estimator.onSettingsChanged());
+            ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
+        };
+    dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
+    iarc7_vision::RoombaEstimator roomba_estimator;
+=======
+            //ROS_ASSERT(gridline_estimator.onSettingsChanged());
+            ROS_ASSERT(optical_flow_estimator.onSettingsChanged());
+        };
+    dynamic_reconfigure_server.setCallback(dynamic_reconfigure_settings_callback);
+    iarc7_vision::RoombaEstimator roomba_estimator;
+>>>>>>> Stashed changes
 
             if (gridline_estimator != nullptr) {
                 ROS_ASSERT(gridline_estimator->onSettingsChanged());
@@ -471,6 +503,20 @@ int main(int argc, char **argv)
     size_t message_queue_item_limit = ros_utils::ParamUtils::getParam<int>(
             private_nh, "message_queue_item_limit");
 
+<<<<<<< Updated upstream
+||||||| merged common ancestors
+    // Initialize the vision classes
+    ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+    ROS_ASSERT(optical_flow_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+
+
+=======
+    // Initialize the vision classes
+    //ROS_ASSERT(gridline_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+    ROS_ASSERT(optical_flow_estimator.waitUntilReady(ros::Duration(startup_timeout)));
+
+
+>>>>>>> Stashed changes
     // Queue and callback for collecting images
     std::deque<sensor_msgs::Image::ConstPtr> message_queue;
     std::function<void(const sensor_msgs::Image::ConstPtr&)> image_msg_handler =
@@ -553,6 +599,7 @@ int main(int argc, char **argv)
             cv::cuda::Stream cuda_stream = cv::cuda::Stream::Null();
 
             const auto start = std::chrono::high_resolution_clock::now();
+<<<<<<< Updated upstream
             cv::cuda::GpuMat image_distorted;
             image_distorted.upload(cv_shared_ptr->image, cuda_stream);
 
@@ -597,6 +644,11 @@ int main(int argc, char **argv)
             const auto color_correct_time = std::chrono::high_resolution_clock::now();
 
             //gridline_estimator->update(image_correct, message->header.stamp);
+||||||| merged common ancestors
+            gridline_estimator.update(image, message->header.stamp);
+=======
+            //gridline_estimator.update(image, message->header.stamp);
+>>>>>>> Stashed changes
             const auto grid_time = std::chrono::high_resolution_clock::now();
 
             std::vector<iarc7_vision::RoombaImageLocation>
